@@ -501,6 +501,31 @@ async function main() {
       console.log('  --  no hay Excel en la raiz: se omite la prueba de importacion');
     }
 
+    // ── Base de produccion a la que le falta 20260930000000 (caso real): la migracion
+    //    20261001000000 se aplica sola, completa lo que faltaba y pasa a neto la venta vieja ──
+    const sinVentaNeta = await crearClienteLocal({ omitir: ['20260930000000_venta_neta_mercadillo.sql', '20261001000000_publicacion_manual.sql'] });
+    const pgS = sinVentaNeta.pg;
+    const uidS = await sinVentaNeta.crearUsuario('sin-venta-neta@prueba.local', 'clave');
+    const furniS = (await pgS.query("insert into public.furnis (propietario, nombre, precio_venta) values ($1, 'Furni de prueba', 400) returning id", [uidS])).rows[0].id;
+    const loteS = (await pgS.query(
+      "insert into public.compras (propietario, furni_id, cantidad, precio_compra, estado, precio_lista, moneda_lista, publicado_en) values ($1, $2, 2, 300, 'publicado', 350, 'creditos', now()) returning id",
+      [uidS, furniS])).rows[0].id;
+    const ventaS = (await pgS.query('select public.vender_lote($1, 1) as r', [loteS])).rows[0].r;
+    assert.equal((await pgS.query('select precio_venta from public.compras where id = $1', [ventaS.venta_id])).rows[0].precio_venta, 350, 'antes: se guardaba el bruto');
+    const sqlPublicacion = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261001000000_publicacion_manual.sql'), 'utf8');
+    await pgS.exec(sqlPublicacion);
+    await pgS.exec(sqlPublicacion);
+    const filaS = (await pgS.query('select precio_venta_real, comision_venta, comision_pagada_cr, publicado_por, ganancia_cr from public.v_compras where id = $1', [ventaS.venta_id])).rows[0];
+    assert.deepEqual(filaS, { precio_venta_real: 342, comision_venta: 8, comision_pagada_cr: 8, publicado_por: 'sniper', ganancia_cr: 42 });
+    assert.equal((await pgS.query('select publicado_por from public.compras where id = $1', [loteS])).rows[0].publicado_por, 'sniper');
+    const revS = (await pgS.query('select public.revertir_venta($1) as r', [ventaS.venta_id])).rows[0].r;
+    assert.equal(revS.fusionada, true);
+    const nuevaS = (await pgS.query('select public.vender_lote($1, 1) as r', [loteS])).rows[0].r;
+    assert.equal(nuevaS.precio_venta, 342, 'despues: se guarda el neto');
+    assert.ok((await pgS.query("select to_regprocedure('public.publicar_lote(bigint, integer, numeric)') as f")).rows[0].f);
+    await sinVentaNeta.cerrar();
+    ok('migracion 20261001000000 en una base SIN la 20260930000000: se aplica (dos veces), completa comision_venta y pasa a neto la venta vieja (350 -> 342)');
+
     // ── API local ──
     let h = await pedir(puerto, 'GET', '/api/cuenta');
     assert.equal(h.json.estado, 'lista');

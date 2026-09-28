@@ -309,7 +309,9 @@ function archivosMigracion() {
 // Aplica en orden las migraciones de supabase/migrations que falten, igual que se
 // ejecutan en Supabase. Lleva la cuenta en _local.migraciones; una base demo creada
 // antes de existir ese registro (con el esquema inicial ya puesto) se marca como tal.
-async function aplicarMigraciones(pg) {
+// `omitir` (solo pruebas): nombres de archivo que no se aplican, para simular una base
+// de produccion a la que le falta alguna migracion.
+async function aplicarMigraciones(pg, omitir = []) {
   await pg.exec(SQL_BASE);
   await pg.exec('create schema if not exists _local; create table if not exists _local.migraciones (nombre text primary key, aplicada_en timestamptz default now());');
   const aplicadas = new Set((await pg.query('select nombre from _local.migraciones')).rows.map((r) => r.nombre));
@@ -319,7 +321,7 @@ async function aplicarMigraciones(pg) {
     aplicadas.add(archivos[0]);
   }
   for (const nombre of archivos) {
-    if (aplicadas.has(nombre)) continue;
+    if (aplicadas.has(nombre) || omitir.includes(nombre)) continue;
     await pg.transaction(async (tx) => {
       await tx.exec(fs.readFileSync(path.join(DIR_MIGRACIONES, nombre), 'utf8'));
       await tx.query('insert into _local.migraciones (nombre) values ($1)', [nombre]);
@@ -329,7 +331,7 @@ async function aplicarMigraciones(pg) {
 }
 
 // Levanta PGlite (en memoria, o persistido en `dir`) con el esquema de Supabase.
-async function crearClienteLocal({ dir = null } = {}) {
+async function crearClienteLocal({ dir = null, omitir = [] } = {}) {
   const { PGlite, types } = await import('@electric-sql/pglite');
   const aIso = (v) => new Date(v).toISOString();
   // Numeric e int8 como numero (igual que los devuelve la API de Supabase) y fechas como
@@ -345,7 +347,7 @@ async function crearClienteLocal({ dir = null } = {}) {
       [types.TIMESTAMP]: aIso,
     },
   });
-  await aplicarMigraciones(pg);
+  await aplicarMigraciones(pg, omitir);
   const cliente = new ClienteLocal(pg);
   await pg.listen(CANAL_NOTIFY, (texto) => cliente._repartir(texto));
   return cliente;

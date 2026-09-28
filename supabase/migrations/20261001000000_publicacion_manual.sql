@@ -1,7 +1,12 @@
 -- =============================================================================
 -- Habbo Inventario — Publicar y retirar a mano (lotes que ya están en el mercadillo)
 --
--- Requiere las migraciones anteriores (hasta 20260930000000_venta_neta_mercadillo).
+-- Requiere las migraciones hasta 20260929000000_precio_lista_y_comision.
+-- Trae incluido, de forma idempotente, lo que necesita de 20260930000000_venta_neta_
+-- mercadillo (columna comision_venta y su restricción, el paso a neto de las ventas
+-- antiguas desde Publicado y revertir_venta): funciona igual se haya ejecutado esa
+-- migración o no. Corrección: la primera versión fallaba con «column c.comision_venta
+-- does not exist» en una base sin la 20260930000000.
 -- Cómo aplicarlo: Supabase → SQL Editor → pega este archivo completo → Run.
 -- Es una sola transacción del editor y se puede ejecutar más de una vez.
 --
@@ -17,9 +22,40 @@
 --      controlas tú. Lo ya publicado queda marcado 'sniper'.
 --   4. El evento 'recuperar' del Sniper toma primero sus propias publicaciones y solo
 --      después las manuales del mismo furni.
+--   5. Si no se había ejecutado 20260930000000: vender un lote publicado guarda el NETO
+--      (precio − comisión) y la comisión en comision_venta; las ventas ya hechas desde
+--      Publicado se pasan a neto una sola vez.
 -- =============================================================================
 
--- ─── 1. Quién publicó cada lote ──────────────────────────────────────────────
+-- ─── 0. Comprobación: la comisión del mercadillo (20260929000000) ya existe ──
+
+do $$
+begin
+  if to_regprocedure('public.comision_mercadillo(numeric)') is null then
+    raise exception 'Falta ejecutar antes 20260929000000_precio_lista_y_comision.sql (y las anteriores, en orden).';
+  end if;
+end;
+$$;
+
+-- ─── 1. Requisitos de 20260930000000 (venta neta), por si no se ejecutó ──────
+
+alter table public.compras add column if not exists comision_venta numeric;
+alter table public.compras drop constraint if exists compras_comision_venta_valida;
+alter table public.compras add constraint compras_comision_venta_valida
+  check (comision_venta is null or (comision_venta >= 0 and estado = 'vendido'));
+
+-- Ventas ya registradas desde 'Publicado' con precio bruto: a neto, una sola vez (si
+-- ya se ejecutó 20260930000000, no queda ninguna y esto no cambia nada).
+update public.compras
+   set comision_venta = public.comision_mercadillo(precio_venta),
+       precio_venta = precio_venta - public.comision_mercadillo(precio_venta)
+ where estado = 'vendido'
+   and precio_lista is not null
+   and moneda_venta = 'creditos'
+   and precio_venta is not null
+   and comision_venta is null;
+
+-- ─── 2. Quién publicó cada lote ──────────────────────────────────────────────
 
 alter table public.compras add column if not exists publicado_por text;
 alter table public.compras drop constraint if exists compras_publicado_por_valido;
@@ -32,7 +68,7 @@ update public.compras
    set publicado_por = 'sniper'
  where publicado_por is null and precio_lista is not null and estado in ('publicado', 'vendido');
 
--- ─── 2. Vistas (v_compras expone publicado_por) ──────────────────────────────
+-- ─── 3. Vistas (v_compras expone publicado_por y la comisión pagada) ─────────
 
 drop view if exists public.v_furnis;
 drop view if exists public.v_compras;
@@ -161,7 +197,7 @@ from (
 revoke all on public.v_compras, public.v_furnis from anon;
 grant select on public.v_compras, public.v_furnis to authenticated;
 
--- ─── 3. Publicar y retirar desde la app ──────────────────────────────────────
+-- ─── 4. Publicar y retirar desde la app ──────────────────────────────────────
 
 -- Publicar a mano: todo el lote o una parte (el lote se divide y nace uno 'publicado'
 -- con esa parte). Sirve también para los huérfanos: al publicarlos se da por puesto
@@ -258,7 +294,7 @@ begin
 end;
 $$;
 
--- ─── 4. El Sniper marca lo que publica y recupera primero lo suyo ────────────
+-- ─── 5. El Sniper marca lo que publica y recupera primero lo suyo ────────────
 
 create or replace function public._sniper_publicar(t public.tokens_sniper, e jsonb)
 returns jsonb
@@ -404,7 +440,12 @@ begin
 end;
 $$;
 
--- ─── 5. Vender copia quién lo publicó (para que revertir lo deje igual) ──────
+-- ─── 6. Vender y revertir ────────────────────────────────────────────────────
+
+-- Vender: si el lote estaba publicado y el precio es en créditos, la venta fue en el
+-- mercadillo: se congela el NETO (precio − comisión) y la comisión queda en
+-- comision_venta. La fila vendida conserva el precio de lista y quién lo publicó, para
+-- que revertir la deje igual.
 
 create or replace function public.vender_lote(
   p_id bigint, p_cantidad integer default null, p_moneda text default null,
@@ -470,7 +511,42 @@ begin
 end;
 $$;
 
--- ─── 6. Permisos ─────────────────────────────────────────────────────────────
+-- Revertir: la venta vuelve a su lote de origen si sigue 'comprado' o 'publicado' al
+-- mismo costo; si no, la fila vuelve a 'publicado' (si tenía precio de lista) o a
+-- 'comprado', sin precio de venta ni comisión.
+create or replace function public.revertir_venta(p_id bigint)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  c public.compras%rowtype;
+  o public.compras%rowtype;
+begin
+  select * into c from public.compras where id = p_id for update;
+  if not found then raise exception using errcode = 'PT404', message = 'Ese lote no existe.'; end if;
+  if c.estado <> 'vendido' then raise exception using errcode = 'PT400', message = 'Ese lote no esta vendido.'; end if;
+
+  if c.origen_id is not null then
+    select * into o from public.compras where id = c.origen_id for update;
+    if found and o.estado in ('comprado', 'publicado') and o.furni_id = c.furni_id
+       and o.moneda_compra = c.moneda_compra and o.precio_compra = c.precio_compra then
+      update public.compras set cantidad = cantidad + c.cantidad where id = o.id;
+      delete from public.compras where id = c.id;
+      return jsonb_build_object('fusionada', true, 'compra_id', o.id);
+    end if;
+  end if;
+
+  update public.compras
+     set estado = case when c.precio_lista is not null then 'publicado' else 'comprado' end,
+         moneda_venta = null, precio_venta = null, comision_venta = null, fecha_venta = null
+   where id = c.id;
+  return jsonb_build_object('fusionada', false, 'compra_id', c.id);
+end;
+$$;
+
+-- ─── 7. Permisos ─────────────────────────────────────────────────────────────
 
 revoke execute on function public.publicar_lote(bigint, integer, numeric) from public, anon;
 revoke execute on function public.retirar_lote(bigint) from public, anon;
