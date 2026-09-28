@@ -7,8 +7,10 @@
 // (FIFO, igual que el Sniper), y el furni sale por completo de Comprado. Si publicas
 // menos, el ultimo lote que entra se divide. Lo "por revisar" (recien comprado por el
 // Sniper) no se toca: lo publica el Sniper. El precio de lista es en creditos y se
-// propone el del furni. La vista previa muestra lo que entraria a tu monedero y la
-// ganancia, ya descontada la comision. Lo publicado a mano se retira desde su fila.
+// propone el del furni. Con "Ingresar precio neto" escribes lo que quieres que te entre
+// y se calcula el precio de lista (el menor que deja ese neto tras la comision). Siempre
+// se ven los dos: lo que paga el comprador y lo que entra a tu monedero, y la ganancia.
+// Lo publicado a mano se retira desde su fila.
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -16,19 +18,10 @@ import { _submitGuard } from '../core/ui.js';
 import { leerNumero, fmtCr, fmtLg } from '../core/format.js';
 import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
-import { calcularComision, calcularGananciaNeta } from '../core/comision.js';
+import { calcularComision, calcularGananciaNeta, calcularPrecioLista } from '../core/comision.js';
+import { repartirFifo } from '../core/lotes.js';
 
-// Reparte `q` unidades entre los lotes (ya ordenados FIFO): [{ lote, toma }].
-function repartir(lotes, q) {
-  var resta = q; var out = [];
-  lotes.forEach(function (l) {
-    if (resta <= 0) return;
-    var toma = Math.min(l.cantidad, resta);
-    out.push({ lote: l, toma: toma });
-    resta -= toma;
-  });
-  return out;
-}
+function texto(n) { return String(n).replace('.', ','); }
 
 export function PublicarModal(props) {
   var furni = props.furni || {};
@@ -38,16 +31,27 @@ export function PublicarModal(props) {
   var sQ = useState(String(total)); var cant = sQ[0]; var setCant = sQ[1];
   var precioBase = furni.moneda_venta === 'creditos' ? furni.precio_venta : null;
   var sP = useState(precioBase !== null && precioBase !== undefined ? String(precioBase).replace('.', ',') : ''); var precio = sP[0]; var setPrecio = sP[1];
+  var sNeto = useState(false); var modoNeto = sNeto[0]; var setModoNeto = sNeto[1];
   var sErr = useState(''); var error = sErr[0]; var setError = sErr[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
 
   var q = leerNumero(cant);
-  var p = leerNumero(precio);
+  var entrada = leerNumero(precio);
   var qValida = q && !isNaN(q) && q >= 1 && q <= total && Math.floor(q) === q;
-  var pValido = p !== null && !isNaN(p) && p >= 0;
-  var tomas = qValida ? repartir(lotes, q) : [];
+  var entradaValida = entrada !== null && !isNaN(entrada) && entrada >= 0;
+  // p = precio de lista (lo que paga el comprador); netoU = lo que entra por unidad.
+  var p = !entradaValida ? null : modoNeto ? calcularPrecioLista(entrada) : entrada;
+  var pValido = p !== null;
+  var tomas = qValida ? repartirFifo(lotes, q) : [];
   var costoTomado = tomas.reduce(function (s, t) { return s + t.lote.precio_compra_cr * t.toma; }, 0);
   var netoU = pValido ? p - calcularComision(p) : null;
+
+  // Al cambiar de modo, el numero escrito se convierte para no perder lo que se veia.
+  function cambiarModo(neto) {
+    if (pValido) setPrecio(texto(neto ? netoU : p));
+    setModoNeto(neto);
+    setError('');
+  }
   var ganancia = qValida && pValido ? tomas.reduce(function (s, t) { return s + calcularGananciaNeta(p, t.lote.precio_compra_cr) * t.toma; }, 0) : null;
   var divide = tomas.length && tomas[tomas.length - 1].toma < tomas[tomas.length - 1].lote.cantidad;
 
@@ -55,7 +59,11 @@ export function PublicarModal(props) {
 
   function publicar() {
     if (!qValida) { setError('La cantidad debe estar entre 1 y ' + total + '.'); return; }
-    if (!pValido) { setError('Escribe el precio de lista con que lo publicaste (en créditos).'); return; }
+    if (!pValido) {
+      setError(modoNeto && entradaValida ? 'Ningún precio de lista deja ese neto: el máximo que puede entrar por unidad es 192.080 cr.'
+        : modoNeto ? 'Escribe cuánto quieres que te entre por unidad (en créditos).' : 'Escribe el precio de lista con que lo publicaste (en créditos).');
+      return;
+    }
     _submitGuard(enviando, setEnviando, function () {
       return API.post('/api/furnis/' + furni.id + '/publicar', { cantidad: q, precio_lista: p })
         .then(function (r) {
@@ -74,17 +82,28 @@ export function PublicarModal(props) {
         h('input', { className: 'inp inp-num', style: { width: 80, textAlign: 'center' }, value: cant, inputMode: 'numeric', onChange: function (e) { setCant(e.target.value); setError(''); } }),
         h('button', { className: 'btn', onClick: function () { cambiarCant(1); } }, '+'),
         h('button', { className: 'btn', onClick: function () { setCant(String(total)); } }, 'Todas'))),
-    h(Fld, { label: 'Precio de lista en el mercadillo (créditos, por unidad)' },
+    h(Fld, { label: modoNeto ? 'Neto que quieres recibir (créditos, por unidad)' : 'Precio de lista en el mercadillo (créditos, por unidad)' },
       h('input', { className: 'inp inp-num', value: precio, placeholder: '0', inputMode: 'decimal', autoFocus: true,
-        onChange: function (e) { setPrecio(e.target.value); setError(''); }, onKeyDown: function (e) { if (e.key === 'Enter') publicar(); } })),
+        onChange: function (e) { setPrecio(e.target.value); setError(''); }, onKeyDown: function (e) { if (e.key === 'Enter') publicar(); } }),
+      h('label', { className: 'check', style: { marginTop: 8 } },
+        h('input', { type: 'checkbox', checked: modoNeto, onChange: function (e) { cambiarModo(e.target.checked); } }),
+        'Ingresar precio neto (lo que quiero que me entre); la app calcula el precio de lista')),
+    h('div', { className: 'par-precios' },
+      h('div', { className: modoNeto ? 'calculado' : '' },
+        h('div', { className: 'dato-l' }, 'Paga el comprador (precio de lista)', modoNeto ? h('span', { className: 'tag tag-gris', style: { marginLeft: 6 } }, 'calculado') : null),
+        h('div', { className: 'par-valor mono' }, pValido ? fmtCr(p) + ' cr' : '-')),
+      h('div', { className: modoNeto ? '' : 'calculado' },
+        h('div', { className: 'dato-l' }, 'Entra a tu monedero (neto)', modoNeto ? null : h('span', { className: 'tag tag-gris', style: { marginLeft: 6 } }, 'calculado')),
+        h('div', { className: 'par-valor mono pos' }, pValido ? fmtCr(netoU) + ' cr' : '-')),
+      h('div', { className: 'par-nota suave' }, pValido ? 'Comisión de Habbo: ' + fmtCr(p - netoU) + ' cr por unidad' : 'Por unidad, en créditos')),
     qValida ? h('div', { className: 'aviso' },
       q === total
         ? h('div', null, 'Las ', h('b', { className: 'mono' }, total), ' und pasan a ',
             h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Publicado'), ' y el furni sale de Comprado.')
         : h('div', null, 'Se publican ', h('b', { className: 'mono' }, q), ' und de los lotes más antiguos y quedan ', h('b', { className: 'mono' }, total - q), ' en Comprado',
             divide ? ' (el lote Nº ' + tomas[tomas.length - 1].lote.id + ' se divide).' : '.'),
-      pValido ? h('div', { style: { marginTop: 6 } }, 'Si se venden, entran a tu monedero ',
-        h('b', { className: 'mono' }, fmtCr(netoU) + ' cr'), ' por unidad (comisión ' + fmtCr(p - netoU) + ' cr) · ganancia ',
+      pValido ? h('div', { style: { marginTop: 6 } }, 'Si se venden las ', q, ', entran ',
+        h('b', { className: 'mono' }, fmtCr(netoU * q) + ' cr'), ' · ganancia ',
         h('b', { className: 'mono ' + (ganancia > 0 ? 'pos' : ganancia < 0 ? 'neg' : '') }, (ganancia > 0 ? '+' : '') + fmtCr(ganancia) + ' cr')) : null,
       pValido && netoU * q < costoTomado ? h('div', { className: 'neg', style: { marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' } }, h(Ico, { name: 'alert', size: 14 }), 'Tras la comisión no cubre lo que costaron') : null) : null,
     furni.unidades_pendientes > 0 ? h('div', { className: 'suave', style: { fontSize: 12 } },

@@ -4,7 +4,9 @@
 // mano (Comprado), lo "por revisar" del Sniper y lo vendido viven en el Inventario. Cada
 // fila resume SOLO lo publicado de ese furni: precio de lista, unidades, costo promedio y
 // ganancia esperada neta, lote por lote con la comision del mercadillo
-// (core/comision.js, resumenPublicado). Clic en una fila: detalle y sus lotes publicados.
+// (core/comision.js, resumenPublicado). En cada fila, "Vendido" y "Retirar" (este solo si
+// hay algo publicado por ti) abren un modal que pregunta cuantas unidades y, si hay
+// varios precios de lista, de cual; se aplican FIFO. Clic en la fila: detalle.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { fmtCr, fmtLg } from '../core/format.js';
@@ -63,7 +65,7 @@ export function MercadilloView(props) {
         : h('table', { className: 'tabla' },
             h('thead', null, h('tr', null,
               h('th', null, 'Furni'), h('th', { className: 'r' }, 'Precio de lista'), h('th', { className: 'r' }, 'Publicadas'),
-              h('th', { className: 'r' }, 'Costo prom.'), h('th', { className: 'r' }, 'Ganancia esp.'), h('th', null, 'Publicado por'))),
+              h('th', { className: 'r' }, 'Costo prom.'), h('th', { className: 'r' }, 'Ganancia esp.'), h('th', null, 'Publicado por'), h('th', null))),
             h('tbody', null, visibles.map(function (x) {
               var f = x.f; var r = x.r;
               var abiertoEste = abierto === f.id;
@@ -77,9 +79,13 @@ export function MercadilloView(props) {
                 h('td', { className: 'r mono' }, r.costoPromedio === null ? '-' : fmtLg(r.costoPromedio)),
                 h('td', { className: 'r mono ' + (r.ganancia > 0 ? 'pos' : r.ganancia < 0 ? 'neg' : ''), title: r.comision ? 'Ya descuenta ' + fmtCr(r.comision) + ' cr de comisión del mercadillo' : '' },
                   (r.ganancia > 0 ? '+' : '') + fmtCr(r.ganancia)),
-                h('td', null, h(PublicadoPor, { r: r })))];
+                h('td', null, h(PublicadoPor, { r: r })),
+                h('td', { className: 'r' },
+                  h('span', { style: { display: 'inline-flex', gap: 6 } },
+                    h('button', { className: 'btn btn-chico', title: 'Registrar la venta de unidades publicadas', onClick: function (e) { e.stopPropagation(); props.onVender(f); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
+                    r.manual ? h('button', { className: 'btn btn-chico', title: 'Quitaste del mercadillo lo que publicaste tú: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); props.onRetirar(f); } }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)))];
               if (abiertoEste) {
-                trs.push(h('tr', { key: f.id + '-d' }, h('td', { colSpan: 6, className: 'detalle' },
+                trs.push(h('tr', { key: f.id + '-d' }, h('td', { colSpan: 7, className: 'detalle' },
                   h('div', { className: 'detalle-grid' },
                     h(Dato, { l: 'Unidades publicadas', v: r.unidades, c: 'morado' }),
                     h(Dato, { l: 'Precio de lista', v: rangoLista(r), c: 'morado' }),

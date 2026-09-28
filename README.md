@@ -10,8 +10,8 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 | Vista | Qué muestra |
 |---|---|
 | **Resumen** | Tasa del Lingo, mercancía en venta (inversión, retorno, ganancia y margen), compras del Sniper por revisar, ventas realizadas, datos rápidos y alerta de furnis con pérdida |
-| **Mercadillo** | Solo lo que está **publicado** en el mercadillo de Habbo.es (por el Sniper o por ti): precio de lista, unidades, costo promedio y ganancia esperada neta de lo publicado. Al hacer clic: lo que te entraría, la comisión, el precio mínimo para no perder y sus lotes |
-| **Inventario** | Cada lote, en tres pestañas: **Comprado** (en mano), **Publicado** (con candado) y **Vendido**; un lote vive en una sola. Arriba, destacadas, las compras que llegaron del Sniper ("huérfanas") para ponerles precio y activarlas. **Publicar** pasa al mercadillo todas las unidades en mano de un furni (por ejemplo, lo que venía del Excel) y **Retirar** lo deshace. Vender una parte divide el lote y congela el precio real de venta |
+| **Mercadillo** | Solo lo que está **publicado** en el mercadillo de Habbo.es (por el Sniper o por ti): precio de lista, unidades, costo promedio y ganancia esperada neta de lo publicado. En cada fila, **Vendido** y **Retirar** (preguntan cuántas unidades y, si hay varios precios de lista, de cuál; se aplican FIFO). Al hacer clic: lo que te entraría, la comisión, el precio mínimo para no perder y sus lotes |
+| **Inventario** | Cada lote, en tres pestañas: **Comprado** (en mano), **Publicado** (con candado) y **Vendido**; un lote vive en una sola. Arriba, destacadas, las compras que llegaron del Sniper ("huérfanas") para ponerles precio y activarlas. **Publicar** pasa al mercadillo todas las unidades en mano de un furni (por ejemplo, lo que venía del Excel), con el precio de lista o, marcando «Ingresar precio neto», con lo que quieres recibir (la app calcula el precio de lista); **Retirar** lo deshace. Vender una parte divide el lote y congela el precio real de venta |
 | **Ajustes** | Tokens de tus snipers (uno por VPS), importar desde Excel, catálogo de Habbo.es, tema y cuenta |
 
 ## Cómo funciona
@@ -48,7 +48,7 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 | Paso | Dónde | Qué hacer |
 |---|---|---|
 | 1 | [supabase.com](https://supabase.com) | Crea un proyecto (el plan gratis alcanza) |
-| 2 | SQL Editor | Ejecuta, **en orden**, cada archivo de [`supabase/migrations/`](supabase/migrations/): pega su contenido y pulsa **Run** (`20260927000000_esquema_inicial.sql`, luego `20260928000000_eventos_sniper.sql`, `20260929000000_precio_lista_y_comision.sql`, `20260930000000_venta_neta_mercadillo.sql`, `20261001000000_publicacion_manual.sql` y `20261002000000_publicar_furni.sql`) |
+| 2 | SQL Editor | Ejecuta, **en orden**, cada archivo de [`supabase/migrations/`](supabase/migrations/): pega su contenido y pulsa **Run** (`20260927000000_esquema_inicial.sql`, luego `20260928000000_eventos_sniper.sql`, `20260929000000_precio_lista_y_comision.sql`, `20260930000000_venta_neta_mercadillo.sql`, `20261001000000_publicacion_manual.sql`, `20261002000000_publicar_furni.sql` y `20261003000000_vender_retirar_furni.sql`) |
 | 3 | Authentication → Users | **Add user** con tu email y contraseña, marcando *Auto Confirm User* |
 | 4 | Authentication → Sign In / Providers → Email | Desactiva *Allow new users to sign up* (nadie más puede crearse cuenta en tu proyecto) |
 | 5 | Project Settings → API | Copia la **Project URL** y la **anon public key** |
@@ -178,7 +178,7 @@ docs/                integración con SniperMercadillo
 | `eventos_sniper` | — | Bitácora de cada evento del bot, con `id_externo` único (idempotencia) |
 | `v_compras`, `v_furnis` | — | Todos los cálculos del Excel (costo, ganancia, margen, stock, costo promedio, estado, pérdida) más la comisión del mercadillo y el precio de lista de lo publicado, con RLS |
 | `registrar_eventos_sniper` | — | Entrada única de los snipers: compra, publicar y recuperar (token + hotel Habbo.es + FIFO + idempotencia) |
-| `vender_lote`, `revertir_venta`, `publicar_furni`, `publicar_lote`, `retirar_lote`, `activar_pendientes`, `crear_compra`, `importar_excel`, `fusionar_furnis` | — | Operaciones de varias escrituras, cada una en una transacción |
+| `vender_lote`, `vender_furni`, `revertir_venta`, `publicar_furni`, `publicar_lote`, `retirar_lote`, `retirar_furni`, `activar_pendientes`, `crear_compra`, `importar_excel`, `fusionar_furnis` | — | Operaciones de varias escrituras, cada una en una transacción |
 
 ## Licencia
 

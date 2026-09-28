@@ -96,6 +96,14 @@ async function main() {
   }
   assert.equal(comision.calcularGananciaNeta(150, 100), 46);
   ok('comision exacta (JS): 2 -> 1 (neto 1), 150 -> 4 (neto 146), 2500 -> 58 (neto 2442), 99999 -> 14500 (neto 85499)');
+  for (const [neto, lista] of [[1, 2], [146, 150], [2442, 2500], [85499, 99999]]) {
+    assert.equal(comision.calcularPrecioLista(neto), lista, `precio de lista para recibir ${neto}`);
+  }
+  for (let n = 1; n <= 150000; n++) {
+    const p = comision.calcularPrecioLista(n);
+    if (p - comision.calcularComision(p) !== n || (p - 1) - comision.calcularComision(p - 1) >= n) assert.fail(`neto ${n}: lista ${p} no es la menor que lo deja exacto`);
+  }
+  ok('al reves (casilla "Ingresar precio neto"): 1 -> 2, 146 -> 150, 2442 -> 2500, 85499 -> 99999; exacto y el menor posible de 1 a 150.000');
   const barrido = (await clienteA.pg.query(
     'select p::int as p, public.comision_mercadillo(p)::int as c from generate_series(0, 200000) p order by p')).rows;
   assert.equal(barrido.length, 200001);
@@ -482,6 +490,42 @@ async function main() {
     await negocio.activarPendientes({ furni_id: sak[0].id });
     assert.equal((await lotesDeSak('comprado')).reduce((s, c) => s + c.cantidad, 0), 4);
     ok('publicar el furni completo: toma sus unidades en mano de todos sus lotes (FIFO) y sale de Comprado; lo "por revisar" no entra; publicar menos divide el lote');
+
+    // ── Desde el Mercadillo: vender y retirar lo publicado de un furni (FIFO, por precio de lista) ──
+    const repartoLotes = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'lotes.js')).href);
+    const loteC = (await negocio.listarCompras()).find((c) => c.id_externo === 'cmp_sak2');
+    await negocio.publicarFurni(sak[0].id, { cantidad: 3, precio_lista: 210 });   // lotes A (2) y B (1)
+    await negocio.publicarFurni(sak[0].id, { cantidad: 1, precio_lista: 250 });   // lote C
+    const gruposSak = repartoLotes.gruposPorPrecioLista(await lotesDeSak('publicado'));
+    assert.deepEqual(gruposSak.map((g) => [g.precio_lista, g.unidades]), [[210, 3], [250, 1]]);
+    const previsto = repartoLotes.repartirFifo(gruposSak[0].lotes, 2).map((t) => [t.lote.id, t.toma]);
+    assert.deepEqual(previsto, [[loteA.id, 2]]);
+    const vf = await negocio.venderFurni(sak[0].id, { cantidad: 2, precio_lista: 210 });
+    assert.deepEqual(vf.ventas.map((v) => [v.lote_id, v.cantidad]), previsto, 'la base toma los mismos lotes que muestra el modal');
+    assert.equal(vf.ventas[0].precio_venta, 210 - comision.calcularComision(210), 'se guarda el neto');
+    await rechaza(negocio.venderFurni(sak[0].id, { cantidad: 2, precio_lista: 210 }), /Solo hay 1 unidad/);
+    const vf2 = await negocio.venderFurni(sak[0].id, { cantidad: 1, precio_venta: 230 });
+    assert.equal(vf2.ventas[0].lote_id, loteB.id, 'sin precio de lista: FIFO sobre todo lo publicado');
+    assert.equal(vf2.ventas[0].precio_venta, 230 - comision.calcularComision(230));
+    const hv = await pedir(puerto, 'POST', `/api/furnis/${sak[0].id}/vender`, { cuerpo: { cantidad: 1, precio_lista: 250 } });
+    assert.equal(hv.status, 200);
+    assert.equal(hv.json.ventas[0].lote_id, loteC.id);
+    for (const v of [...vf.ventas, ...vf2.ventas, ...hv.json.ventas]) await negocio.revertirVenta(v.venta_id);
+    assert.equal((await lotesDeSak('publicado')).reduce((s, c) => s + c.cantidad, 0), 4);
+    ok('Vendido desde el Mercadillo: elige el precio de lista y vende FIFO (los mismos lotes que muestra el modal), guardando el neto');
+
+    let rf = await negocio.retirarFurni(sak[0].id, { cantidad: 1, precio_lista: 210 });
+    assert.deepEqual(rf.lotes.map((x) => [x.desde_lote, x.cantidad]), [[loteA.id, 1]]);
+    assert.equal((await leerLote(loteA.id)).cantidad, 1, 'retirar una parte divide el lote');
+    assert.equal((await leerLote(rf.lotes[0].hacia_lote)).estado, 'comprado');
+    rf = await negocio.retirarFurni(sak[0].id, {});
+    assert.equal(rf.cantidad, 3);
+    assert.equal((await lotesDeSak('publicado')).length, 0);
+    assert.equal((await lotesDeSak('comprado')).reduce((s, c) => s + c.cantidad, 0), 4);
+    const hr = await pedir(puerto, 'POST', `/api/furnis/${fv.id}/retirar`, { cuerpo: {} });
+    assert.equal(hr.status, 400);
+    assert.match(hr.json.error, /publicó el Sniper/);
+    ok('Retirar desde el Mercadillo: solo lo publicado por ti, FIFO y por precio de lista; una parte divide el lote; lo del Sniper no');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);

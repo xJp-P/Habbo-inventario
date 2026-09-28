@@ -244,6 +244,32 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { cantidad: r.cantidad, en_mano: r.en_mano, precio_lista: r.precio_lista, lotes: r.lotes };
   }
 
+  // Desde el Mercadillo (por furni). Venta de N unidades publicadas, FIFO; con
+  // precio_lista, solo de los lotes publicados a ese precio (funcion vender_furni). Lo
+  // que se guarda es el neto: vender_lote descuenta la comision.
+  async function venderFurni(id, entrada = {}) {
+    const r = await datos(db().rpc('vender_furni', {
+      p_furni_id: Number(id),
+      p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad vendida', minimo: 1, entero: true }),
+      p_precio: numeroValido(entrada.precio_venta, { campo: 'El precio de venta', opcional: true }),
+      p_fecha: entrada.fecha_venta || hoyStr(),
+      p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
+    }));
+    return { cantidad: r.cantidad, ventas: r.ventas };
+  }
+
+  // Retira N unidades que publicaste tu de un furni (todas si no se indica), FIFO;
+  // con precio_lista, solo las de ese precio (funcion retirar_furni).
+  async function retirarFurni(id, entrada = {}) {
+    const r = await datos(db().rpc('retirar_furni', {
+      p_furni_id: Number(id),
+      p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
+        ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a retirar', minimo: 1, entero: true }),
+      p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
+    }));
+    return { cantidad: r.cantidad, lotes: r.lotes };
+  }
+
   // Deshace una publicacion manual: el lote vuelve a "comprado" (funcion retirar_lote).
   async function retirarLote(id) {
     const r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
@@ -379,7 +405,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
-    vender, revertirVenta, publicarLote, publicarFurni, retirarLote, pendientesPorFurni, activarPendientes,
+    vender, revertirVenta, publicarLote, publicarFurni, venderFurni, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
     resolverNombre, sincronizarConCatalogo,
   };

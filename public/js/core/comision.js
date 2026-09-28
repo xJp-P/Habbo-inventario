@@ -49,6 +49,14 @@ export function precioMinimoSinPerder(costo) {
   return p;
 }
 
+// Al reves: el precio de lista (lo que paga el comprador) para que te entre `neto`. Es el
+// MENOR precio entero cuyo neto llega a esa cifra; como el neto sube de a 0 o 1 credito,
+// con un neto entero da exacto (146 -> 150, 2.442 -> 2.500, 85.499 -> 99.999). null si
+// ningun precio lo alcanza.
+export function calcularPrecioLista(neto) {
+  return precioMinimoSinPerder(neto);
+}
+
 // Ganancia esperada de un furni (columna "Ganancia esp." del Mercadillo): cada unidad en
 // stock, comprada o publicada, vendida a su precio (el de lista si está publicada, el
 // del furni si no) menos la comisión y menos lo que costó. `lotes` son las filas de

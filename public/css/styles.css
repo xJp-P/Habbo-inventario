@@ -89,6 +89,13 @@ input[type=number]{-moz-appearance:textfield}
 .btn-morado:hover{border-color:var(--purple)}
 .confirmar-ico{flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--green-bg,rgba(46,160,67,.15));color:var(--green)}
 .confirmar-ico.peligro{background:var(--red-bg);color:var(--red)}
+.check{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2)}
+.check input{width:16px;height:16px;accent-color:var(--green2);cursor:pointer}
+.par-precios{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.par-precios>div:not(.par-nota){background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.par-precios>div.calculado{border-style:dashed}
+.par-valor{font-size:20px;font-weight:700;margin-top:2px}
+.par-nota{grid-column:1/-1;font-size:12px;margin-top:-4px}
 .btn-icono{background:var(--bg3);border:1px solid var(--border);border-radius:99px;padding:6px 8px;cursor:pointer;display:flex;align-items:center}
 .mono{font-family:'Cascadia Code','Consolas',monospace}
 .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap}
