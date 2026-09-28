@@ -23,6 +23,8 @@ import { Ico } from '../componentes/iconos.js';
 
 function clave(f) { return f.tipo + ':' + f.sprite_id; }
 function unidades(n) { return n + (n === 1 ? ' unidad' : ' unidades'); }
+// Singular o plural segun la cantidad: pl(1, 'furni', 'furnis') -> 'furni'.
+function pl(n, singular, plural) { return n === 1 ? singular : plural; }
 
 function Chip(props) {
   return h('span', { className: 'tag ' + props.clase, style: { fontSize: 12 } }, props.children);
@@ -107,7 +109,7 @@ function FormMover(props) {
     props.onEnviar('/api/auditoria/mover', {
       furni_id: f.furni_id, cantidad: c, desde: props.desde, hacia: destino.trim(),
       lote_ids: lotes.length ? lotes.map(function (l) { return l.lote_id; }) : null,
-    }, props.nombre + ': ' + unidades(c) + ' pasan a ' + destino.trim());
+    }, props.nombre + ': ' + unidades(c) + pl(c, ' pasa a ', ' pasan a ') + destino.trim());
   }
   return h(Formulario, { onCancelar: props.onCerrar, onGuardar: guardar, enviando: props.enviando, textoGuardar: 'Mover' },
     h(Campo, { l: 'Cantidad' }, h('input', { className: 'inp inp-num', style: { width: 80 }, value: cant, inputMode: 'numeric', onChange: function (e) { setCant(e.target.value); } })),
@@ -188,7 +190,7 @@ export function AuditoriaView(props) {
 
   function quitarNoRegistrados() {
     enviar('/api/auditoria/excluir', { keko: K, items: noReg.map(function (f) { return { sprite_id: f.sprite_id, tipo: f.tipo, unidades: f.diferencia, habbo: f.habbo, app: f.app }; }) },
-      noReg.length + ' furni(s) quitados de la auditoría de ' + K);
+      noReg.length + pl(noReg.length, ' furni quitado', ' furnis quitados') + ' de la auditoría de ' + K);
   }
 
   function excluir(f, unidadesExcl) {
@@ -217,13 +219,13 @@ export function AuditoriaView(props) {
       if (f.sin_asignar > 0) {
         var n = Math.min(f.diferencia, f.sin_asignar);
         acciones.push(h('button', { key: 's', className: 'btn btn-chico btn-verde', title: 'Lotes de la app sin keko (Excel, compras manuales o del Sniper antes de la auditoría)', onClick: function () {
-          enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: n, desde: null, hacia: K }, nombreDe(f) + ': ' + unidades(n) + ' asignadas a ' + K);
+          enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: n, desde: null, hacia: K }, nombreDe(f) + ': ' + unidades(n) + pl(n, ' asignada a ', ' asignadas a ') + K);
         } }, 'Son de este keko (' + f.sin_asignar + ' sin asignar)'));
       }
       (f.otros || []).forEach(function (o) {
         var m = Math.min(f.diferencia, o.unidades);
         acciones.push(h('button', { key: 'o' + o.keko, className: 'btn btn-chico', onClick: function () {
-          enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: m, desde: o.keko, hacia: K }, nombreDe(f) + ': ' + unidades(m) + ' volvieron de ' + o.keko);
+          enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: m, desde: o.keko, hacia: K }, nombreDe(f) + ': ' + unidades(m) + pl(m, ' volvió de ', ' volvieron de ') + o.keko);
         } }, 'Volvieron de ' + o.keko + ' (' + o.unidades + ' allá)'));
       });
       acciones.push(h('button', { key: 'e', className: 'btn btn-chico' + (abiertoAqui === 'entrada' ? ' activo' : ''), onClick: function () { abrir('entrada'); } },
@@ -236,14 +238,14 @@ export function AuditoriaView(props) {
         var lotes = (f.lotes_ltd_faltantes || []).map(function (l) { return l.lote_id; });
         setConfirmacion({ titulo: 'Borrar unidades', peligro: true, icono: 'trash', textoBoton: 'Borrar',
           mensaje: h('span', null, 'Se eliminan ', h('b', null, unidades(falta)), ' de «' + nombreDe(f) + '» del keko ' + K + ', sin registrar venta ni pérdida.'),
-          accion: function () { enviar('/api/auditoria/baja', { furni_id: f.furni_id, cantidad: falta, keko: K, lote_ids: lotes.length ? lotes : null }, nombreDe(f) + ': ' + unidades(falta) + ' borradas'); } });
+          accion: function () { enviar('/api/auditoria/baja', { furni_id: f.furni_id, cantidad: falta, keko: K, lote_ids: lotes.length ? lotes : null }, nombreDe(f) + ': ' + unidades(falta) + pl(falta, ' borrada', ' borradas')); } });
       } }, 'Borrar'));
     } else if (f.categoria === 'sin_keko') {
       acciones.push(h('button', { key: 'm', className: 'btn btn-chico' + (abiertoAqui === 'mover-sin' ? ' activo' : ''), onClick: function () { abrir('mover-sin'); } }, 'Están en otro keko'));
       acciones.push(h('button', { key: 'b', className: 'btn btn-chico btn-peligro', onClick: function () {
         setConfirmacion({ titulo: 'Borrar unidades', peligro: true, icono: 'trash', textoBoton: 'Borrar',
           mensaje: h('span', null, 'Se eliminan ', h('b', null, unidades(f.sin_asignar)), ' sin keko de «' + nombreDe(f) + '», sin registrar venta ni pérdida.'),
-          accion: function () { enviar('/api/auditoria/baja', { furni_id: f.furni_id, cantidad: f.sin_asignar, keko: null }, nombreDe(f) + ': ' + unidades(f.sin_asignar) + ' sin keko borradas'); } });
+          accion: function () { enviar('/api/auditoria/baja', { furni_id: f.furni_id, cantidad: f.sin_asignar, keko: null }, nombreDe(f) + ': ' + unidades(f.sin_asignar) + ' sin keko ' + pl(f.sin_asignar, 'borrada', 'borradas')); } });
       } }, 'Borrar'));
       notas.push('Si las vendiste, regístralo en Inventario → Venta.');
     } else if (f.categoria === 'ltd') {
@@ -304,13 +306,13 @@ export function AuditoriaView(props) {
           return h('button', { key: k.keko, className: 'chip' + (k.keko === K ? ' activo' : ''), onClick: function () { setAbierto(null); cargar(k.keko); } }, k.keko);
         })) : null,
       h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 } },
-        h(Chip, { clase: 'tag-verde' }, (r.coinciden || 0) + ' coinciden'),
+        h(Chip, { clase: 'tag-verde' }, (r.coinciden || 0) + pl(r.coinciden || 0, ' coincide', ' coinciden')),
         sobrantes.length ? h(Chip, { clase: 'tag-azul' }, sobrantes.length + ' con sobrantes') : null,
         faltantes.length ? h(Chip, { clase: 'tag-rojo' }, faltantes.length + ' con faltantes') : null,
         ltds.length ? h(Chip, { clase: 'tag-ambar' }, ltds.length + ' LTD con otro número') : null,
         sinKeko.length ? h(Chip, { clase: 'tag-ambar' }, sinKeko.length + ' con unidades sin keko') : null,
         noReg.length ? h(Chip, { clase: 'tag-gris' }, noReg.length + ' sin registrar') : null,
-        (aud.excluidos || []).length ? h(Chip, { clase: 'tag-gris' }, aud.excluidos.length + ' excluidos') : null)),
+        (aud.excluidos || []).length ? h(Chip, { clase: 'tag-gris' }, aud.excluidos.length + pl(aud.excluidos.length, ' excluido', ' excluidos')) : null)),
 
     hayDiferencias ? null : h('div', { className: 'aviso', style: { background: 'var(--green-bg)', color: 'var(--green)', fontSize: 13 } },
       'Todo cuadra: lo que la app tiene en mano en ' + K + ' coincide con Habbo.'),
@@ -327,14 +329,14 @@ export function AuditoriaView(props) {
       h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' } },
         h('button', { className: 'plegable', onClick: function () { setVerNoReg(!verNoReg); } },
           h(Ico, { name: verNoReg ? 'chevdown' : 'chevright', size: 14 }),
-          noReg.length + ' furnis de tu Habbo no están en la app (decoración, regalos o un tradeo sin registrar)'),
+          noReg.length + pl(noReg.length, ' furni de tu Habbo no está', ' furnis de tu Habbo no están') + ' en la app (decoración, regalos o un tradeo sin registrar)'),
         h('button', { className: 'btn btn-chico', style: { marginLeft: 'auto' }, onClick: quitarNoRegistrados, disabled: enviando }, 'Quitar todos de la auditoría')),
       verNoReg ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 } }, noReg.map(Fila)) : null) : null,
 
     (aud.excluidos || []).length ? h('div', { className: 'card' },
       h('button', { className: 'plegable', onClick: function () { setVerExcl(!verExcl); } },
         h(Ico, { name: verExcl ? 'chevdown' : 'chevright', size: 14 }),
-        aud.excluidos.length + ' furnis quitados de la auditoría (vuelven a aparecer si cambia su cantidad)'),
+        aud.excluidos.length + pl(aud.excluidos.length, ' furni quitado de la auditoría (vuelve', ' furnis quitados de la auditoría (vuelven') + ' a aparecer si cambia su cantidad)'),
       verExcl ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 } }, aud.excluidos.map(function (x) {
         return h('div', { key: clave(x), className: 'aud-top', style: { padding: '4px 0' } },
           h('div', { style: { flex: 1, minWidth: 200 } }, h(NombreFurni, { furni: furniDe(x) })),

@@ -726,6 +726,22 @@ async function main() {
     assert.equal(filaC(sCa), undefined);
     ok('auditoria: las unidades sin keko que sobran aparecen aparte y se mueven al keko donde estan');
 
+    // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql'] });
+    await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
+    await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
+    const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
+    await conexD.iniciar();
+    const negD = crearServicioNegocio({ conexion: conexD, furnidata });
+    const compraD = await negD.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 2, precio_compra: 30 });
+    await negD.crearCompra({ furni_id: compraD.furni_id, cantidad: 1, precio_compra: 31 });
+    const ventaD = await negD.venderEnMano(compraD.furni_id, { cantidad: 1, precio: 50 });
+    assert.equal(ventaD.cantidad, 1);
+    assert.deepEqual(await negD.resumenAuditoria(), { pendientes: 0, kekos: [], sin_migracion: true });
+    await rechaza(negD.auditoria(), /Falta instalar la migracion 20261007000000/);
+    await sinAuditoria.cerrar();
+    ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra y la venta manual siguen funcionando; la auditoria pide instalarla');
+
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);
     assert.equal(est.data.pendientes, 0);

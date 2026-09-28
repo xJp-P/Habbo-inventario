@@ -129,6 +129,24 @@ function crearServicioNegocio({ conexion, furnidata }) {
   }
 
   // ── Compras (vista INVENTARIO) ────────────────────────────────────────────
+  // La app se actualiza sola, pero la migracion 20261007000000 la ejecuta el usuario
+  // a mano: hasta entonces crear_compra y vender_en_mano no conocen p_keko, p_sprite_id
+  // ni p_tipo, y Supabase rechaza la llamada entera. Esos parametros van solo si traen
+  // valor, y si la base no los conoce se reintenta sin ellos.
+  const PARAMETROS_1_1 = ['p_keko', 'p_sprite_id', 'p_tipo'];
+
+  async function rpcCompatible(nombre, args) {
+    const conValor = { ...args };
+    for (const k of PARAMETROS_1_1) if (conValor[k] === null || conValor[k] === undefined) delete conValor[k];
+    try {
+      return await datos(db().rpc(nombre, conValor));
+    } catch (e) {
+      if (!faltaMigracion(e) || !PARAMETROS_1_1.some((k) => k in conValor)) throw e;
+      for (const k of PARAMETROS_1_1) delete conValor[k];
+      return datos(db().rpc(nombre, conValor));
+    }
+  }
+
   // Nombre de un keko de Habbo (donde estan las unidades). null si viene vacio.
   function nombreKeko(v) {
     const s = String(v ?? '').trim();
@@ -167,7 +185,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
           p_sprite_id: oficial.sprite_id ?? null, p_tipo: oficial.tipo || null });
       }
     }
-    const r = await datos(db().rpc('crear_compra', args));
+    const r = await rpcCompatible('crear_compra', args);
     return compraPorId(r.compra_id);
   }
 
@@ -290,7 +308,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // de un lote o FIFO entre los lotes en mano del furni. En el mercadillo se guarda el
   // neto y la comision; en un tradeo, el precio tal cual (funcion vender_en_mano).
   async function venderEnMano(id, entrada = {}) {
-    const r = await datos(db().rpc('vender_en_mano', {
+    const r = await rpcCompatible('vender_en_mano', {
       p_furni_id: Number(id),
       p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad vendida', minimo: 1, entero: true }),
       p_precio: numeroValido(entrada.precio, { campo: 'El precio de venta' }),
@@ -299,7 +317,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
       p_fecha: entrada.fecha || hoyStr(),
       p_lote_id: entrada.lote_id ? Number(entrada.lote_id) : null,
       p_keko: nombreKeko(entrada.keko),
-    }));
+    });
     return { cantidad: r.cantidad, precio_neto: r.precio_neto, comision: r.comision, moneda: r.moneda, ventas: r.ventas };
   }
 
