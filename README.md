@@ -15,7 +15,6 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 - [Comisión del mercadillo](#comisión-del-mercadillo)
 - [Importar desde Excel](#importar-desde-excel)
 - [Datos en tu equipo](#datos-en-tu-equipo)
-- [Desarrollo](#desarrollo)
 - [Licencia](#licencia)
 
 ## Qué hace
@@ -276,63 +275,6 @@ La base de datos está en Supabase; en tu PC solo queda la carpeta de datos de l
 | `.env` | URL y clave pública de Supabase (si las configuraste desde la app) |
 | `sesion-supabase.json` | Tu sesión, cifrada con la llave del sistema operativo |
 | `furnidata-es.json`, `iconos/` | Catálogo e iconos de Habbo.es (se pueden borrar; se vuelven a bajar) |
-
-## Desarrollo
-
-| Comando | Qué hace |
-|---|---|
-| `npm start` | Abre la app de escritorio |
-| `npm run demo` | La app en el navegador (`http://127.0.0.1:3435`) **sin Supabase**: Postgres local (PGlite) con el mismo esquema. Empieza vacía (si hay un único `.xlsx` en la raíz, lo importa); en Ajustes puedes simular compras, publicaciones y recuperaciones del Sniper |
-| `npm run web` | La app en el navegador contra tu Supabase |
-| `npm run verificar` | Pruebas de la lógica, la seguridad (RLS, clave pública, tokens) y la API sobre Postgres local |
-| `npm run supabase:probar` | Revisa tu proyecto real: conexión, esquema instalado, que la clave pública no vea datos y tu sesión |
-| `npm run prueba-arranque` | Abre Electron, comprueba que la interfaz cargó y se cierra |
-| `npm run simular-actualizacion` | Recorre el flujo de actualización con una versión ficticia, sin descargar nada |
-| `npm run build:win` / `build:mac` | Genera el instalador en `dist/` (el de Mac, solo desde una Mac) |
-| `npm run build:dir` | Genera la app sin instalador, para probarla rápido |
-
-### Publicar una versión
-
-Los instaladores oficiales los genera GitHub Actions ([`.github/workflows/build.yml`](.github/workflows/build.yml)) en Windows y macOS.
-
-1. Sube la versión en `package.json` y anota los cambios en [`CHANGELOG.md`](CHANGELOG.md), incluida cualquier migración nueva.
-2. Si la versión trae una migración, ejecútala en Supabase **antes** de publicar: las apps instaladas se actualizan solas.
-3. Sube una etiqueta con esa versión (por ejemplo `v1.1.0`). GitHub Actions compila y deja un **Release en borrador** con los instaladores y los archivos que leen las apps para actualizarse.
-4. Revisa el borrador y pulsa **Publish release**. Desde ese momento, las apps instaladas lo descargan al abrirse.
-
-Las actualizaciones automáticas necesitan que el repositorio sea **público**.
-
-### Estructura
-
-```
-electron/            proceso principal, puente seguro (preload), pantalla de inicio y actualizaciones
-backend/
-  server.js          arma el servidor local: conexión Supabase + catálogo + API
-  db/                cliente de Supabase, errores y cliente local (PGlite) para pruebas y demo
-  services/          conexión y sesión, reglas del negocio, catálogo Habbo.es, importador de Excel, demo
-  routes/api.js      API local que usa la interfaz
-  core/              utilidades, cálculos del Resumen y seguridad de la API local
-supabase/migrations/ esquema de la base de datos (tablas, vistas, RLS y funciones)
-public/              interfaz (HTML/CSS/JS con React 18, sin compilación)
-recursos/            iconos del instalador
-scripts/             importación de Excel, pruebas, prueba de Supabase y modo navegador/demo
-docs/                integración con SniperMercadillo
-```
-
-### Base de datos
-
-| Tabla / vista | Vista de la app | Contenido |
-|---|---|---|
-| `config` | — | Ajustes por usuario (tasa del Lingo) |
-| `furnis` | Mercadillo | Nombre oficial único, classname, revisión del icono y sprite |
-| `compras` | Inventario | Lotes: estado (`comprado`, `publicado`, `vendido`), cantidad, precio de compra, precio de lista, `publicado_por` (`sniper` o `manual`), precio real al vender (neto si fue en el mercadillo), `comision_venta`, `numero_ltd`, `origen_id` (lote dividido), `id_externo` y `pendiente` (por revisar) |
-| `tokens_sniper` | Ajustes | Nombre, prefijo y huella de cada token |
-| `eventos_sniper` | — | Bitácora de cada evento del bot, con `id_externo` único |
-| `v_compras`, `v_furnis` | — | Costo, ganancia, margen, stock, costo promedio, comisión y alertas, con RLS |
-| `registrar_eventos_sniper` | — | Entrada única de los snipers: compra, publicar y recuperar |
-| `vender_lote`, `vender_furni`, `vender_en_mano`, `revertir_venta`, `publicar_lote`, `publicar_furni`, `retirar_lote`, `retirar_furni`, `asignar_ltd`, `activar_pendientes`, `crear_compra`, `importar_excel`, `fusionar_furnis` | — | Operaciones de varias escrituras, cada una en una sola transacción |
-
-Un cambio de esquema es siempre una migración nueva y numerada en `supabase/migrations/`, nunca una edición de las anteriores.
 
 ## Licencia
 

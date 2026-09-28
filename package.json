@@ -24,10 +24,8 @@
     "prueba-arranque": "electron . --prueba-arranque",
     "simular-actualizacion": "electron . --simular-actualizacion",
     "build:win": "electron-builder --win nsis --x64",
-    "build:mac": "electron-builder --mac dmg zip",
-    "build:dir": "electron-builder --dir",
-    "release:win": "electron-builder --win nsis --x64 --publish always",
-    "release:mac": "electron-builder --mac dmg zip --publish always"
+    "build:mac": "electron-builder --mac",
+    "build:dir": "electron-builder --dir"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
