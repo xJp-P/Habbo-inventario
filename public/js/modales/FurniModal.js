@@ -8,7 +8,7 @@ import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
 import { _submitGuard } from '../core/ui.js';
 import { leerNumero, fmtCr } from '../core/format.js';
-import { Modal, Fld, SelectorMoneda, NombreFurni } from '../componentes/base.js';
+import { Modal, Fld, SelectorMoneda, NombreFurni, Confirmar } from '../componentes/base.js';
 import { Autocompletar } from '../componentes/Autocompletar.js';
 import { Ico } from '../componentes/iconos.js';
 
@@ -20,6 +20,7 @@ export function FurniModal(props) {
   var sN = useState(f && f.notas ? f.notas : ''); var notas = sN[0]; var setNotas = sN[1];
   var sErr = useState(''); var error = sErr[0]; var setError = sErr[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
+  var sBorrar = useState(false); var confirmandoBorrar = sBorrar[0]; var setConfirmandoBorrar = sBorrar[1];
 
   function guardar() {
     var p = leerNumero(precio);
@@ -34,10 +35,16 @@ export function FurniModal(props) {
   }
 
   function eliminar() {
-    if (!window.confirm('¿Eliminar "' + f.nombre + '" del Mercadillo?')) return;
     _submitGuard(enviando, setEnviando, function () {
       return API.del('/api/furnis/' + f.id).then(function (r) { if (r) props.onGuardado(null, 'Furni eliminado'); });
     });
+  }
+
+  // Confirmar el borrado reemplaza este modal (Cancelar vuelve a la edicion).
+  if (confirmandoBorrar) {
+    return h(Confirmar, { titulo: 'Eliminar furni', peligro: true, icono: 'trash', textoBoton: 'Eliminar', enviando: enviando,
+      mensaje: h('span', null, '¿Eliminar ', h('b', null, '«' + f.nombre + '»'), ' de tus furnis? No se puede deshacer.'),
+      onClose: function () { setConfirmandoBorrar(false); }, onConfirmar: eliminar });
   }
 
   return h(Modal, { titulo: f ? 'Editar furni' : 'Agregar furni al Mercadillo', onClose: props.onClose },
@@ -57,7 +64,7 @@ export function FurniModal(props) {
     h(Fld, { label: 'Notas (opcional)' }, h('input', { className: 'inp', value: notas, onChange: function (e) { setNotas(e.target.value); } })),
     error ? h('div', { className: 'aviso aviso-rojo' }, error) : null,
     h('div', { style: { display: 'flex', gap: 8, marginTop: 4 } },
-      f ? h('button', { className: 'btn btn-peligro', onClick: eliminar, disabled: enviando || f.unidades_compradas > 0,
+      f ? h('button', { className: 'btn btn-peligro', onClick: function () { setConfirmandoBorrar(true); }, disabled: enviando || f.unidades_compradas > 0,
         title: f.unidades_compradas > 0 ? 'Tiene lotes en el Inventario' : '' }, h(Ico, { name: 'trash', size: 14 }), 'Eliminar') : null,
       h('div', { style: { flex: 1 } }),
       h('button', { className: 'btn', onClick: props.onClose }, 'Cancelar'),

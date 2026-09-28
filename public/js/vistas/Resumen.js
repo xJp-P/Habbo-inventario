@@ -82,7 +82,7 @@ export function ResumenView(props) {
               d.perdidas.length + ' furni' + (d.perdidas.length === 1 ? '' : 's') + ' deja' + (d.perdidas.length === 1 ? '' : 'n') + ' pérdida al precio actual'),
             d.perdidas.map(function (f) {
               return h('div', { key: f.id, style: { display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--red-bd)', cursor: 'pointer' },
-                onClick: function () { props.onNav('mercadillo', f.id); } },
+                onClick: function () { props.onVerFurni(f.id); } },
                 h('div', { style: { flex: 1, minWidth: 0 } }, h(NombreFurni, { furni: f,
                   sub: 'Vendes a ' + fmtCr(f.precio_venta_cr) + ' · costo prom. ' + fmtLg(f.costo_promedio_cr) + ' · mínimo ' + fmtCr(f.precio_minimo_cr) })),
                 h('span', { className: 'mono neg', style: { fontWeight: 700 } }, fmtCr(f.ganancia_esperada_cr)));

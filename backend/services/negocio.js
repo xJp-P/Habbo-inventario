@@ -232,6 +232,18 @@ function crearServicioNegocio({ conexion, furnidata }) {
     };
   }
 
+  // Publicar a mano un furni completo: toma sus unidades en mano de todos sus lotes, del
+  // mas antiguo al mas nuevo (funcion publicar_furni). Sin cantidad, publica todas.
+  async function publicarFurni(id, entrada = {}) {
+    const r = await datos(db().rpc('publicar_furni', {
+      p_furni_id: Number(id),
+      p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
+        ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a publicar', minimo: 1, entero: true }),
+      p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
+    }));
+    return { cantidad: r.cantidad, en_mano: r.en_mano, precio_lista: r.precio_lista, lotes: r.lotes };
+  }
+
   // Deshace una publicacion manual: el lote vuelve a "comprado" (funcion retirar_lote).
   async function retirarLote(id) {
     const r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
@@ -367,7 +379,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
-    vender, revertirVenta, publicarLote, retirarLote, pendientesPorFurni, activarPendientes,
+    vender, revertirVenta, publicarLote, publicarFurni, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
     resolverNombre, sincronizarConCatalogo,
   };

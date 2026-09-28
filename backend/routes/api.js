@@ -41,6 +41,7 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.post('/api/furnis', async (req, res) => res.status(201).json(await negocio.crearFurni(req.body || {})));
   r.put('/api/furnis/:id', async (req, res) => res.json(await negocio.actualizarFurni(id(req), req.body || {})));
   r.delete('/api/furnis/:id', async (req, res) => res.json(await negocio.eliminarFurni(id(req))));
+  r.post('/api/furnis/:id/publicar', async (req, res) => res.json(await negocio.publicarFurni(id(req), req.body || {})));
 
   // ── Compras / lotes (vista Inventario) ───────────────────────────────────
   r.get('/api/compras', async (req, res) => res.json(await negocio.listarCompras({ pendientes: req.query.pendientes === '1' })));

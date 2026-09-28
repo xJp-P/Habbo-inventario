@@ -450,6 +450,39 @@ async function main() {
     assert.equal(rt.compra.precio_lista, null);
     ok('el Sniper recupera primero lo suyo; lo publicado a mano se vende neto, revertir lo deja publicado y retirar lo vuelve a Comprado');
 
+    // ── Publicar el furni completo: todas sus unidades en mano, de todos sus lotes (FIFO) ──
+    r = await sniper([{ tipo_evento: 'compra', id_externo: 'cmp_sak2', sprite_id: sakura.sprite_id, cantidad: 1, precio: 140, moneda: 'creditos', hotel: 'es' }]);
+    assert.equal(r.data.procesados, 1);
+    const lotesDeSak = async (estado) => (await negocio.listarCompras()).filter((c) => c.furni_id === sak[0].id && c.estado === estado);
+    const pf = await negocio.publicarFurni(sak[0].id, { precio_lista: 210 });
+    assert.equal(pf.cantidad, 3, 'las 3 und en mano; la "por revisar" del Sniper no entra');
+    assert.equal(pf.en_mano, 0);
+    assert.deepEqual(pf.lotes.map((x) => [x.lote_id, x.cantidad, x.dividido]), [[loteA.id, 2, false], [loteB.id, 1, false]]);
+    assert.deepEqual((await lotesDeSak('comprado')).map((c) => c.pendiente), [true], 'en Comprado solo queda lo por revisar');
+    const pubSak = await lotesDeSak('publicado');
+    assert.ok(pubSak.every((c) => c.publicado_por === 'manual'));
+    const rp = comision.resumenPublicado(pubSak);
+    assert.equal(rp.unidades, 3);
+    assert.equal(rp.manual, 3);
+    assert.equal(rp.listaMin, 210);
+    assert.equal(rp.ganancia, pubSak.reduce((s, c) => s + c.ganancia_cr, 0), 'el resumen del Mercadillo coincide con la vista de la base');
+    assert.equal(rp.ganancia, comision.calcularGananciaNeta(210, 170) * 2 + comision.calcularGananciaNeta(210, 150));
+    for (const c of pubSak) await negocio.retirarLote(c.id);
+    const pf2 = await negocio.publicarFurni(sak[0].id, { cantidad: 1, precio_lista: 210 });
+    assert.equal(pf2.en_mano, 2);
+    assert.equal(pf2.lotes[0].origen_id, loteA.id, 'publicar menos divide el lote mas antiguo');
+    assert.equal((await leerLote(loteA.id)).cantidad, 1);
+    await negocio.retirarLote(pf2.lotes[0].lote_id);
+    assert.equal((await leerLote(loteA.id)).cantidad, 2);
+    await rechaza(negocio.publicarFurni(sak[0].id, { cantidad: 9, precio_lista: 5 }), /Solo tienes 3 unidad/);
+    const hf = await pedir(puerto, 'POST', `/api/furnis/${sak[0].id}/publicar`, { cuerpo: { precio_lista: 205 } });
+    assert.equal(hf.status, 200);
+    assert.equal(hf.json.cantidad, 3);
+    for (const c of await lotesDeSak('publicado')) await negocio.retirarLote(c.id);
+    await negocio.activarPendientes({ furni_id: sak[0].id });
+    assert.equal((await lotesDeSak('comprado')).reduce((s, c) => s + c.cantidad, 0), 4);
+    ok('publicar el furni completo: toma sus unidades en mano de todos sus lotes (FIFO) y sale de Comprado; lo "por revisar" no entra; publicar menos divide el lote');
+
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);
     assert.equal(est.data.pendientes, 0);
@@ -503,7 +536,8 @@ async function main() {
 
     // ── Base de produccion a la que le falta 20260930000000 (caso real): la migracion
     //    20261001000000 se aplica sola, completa lo que faltaba y pasa a neto la venta vieja ──
-    const sinVentaNeta = await crearClienteLocal({ omitir: ['20260930000000_venta_neta_mercadillo.sql', '20261001000000_publicacion_manual.sql'] });
+    const posteriores = fs.readdirSync(path.join(__dirname, '..', 'supabase', 'migrations')).filter((x) => x >= '20260930000000');
+    const sinVentaNeta = await crearClienteLocal({ omitir: posteriores });
     const pgS = sinVentaNeta.pg;
     const uidS = await sinVentaNeta.crearUsuario('sin-venta-neta@prueba.local', 'clave');
     const furniS = (await pgS.query("insert into public.furnis (propietario, nombre, precio_venta) values ($1, 'Furni de prueba', 400) returning id", [uidS])).rows[0].id;

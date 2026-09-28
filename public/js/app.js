@@ -43,6 +43,7 @@ function App() {
   var sMenu = useState(false); var menuPlegado = sMenu[0]; var setMenuPlegado = sMenu[1];
   var sEnf = useState(null); var enfocar = sEnf[0]; var setEnfocar = sEnf[1];
   var sFil = useState(''); var filtroFurni = sFil[0]; var setFiltroFurni = sFil[1];
+  var sFilE = useState('comprado'); var filtroEstado = sFilE[0]; var setFiltroEstado = sFilE[1];
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -100,6 +101,30 @@ function App() {
 
   function cambio(msg) { setModal(null); if (msg) avisar(msg); recargar(); }
 
+  function furniDe(id) { return datos.furnis.find(function (f) { return f.id === id; }); }
+  // Lotes en mano de un furni (comprados y no "por revisar"), del mas antiguo al mas
+  // nuevo: el mismo orden en que los toma publicar_furni.
+  function enManoFifo(furniId) {
+    return datos.compras.filter(function (c) { return c.furni_id === furniId && c.estado === 'comprado' && !c.pendiente; })
+      .sort(function (a, b) {
+        if (a.fecha_compra !== b.fecha_compra) {
+          if (!a.fecha_compra) return -1;
+          if (!b.fecha_compra) return 1;
+          return a.fecha_compra < b.fecha_compra ? -1 : 1;
+        }
+        return a.id - b.id;
+      });
+  }
+  // Abre el Inventario en una pestana, filtrado por el nombre del furni.
+  function verLotes(nombre, estado) { setFiltroFurni(nombre); setFiltroEstado(estado); setVista('inventario'); }
+  // Desde el Resumen: si el furni esta publicado, al Mercadillo; si no, a sus lotes en mano.
+  function verFurni(id) {
+    var f = furniDe(id);
+    if (!f) return;
+    if (f.unidades_publicadas > 0) navegar('mercadillo', id);
+    else verLotes(f.nombre, 'comprado');
+  }
+
   function navegar(v, furniId) {
     setVista(v);
     setEnfocar(v === 'mercadillo' && furniId ? furniId : null);
@@ -119,19 +144,17 @@ function App() {
 
   var contenido;
   if (!datos) contenido = h(Spinner);
-  else if (vista === 'resumen') contenido = h(ResumenView, { resumen: datos.resumen, onNav: navegar, onCambio: cambio, onError: function (m) { avisar(m, 'error'); } });
+  else if (vista === 'resumen') contenido = h(ResumenView, { resumen: datos.resumen, onNav: navegar, onVerFurni: verFurni, onCambio: cambio, onError: function (m) { avisar(m, 'error'); } });
   else if (vista === 'mercadillo') contenido = h(MercadilloView, {
     furnis: datos.furnis, compras: datos.compras, enfocar: enfocar,
-    onNuevo: function () { setModal({ tipo: 'furni' }); },
-    onEditar: function (f) { setModal({ tipo: 'furni', furni: f }); },
-    onComprar: function (f) { setModal({ tipo: 'compra', furni: f }); },
-    onVerLotes: function (f) { setFiltroFurni(f.nombre); setVista('inventario'); },
+    onVerLotes: function (f) { verLotes(f.nombre, 'publicado'); },
   });
   else if (vista === 'inventario') contenido = h(InventarioView, {
-    compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni,
+    compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado,
     onNueva: function () { setModal({ tipo: 'compra' }); },
     onVender: function (l) { setModal({ tipo: 'vender', lote: l, furni: datos.furnis.find(function (f) { return f.id === l.furni_id; }) }); },
-    onPublicar: function (l) { setModal({ tipo: 'publicar', lote: l, furni: datos.furnis.find(function (f) { return f.id === l.furni_id; }) }); },
+    onPublicar: function (l) { setModal({ tipo: 'publicar', furni: furniDe(l.furni_id), lotes: enManoFifo(l.furni_id) }); },
+    onEditarFurni: function (l) { setModal({ tipo: 'furni', furni: furniDe(l.furni_id) }); },
     onCambio: cambio,
   });
   else contenido = h(AjustesView, {
@@ -174,7 +197,7 @@ function App() {
 
     modal && modal.tipo === 'furni' ? h(FurniModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
-    modal && modal.tipo === 'publicar' ? h(PublicarModal, { lote: modal.lote, furni: modal.furni, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender' ? h(VenderModal, { lote: modal.lote, furni: modal.furni, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
 
     toast ? h('div', { key: toast.id, className: 'toast', style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } }, toast.msg) : null);

@@ -3,9 +3,12 @@
 //
 // Ciclo de un lote: Comprado -> Publicado (en el mercadillo de Habbo; lleva candado y su
 // precio de lista) -> Vendido, o de vuelta a Comprado si se retira. Lo publica el Sniper
-// (y lo recupera el Sniper) o lo publicas tu con el boton "Publicar" (y lo retiras tu
-// desde su detalle). Lo publicado no se edita ni se borra: se registra su venta con
-// "Vendido" cuando se vende.
+// (y lo recupera el Sniper) o lo publicas tu con el boton "Publicar" (todas las unidades
+// en mano del furni) y lo retiras tu con "Retirar" en su fila. Lo publicado no se edita
+// ni se borra: se registra su venta con "Vendido" cuando se vende.
+//
+// Pestanas: Comprado (en mano), Publicado y Vendido. Un lote vive en una sola: lo
+// publicado no aparece en Comprado.
 //
 // Arriba, destacadas en ambar, las compras HUERFANAS que llegaron de los SniperMercadillo:
 // agrupadas por furni, con el precio de venta listo para confirmar y la ganancia
@@ -18,7 +21,7 @@ import { API } from '../core/api.js';
 import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace, leerNumero } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
-import { NombreFurni, EtiquetaPublicado, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
+import { NombreFurni, EtiquetaPublicado, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
 import { calcularGananciaNeta, ingresoNeto, precioMinimoSinPerder } from '../core/comision.js';
 
 function FilaHuerfana(props) {
@@ -64,7 +67,7 @@ function FilaHuerfana(props) {
               gan < 0 ? h('span', { className: 'neg' }, ' · debajo del costo') : null)))));
 }
 
-var FILTROS = [['comprado', 'Comprado'], ['publicado', 'Publicado'], ['vendido', 'Vendido'], ['todos', 'Todos']];
+var FILTROS = [['comprado', 'Comprado'], ['publicado', 'Publicado'], ['vendido', 'Vendido']];
 var ORIGEN = { excel: 'Excel', manual: 'Manual', sniper: 'Sniper' };
 
 export function InventarioView(props) {
@@ -74,37 +77,47 @@ export function InventarioView(props) {
   var sF = useState('comprado'); var filtro = sF[0]; var setFiltro = sF[1];
   var sA = useState(null); var abierto = sA[0]; var setAbierto = sA[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
-  useEffect(function () { if (props.filtroFurni) { setQ(props.filtroFurni); setFiltro('todos'); } }, [props.filtroFurni]);
+  var sConf = useState(null); var confirmacion = sConf[0]; var setConfirmacion = sConf[1];
+  useEffect(function () { if (props.filtroFurni) { setQ(props.filtroFurni); setFiltro(props.filtroEstado || 'comprado'); } }, [props.filtroFurni, props.filtroEstado]);
 
   var cuenta = useMemo(function () {
-    var c = { comprado: 0, publicado: 0, vendido: 0, todos: compras.length };
+    var c = { comprado: 0, publicado: 0, vendido: 0 };
     compras.forEach(function (l) { c[l.estado]++; });
     return c;
   }, [compras]);
 
   var visibles = compras.filter(function (l) {
-    return (filtro === 'todos' || l.estado === filtro) && (!q || normalizar(l.nombre).indexOf(normalizar(q)) !== -1);
+    return l.estado === filtro && (!q || normalizar(l.nombre).indexOf(normalizar(q)) !== -1);
   }).sort(function (a, b) { return (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0) || b.id - a.id; });
 
-  function revertir(l) {
-    if (!window.confirm('¿Deshacer la venta del lote Nº ' + l.id + '?')) return;
+  // Ejecuta la accion confirmada y cierra el dialogo al terminar.
+  function ejecutar(accion) {
     _submitGuard(enviando, setEnviando, function () {
-      return API.post('/api/compras/' + l.id + '/revertir', {}).then(function (r) { if (r) props.onCambio(r.fusionada ? 'Venta deshecha: las unidades volvieron a su lote' : 'Venta deshecha'); });
+      return accion().then(function () { setConfirmacion(null); });
     });
+  }
+  function revertir(l) {
+    setConfirmacion({ titulo: 'Deshacer la venta', icono: 'undo', textoBoton: 'Deshacer venta',
+      mensaje: h('span', null, '¿Deshacer la venta del lote Nº ', h('b', null, l.id), ' (', l.cantidad, ' × ', l.nombre, ')? Las unidades vuelven a su estado anterior.'),
+      accion: function () {
+        return API.post('/api/compras/' + l.id + '/revertir', {}).then(function (r) { if (r) props.onCambio(r.fusionada ? 'Venta deshecha: las unidades volvieron a su lote' : 'Venta deshecha'); });
+      } });
   }
   function retirar(l) {
-    if (!window.confirm('¿Retirar del mercadillo el lote Nº ' + l.id + ' (' + l.cantidad + ' × ' + l.nombre + ')? Vuelve a Comprado.')) return;
-    _submitGuard(enviando, setEnviando, function () {
-      return API.post('/api/compras/' + l.id + '/retirar', {}).then(function (r) {
-        if (r) { setAbierto(null); props.onCambio(r.fusionada ? 'Retirado: las unidades volvieron a su lote en Comprado' : 'Retirado: el lote volvió a Comprado'); }
-      });
-    });
+    setConfirmacion({ titulo: 'Retirar del mercadillo', icono: 'undo', textoBoton: 'Retirar',
+      mensaje: h('span', null, '¿Retirar del mercadillo ', h('b', null, l.cantidad + ' × ' + l.nombre), ' (lote Nº ', l.id, ')? Vuelve a Comprado, en mano.'),
+      accion: function () {
+        return API.post('/api/compras/' + l.id + '/retirar', {}).then(function (r) {
+          if (r) { setAbierto(null); props.onCambio(r.fusionada ? 'Retirado: las unidades volvieron a su lote en Comprado' : 'Retirado: el lote volvió a Comprado'); }
+        });
+      } });
   }
   function eliminar(l) {
-    if (!window.confirm('¿Eliminar el lote Nº ' + l.id + ' (' + l.cantidad + ' × ' + l.nombre + ')? No se puede deshacer.')) return;
-    _submitGuard(enviando, setEnviando, function () {
-      return API.del('/api/compras/' + l.id).then(function (r) { if (r) { setAbierto(null); props.onCambio('Lote eliminado'); } });
-    });
+    setConfirmacion({ titulo: 'Eliminar lote', peligro: true, icono: 'trash', textoBoton: 'Eliminar lote',
+      mensaje: h('span', null, '¿Eliminar el lote Nº ', h('b', null, l.id), ' (', l.cantidad, ' × ', l.nombre, ')? No se puede deshacer.'),
+      accion: function () {
+        return API.del('/api/compras/' + l.id).then(function (r) { if (r) { setAbierto(null); props.onCambio('Lote eliminado'); } });
+      } });
   }
 
   return h('div', { className: 'contenedor fade-in' },
@@ -130,7 +143,9 @@ export function InventarioView(props) {
 
     h('div', { className: 'tabla-caja' },
       visibles.length === 0
-        ? h('div', { className: 'vacio' }, compras.length ? 'Ningún lote coincide.' : 'Aún no hay compras. Registra una o importa tu Excel desde Ajustes.')
+        ? h('div', { className: 'vacio' }, !compras.length ? 'Aún no hay compras. Registra una o importa tu Excel desde Ajustes.'
+            : q ? 'Ningún lote coincide en esta pestaña.'
+            : filtro === 'publicado' ? 'No hay nada publicado en el mercadillo.' : filtro === 'vendido' ? 'Aún no hay ventas.' : 'No tienes nada en mano.')
         : h('table', { className: 'tabla' },
             h('thead', null, h('tr', null,
               h('th', null, 'Nº'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Cant.'), h('th', { className: 'r' }, 'Precio'),
@@ -153,10 +168,12 @@ export function InventarioView(props) {
                   : publicado ? h(EtiquetaPublicado, { manual: manual, texto: 'Publicado · ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') })
                   : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
                 h('td', { className: 'r' }, publicado
-                  ? h('button', { className: 'btn btn-chico', title: 'Registrar la venta de lo publicado', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido')
+                  ? h('span', { style: { display: 'inline-flex', gap: 6 } },
+                      h('button', { className: 'btn btn-chico', title: 'Registrar la venta de lo publicado', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
+                      manual ? h('button', { className: 'btn btn-chico', title: 'Lo quitaste del mercadillo: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)
                   : l.estado === 'comprado'
                   ? h('span', { style: { display: 'inline-flex', gap: 6 } },
-                      h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pásalo a Publicado', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
+                      l.pendiente ? null : h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pasa a Publicado (todas sus unidades en mano)', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
                       h('button', { className: 'btn btn-chico', title: 'Lo vendiste en mano (intercambio o venta directa)', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
                   : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
               if (abiertoEste) {
@@ -177,12 +194,14 @@ export function InventarioView(props) {
                   l.notas ? h('div', { className: 'suave', style: { fontSize: 12, marginBottom: 10 } }, l.notas) : null,
                   publicado
                     ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
-                        h(Ico, { name: 'lock', size: 15 }), h('span', { style: { flex: 1 } }, manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO),
-                        manual ? h('button', { className: 'btn btn-chico', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar del mercadillo') : null)
+                        h(Ico, { name: 'lock', size: 15 }), h('span', { style: { flex: 1 } }, manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO))
                     : h('div', { style: { display: 'flex', gap: 8 } },
+                        l.estado === 'comprado' ? h('button', { className: 'btn', onClick: function (e) { e.stopPropagation(); props.onEditarFurni(l); } }, h(Ico, { name: 'edit', size: 14 }), 'Precio del furni') : null,
                         h('button', { className: 'btn btn-peligro', onClick: function (e) { e.stopPropagation(); eliminar(l); }, disabled: enviando }, h(Ico, { name: 'trash', size: 14 }), 'Eliminar lote')))));
               }
               return filas;
             })))),
-    h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, 'La ganancia de lo comprado usa el precio actual del Mercadillo; la de lo publicado, su precio de lista; ambas descuentan la comisión del mercadillo de Habbo.es. La de lo vendido usa el precio real congelado al vender (si se vendió en el mercadillo, el neto que entró a tu monedero).'));
+    confirmacion ? h(Confirmar, Object.assign({}, confirmacion, { enviando: enviando,
+      onClose: function () { setConfirmacion(null); }, onConfirmar: function () { ejecutar(confirmacion.accion); } })) : null,
+    h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, 'La ganancia de lo comprado usa el precio de venta del furni; la de lo publicado, su precio de lista; ambas descuentan la comisión del mercadillo de Habbo.es. La de lo vendido usa el precio real congelado al vender (si se vendió en el mercadillo, el neto que entró a tu monedero).'));
 }

@@ -5,7 +5,7 @@
 // formulario a medio llenar por un clic. Se suman los propios del inventario: el icono
 // del furni, las etiquetas de estado y el selector de moneda.
 
-import { h, useState } from '../core/react.js';
+import { h, useState, useEffect } from '../core/react.js';
 import { Ico } from './iconos.js';
 import { iconoUrl } from '../core/ui.js';
 
@@ -16,6 +16,25 @@ export function Modal(props) {
         h('div', { style: { fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 } }, props.titulo),
         h('button', { className: 'btn-icono', onClick: props.onClose, 'aria-label': 'Cerrar' }, h(Ico, { name: 'x', size: 14, sw: 2.5 }))),
       h('div', { className: 'modal-cuerpo' }, props.children)));
+}
+
+// Confirmacion con el diseno de la app (en lugar de window.confirm). Esc cancela.
+//   titulo, mensaje, textoBoton, peligro (boton rojo), icono, enviando
+//   onConfirmar, onClose
+export function Confirmar(props) {
+  useEffect(function () {
+    function tecla(e) { if (e.key === 'Escape') props.onClose(); }
+    document.addEventListener('keydown', tecla);
+    return function () { document.removeEventListener('keydown', tecla); };
+  }, [props.onClose]);
+  return h(Modal, { titulo: props.titulo, onClose: props.onClose, ancho: 440 },
+    h('div', { style: { display: 'flex', gap: 12, alignItems: 'flex-start' } },
+      h('div', { className: 'confirmar-ico' + (props.peligro ? ' peligro' : '') }, h(Ico, { name: props.icono || (props.peligro ? 'alert' : 'check'), size: 18 })),
+      h('div', { style: { fontSize: 14, lineHeight: 1.5, paddingTop: 6 } }, props.mensaje)),
+    h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 } },
+      h('button', { className: 'btn', onClick: props.onClose, autoFocus: !!props.peligro }, 'Cancelar'),
+      h('button', { className: 'btn ' + (props.peligro ? 'btn-peligro' : 'btn-verde'), onClick: props.onConfirmar, disabled: props.enviando, autoFocus: !props.peligro },
+        props.textoBoton || 'Confirmar')));
 }
 
 export function Fld(props) {
@@ -58,7 +77,7 @@ export function EtiquetaEstado(props) {
 
 // Candado de lo publicado en el mercadillo de Habbo: su stock lo mueve el Sniper.
 export var AYUDA_PUBLICADO = 'Publicado en el mercadillo de Habbo: el Sniper controla este stock (publicar / recuperar). No lo cambies a mano; solo registra la venta cuando se venda.';
-export var AYUDA_PUBLICADO_MANUAL = 'Lo publicaste tú en el mercadillo de Habbo. Cuando se venda, registra la venta con «Vendido»; si lo quitas del mercadillo, usa «Retirar del mercadillo».';
+export var AYUDA_PUBLICADO_MANUAL = 'Lo publicaste tú en el mercadillo de Habbo. Cuando se venda, registra la venta con «Vendido»; si lo quitas del mercadillo, usa «Retirar».';
 export function EtiquetaPublicado(props) {
   return h('span', { className: 'tag tag-morado', title: props.manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO },
     h(Ico, { name: 'lock', size: 11, sw: 2.2 }), props.texto || 'Publicado');

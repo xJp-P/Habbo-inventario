@@ -67,3 +67,29 @@ export function gananciaEsperadaFurni(furni, lotes) {
   }
   return total;
 }
+
+// Lo PUBLICADO de un furni (vista Mercadillo): suma solo sus lotes 'publicado', cada uno a
+// su precio de lista menos la comision (sin comision si la lista es en lingos). Devuelve
+// unidades, costo, venta bruta y neta, comision, ganancia neta, costo promedio, rango de
+// precios de lista y cuantas unidades publico el Sniper y cuantas tu.
+export function resumenPublicado(lotes) {
+  var r = { unidades: 0, costo: 0, bruto: 0, neto: 0, comision: 0, ganancia: 0, costoPromedio: null,
+    listaMin: null, listaMax: null, sniper: 0, manual: 0 };
+  for (var i = 0; i < lotes.length; i++) {
+    var l = lotes[i];
+    if (l.estado !== 'publicado') continue;
+    var p = Number(l.precio_lista_cr);
+    var com = l.moneda_lista === 'lingos' ? 0 : calcularComision(p);
+    r.unidades += l.cantidad;
+    r.costo += l.precio_compra_cr * l.cantidad;
+    r.bruto += p * l.cantidad;
+    r.comision += com * l.cantidad;
+    r.neto += (p - com) * l.cantidad;
+    r.ganancia += (l.moneda_lista === 'lingos' ? p - l.precio_compra_cr : calcularGananciaNeta(p, l.precio_compra_cr)) * l.cantidad;
+    r.listaMin = r.listaMin === null ? p : Math.min(r.listaMin, p);
+    r.listaMax = r.listaMax === null ? p : Math.max(r.listaMax, p);
+    if (l.publicado_por === 'manual') r.manual += l.cantidad; else r.sniper += l.cantidad;
+  }
+  if (r.unidades) r.costoPromedio = r.costo / r.unidades;
+  return r;
+}

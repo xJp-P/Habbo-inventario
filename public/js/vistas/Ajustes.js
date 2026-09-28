@@ -9,6 +9,7 @@ import { API } from '../core/api.js';
 import { fmtHace, fmtD } from '../core/format.js';
 import { _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
+import { Confirmar } from '../componentes/base.js';
 
 function copiar(texto, alListo) {
   var hecho = function () { if (alListo) alListo(); };
@@ -31,6 +32,7 @@ export function AjustesView(props) {
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
   var sRuta = useState(''); var rutaExcel = sRuta[0]; var setRutaExcel = sRuta[1];
   var sInf = useState(null); var informe = sInf[0]; var setInforme = sInf[1];
+  var sConf = useState(null); var confirmacion = sConf[0]; var setConfirmacion = sConf[1];
   var electron = typeof window !== 'undefined' && window.electronAPI;
 
   function cargar() {
@@ -47,8 +49,9 @@ export function AjustesView(props) {
     });
   }
   function revocar(t) {
-    if (!window.confirm('¿Revocar el token "' + t.nombre + '"? El sniper que lo use dejará de poder enviar compras.')) return;
-    API.post('/api/sniper/tokens/' + t.id + '/revocar', {}).then(function (r) { if (r) { props.onAviso('Token revocado'); cargar(); } });
+    setConfirmacion({ titulo: 'Revocar token', peligro: true, icono: 'key', textoBoton: 'Revocar',
+      mensaje: h('span', null, '¿Revocar el token ', h('b', null, '«' + t.nombre + '»'), '? El sniper que lo use dejará de poder enviar eventos al instante.'),
+      accion: function () { API.post('/api/sniper/tokens/' + t.id + '/revocar', {}).then(function (r) { if (r) { props.onAviso('Token revocado'); cargar(); } }); } });
   }
   function actualizarCatalogo() {
     _submitGuard(enviando, setEnviando, function () {
@@ -77,6 +80,9 @@ export function AjustesView(props) {
   var ejemplo = conexion && conexion.url_eventos ? 'POST ' + conexion.url_eventos + '\napikey: <SUPABASE_ANON_KEY>\nAuthorization: Bearer <SUPABASE_ANON_KEY>\nContent-Type: application/json\n\n{ "token_sniper": "hbi_…",\n  "eventos": [\n    { "tipo_evento": "compra",    "id_externo": "…", "sprite_id": 4623, "cantidad": 1, "precio": 100, "moneda": "creditos", "hotel": "es", "notas": "…" },\n    { "tipo_evento": "publicar",  "id_externo": "pub_…", "sprite_id": 4623, "cantidad": 1, "precio_lista": 125, "moneda": "creditos", "hotel": "es" },\n    { "tipo_evento": "recuperar", "id_externo": "rec_…", "sprite_id": 4623, "cantidad": 1, "hotel": "es" } ] }' : null;
 
   return h('div', { className: 'contenedor fade-in', style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+    confirmacion ? h(Confirmar, Object.assign({}, confirmacion, {
+      onClose: function () { setConfirmacion(null); },
+      onConfirmar: function () { var a = confirmacion.accion; setConfirmacion(null); a(); } })) : null,
     h('div', { className: 'card' },
       h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 } },
         h(Ico, { name: 'plug', size: 20, color: 'var(--green)' }),
@@ -130,7 +136,11 @@ export function AjustesView(props) {
         electron ? null : h('input', { className: 'inp', style: { marginBottom: 8 }, placeholder: 'Ruta del archivo .xlsx', value: rutaExcel, onChange: function (e) { setRutaExcel(e.target.value); } }),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { className: 'btn', onClick: function () { elegirExcel(false); }, disabled: enviando }, electron ? 'Elegir archivo…' : 'Importar'),
-          h('button', { className: 'btn btn-peligro', onClick: function () { if (window.confirm('Esto BORRA tus furnis y lotes actuales antes de importar. ¿Seguir?')) elegirExcel(true); }, disabled: enviando }, 'Reemplazar todo')),
+          h('button', { className: 'btn btn-peligro', disabled: enviando, onClick: function () {
+            setConfirmacion({ titulo: 'Reemplazar todo', peligro: true, icono: 'trash', textoBoton: 'Borrar e importar',
+              mensaje: 'Esto BORRA tus furnis y lotes actuales antes de importar el Excel. No se puede deshacer.',
+              accion: function () { elegirExcel(true); } });
+          } }, 'Reemplazar todo')),
         informe ? h('div', { className: 'aviso', style: { marginTop: 10 } },
           informe.furnis + ' furnis y ' + informe.compras + ' lotes importados.',
           informe.correcciones.length ? ' ' + informe.correcciones.length + ' nombre(s) corregido(s) al oficial.' : '',
