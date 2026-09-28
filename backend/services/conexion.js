@@ -12,6 +12,7 @@
 // furnis nuevos que llegaron solo con sprite_id) y luego se publica un evento
 // `eventos-sniper` en el bus que alimenta /api/eventos.
 
+const path = require('path');
 const { ClientError } = require('../core/util');
 const { leerConfiguracion, guardarConfiguracion, crearClienteSupabase } = require('../db/supabase');
 
@@ -20,6 +21,7 @@ const ESPERA_AGRUPAR_MS = 700;
 function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrado = null, clienteFijo = null, demo = false, alRecibirEventos = null }) {
   let config = clienteFijo ? { url: 'local', anonKey: 'local', origen: 'demo' } : leerConfiguracion({ raiz, dirDatos });
   let cliente = clienteFijo || (config ? crearClienteSupabase({ ...config, dirDatos, cifrado }) : null);
+  let anonimo = null;
   let usuario = null;
   let canal = null;
   let pendientesAviso = [];
@@ -79,11 +81,20 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
     return estado();
   }
 
+  // La conexion se puede cambiar desde la app si vive en el .env de la carpeta de datos
+  // (lo que guarda el asistente); las variables de entorno y el .env de la raiz mandan.
+  function configEditable() {
+    if (clienteFijo) return false;
+    if (!config) return true;
+    return config.origen !== 'entorno' && !(raiz && config.origen === path.join(raiz, '.env'));
+  }
+
   function estado() {
     return {
       estado: !cliente ? 'sin_configurar' : usuario ? 'lista' : 'sin_sesion',
       url: config ? config.url : null,
       origenConfig: config ? config.origen : null,
+      configEditable: configEditable(),
       usuario: usuario ? { id: usuario.id, email: usuario.email } : null,
       demo,
     };
@@ -94,6 +105,7 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
     config = guardarConfiguracion(dirDatos, datos);
     await desuscribir();
     cliente = crearClienteSupabase({ ...config, dirDatos, cifrado });
+    anonimo = null;
     usuario = null;
     return iniciar();
   }
@@ -134,7 +146,18 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
     return cliente;
   }
 
-  return { iniciar, estado, configurar, iniciarSesion, cerrarSesion, clienteListo, cliente: () => cliente, detener: desuscribir };
+  // Cliente con la clave publica y SIN sesion (rol anon), aparte del de la sesion: el
+  // asistente de configuracion lo usa para ver que migraciones estan instaladas.
+  function clienteAnonimo() {
+    if (!cliente) throw Object.assign(new ClientError('Falta configurar la conexion con Supabase.', 428), { codigo: 'SIN_CONFIG' });
+    if (!anonimo) {
+      anonimo = clienteFijo ? clienteFijo.comoAnon()
+        : crearClienteSupabase({ ...config, dirDatos, cifrado, sinSesion: true });
+    }
+    return anonimo;
+  }
+
+  return { iniciar, estado, configurar, iniciarSesion, cerrarSesion, clienteListo, clienteAnonimo, cliente: () => cliente, detener: desuscribir };
 }
 
 module.exports = { crearServicioConexion };

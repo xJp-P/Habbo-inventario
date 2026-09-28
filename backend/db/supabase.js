@@ -60,12 +60,13 @@ function validarConfiguracion({ url, anonKey }) {
   const local = ['localhost', '127.0.0.1'].includes(host.hostname);
   if (host.protocol !== 'https:' && !local) throw new ClientError('La URL de Supabase debe empezar por https://');
   const k = String(anonKey || '').trim();
-  // Formato clasico (JWT eyJ...) o las claves publicables nuevas (sb_publishable_...).
-  if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(k) && !/^sb_publishable_[\w-]+$/.test(k)) {
-    throw new ClientError('La Anon Key no parece valida. Copiala de Supabase → Project Settings → API.');
-  }
+  // Primero la clave secreta (con su propio aviso), despues el formato: clasico (JWT
+  // eyJ...) o las claves publicables nuevas (sb_publishable_...).
   if (/^sb_secret_/.test(k) || /service_role/.test(Buffer.from(k.split('.')[1] || '', 'base64').toString())) {
-    throw new ClientError('Esa es la clave secreta (service_role). Usa la Anon Key publica: la secreta no debe ir en la app.');
+    throw new ClientError('Esa es la clave secreta (Secret key o service_role). Usa la clave pública: la secreta no debe ir en la app.');
+  }
+  if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(k) && !/^sb_publishable_[\w-]+$/.test(k)) {
+    throw new ClientError('La clave pública no parece válida. Cópiala de Supabase → Project Settings → API Keys.');
   }
   return { url: u, anonKey: k };
 }
@@ -106,10 +107,12 @@ function almacenSesion(ruta, cifrado = null) {
   };
 }
 
-function crearClienteSupabase({ url, anonKey, dirDatos, cifrado = null }) {
+// `sinSesion`: cliente solo con la clave publica (rol anon), que no lee ni guarda la
+// sesion del archivo.
+function crearClienteSupabase({ url, anonKey, dirDatos, cifrado = null, sinSesion = false }) {
   const { createClient } = require('@supabase/supabase-js');
   return createClient(url, anonKey, {
-    auth: {
+    auth: sinSesion ? { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } : {
       storage: almacenSesion(path.join(dirDatos, ARCHIVO_SESION), cifrado),
       storageKey: 'habbo-inventario',
       persistSession: true,

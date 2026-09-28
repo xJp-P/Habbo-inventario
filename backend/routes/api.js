@@ -17,7 +17,7 @@ function id(req) {
   return n;
 }
 
-module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos, importar, demo }) {
+module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos, importar, demo, instalacion }) {
   const r = express.Router();
 
   // ── Cuenta y conexion con Supabase ───────────────────────────────────────
@@ -29,6 +29,10 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
     res.json(estado);
   });
   r.post('/api/cuenta/salir', async (_req, res) => res.json(await conexion.cerrarSesion()));
+
+  // ── Asistente de configuracion: migraciones (sin sesion; la deteccion usa la clave publica) ──
+  r.get('/api/instalacion', async (_req, res) => res.json(await instalacion.comprobar(conexion.clienteAnonimo())));
+  r.get('/api/instalacion/sql/:archivo', (req, res) => res.json(instalacion.leerSql(req.params.archivo)));
 
   // ── Resumen y configuracion ──────────────────────────────────────────────
   r.get('/api/resumen', async (_req, res) => res.json(await negocio.resumen()));

@@ -8,13 +8,16 @@
 // vuelve a cargar tras cada cambio. Las compras que llegan de los SniperMercadillo se
 // anuncian por /api/eventos (Supabase Realtime -> servidor local -> aca): aviso +
 // recarga, sin tocar nada.
+//
+// Si a la base le falta una migracion (una actualizacion de la app trajo una nueva y
+// aun no se ejecuto en Supabase), un aviso arriba abre la misma lista del asistente.
 
 import { h, useState, useEffect, useCallback, createRoot } from './core/react.js';
 import { API, setErrorHandler } from './core/api.js';
 import { fmtLg } from './core/format.js';
 import { Ico } from './componentes/iconos.js';
-import { Spinner } from './componentes/base.js';
-import { AccesoView } from './vistas/Acceso.js';
+import { Spinner, Modal } from './componentes/base.js';
+import { AccesoView, InstalarBase } from './vistas/Acceso.js';
 import { ResumenView } from './vistas/Resumen.js';
 import { MercadilloView } from './vistas/Mercadillo.js';
 import { InventarioView } from './vistas/Inventario.js';
@@ -47,6 +50,7 @@ function App() {
   var sEnf = useState(null); var enfocar = sEnf[0]; var setEnfocar = sEnf[1];
   var sFil = useState(''); var filtroFurni = sFil[0]; var setFiltroFurni = sFil[1];
   var sFilE = useState('comprado'); var filtroEstado = sFilE[0]; var setFiltroEstado = sFilE[1];
+  var sMig = useState(null); var faltanMig = sMig[0]; var setFaltanMig = sMig[1];
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -85,6 +89,12 @@ function App() {
 
   var lista = cuenta && cuenta.estado === 'lista';
   useEffect(function () { if (lista) recargar(); else setDatos(null); }, [lista]);
+
+  // Migraciones que faltan en la base (solo se avisa si se pudo comprobar).
+  var revisarMigraciones = useCallback(function () {
+    API.get('/api/instalacion').then(function (r) { setFaltanMig(r && !r.error && !r.completa ? r : null); });
+  }, []);
+  useEffect(function () { if (lista) revisarMigraciones(); else setFaltanMig(null); }, [lista]);
 
   // Compras del Sniper en vivo.
   useEffect(function () {
@@ -141,8 +151,14 @@ function App() {
     API.post('/api/cuenta/salir', {}).then(function (r) { if (r) { setCuenta(r); setVista('resumen'); } });
   }
 
+  var colorToast = toast && toast.tipo === 'error' ? ['var(--red-bg)', 'var(--red-bd)', 'var(--red)']
+    : toast && toast.tipo === 'sniper' ? ['var(--yellow-bg)', 'var(--yellow-bd)', 'var(--yellow)']
+    : ['var(--green-bg)', 'var(--green-bd)', 'var(--green)'];
+  var aviso = toast ? h('div', { key: toast.id, className: 'toast', style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } }, toast.msg) : null;
+
   if (!cuenta) return h('div', { className: 'acceso', 'data-app-lista': '1' }, h(Spinner));
-  if (!lista) return h(AccesoView, { cuenta: cuenta, onCuenta: setCuenta });
+  // El aviso tambien se ve en el acceso (antes sus errores no se mostraban).
+  if (!lista) return h('div', null, h(AccesoView, { cuenta: cuenta, onCuenta: setCuenta }), aviso);
 
   var nav = NAV.find(function (n) { return n[0] === vista; });
   var huerfanos = datos ? datos.pendientes.length : 0;
@@ -181,9 +197,12 @@ function App() {
     onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
   });
 
-  var colorToast = toast && toast.tipo === 'error' ? ['var(--red-bg)', 'var(--red-bd)', 'var(--red)']
-    : toast && toast.tipo === 'sniper' ? ['var(--yellow-bg)', 'var(--yellow-bd)', 'var(--yellow)']
-    : ['var(--green-bg)', 'var(--green-bd)', 'var(--green)'];
+  var faltan = faltanMig ? faltanMig.total - faltanMig.instaladas : 0;
+  var avisoMigraciones = faltan ? h('div', { className: 'contenedor', style: { marginBottom: 14 } },
+    h('div', { className: 'aviso aviso-ambar', style: { display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 } },
+      h(Ico, { name: 'alert', size: 16 }),
+      h('span', { style: { flex: 1 } }, 'A tu base de datos ' + (faltan === 1 ? 'le falta 1 migración' : 'le faltan ' + faltan + ' migraciones') + ' de esta versión: algunas funciones pueden fallar hasta que la instales.'),
+      h('button', { className: 'btn btn-chico', onClick: function () { setModal({ tipo: 'instalar' }); } }, 'Instalar ahora'))) : null;
 
   return h('div', { className: 'app-layout', 'data-app-lista': '1' },
     h('div', { className: 'sidebar' + (menuPlegado ? ' collapsed' : '') },
@@ -212,7 +231,7 @@ function App() {
         h('span', { className: 'tag tag-morado', title: 'Tasa del Lingo (cámbiala en Resumen)' }, h(Ico, { name: 'diamond', size: 12 }), '1 lingo = ' + fmtLg(tasa) + ' cr'),
         h('button', { className: 'btn-icono', onClick: function () { setTema(tema === 'dark' ? 'light' : 'dark'); }, title: tema === 'dark' ? 'Tema claro' : 'Tema oscuro' },
           h(Ico, { name: tema === 'dark' ? 'sun' : 'moon', size: 14, color: 'var(--text3)' }))),
-      h('div', { className: 'main-content' }, contenido)),
+      h('div', { className: 'main-content' }, avisoMigraciones, contenido)),
 
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
@@ -222,7 +241,11 @@ function App() {
     modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender' ? h(VenderModal, { lote: modal.lote, furni: modal.furni, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
 
-    toast ? h('div', { key: toast.id, className: 'toast', style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } }, toast.msg) : null);
+    modal && modal.tipo === 'instalar' ? h(Modal, { titulo: 'Instalar migraciones', ancho: 580, onClose: function () { setModal(null); revisarMigraciones(); } },
+      h('div', { className: 'card-sub', style: { lineHeight: 1.5, marginTop: -4 } }, 'Copia cada archivo en el SQL Editor de tu proyecto y pulsa Run, en orden. La lista se actualiza sola.'),
+      h(InstalarBase, { cuenta: cuenta, sinTitulo: true, textoListo: 'Listo', onListo: function () { setModal(null); setFaltanMig(null); avisar('Base de datos al día'); recargar(); } })) : null,
+
+    aviso);
 }
 
 createRoot(document.getElementById('root')).render(h(App));

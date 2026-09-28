@@ -18,6 +18,7 @@ const { EventEmitter } = require('events');
 const { crearServicioFurnidata } = require('./services/furnidata');
 const { crearServicioConexion } = require('./services/conexion');
 const { crearServicioNegocio } = require('./services/negocio');
+const { crearServicioInstalacion } = require('./services/instalacion');
 const { importarExcel } = require('./services/importarExcel');
 const { protegerApiLocal } = require('./core/seguridad');
 const crearRutasApi = require('./routes/api');
@@ -75,6 +76,7 @@ async function crearApp({
     furnidata,
     eventos,
     demo,
+    instalacion: crearServicioInstalacion(),
     importar: (ruta, opciones) => importarExcel(negocio, furnidata, ruta, opciones),
   }));
 

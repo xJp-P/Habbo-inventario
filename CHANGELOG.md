@@ -43,6 +43,11 @@ Primera versión pública. Funciona solo con el hotel **Habbo.es**.
 - **Seguridad**: seguridad por filas (RLS) en Supabase, sesión cifrada con la llave del
   sistema operativo y rechazo de la clave `service_role`.
 - **Modo demo** con una base local, para probar sin Supabase.
+- **Asistente de configuración** al abrir la app por primera vez: crear el proyecto de
+  Supabase, conectar la app, instalar la base (copia cada migración con un clic y
+  detecta cuáles faltan usando solo la clave pública) y crear tu usuario. Si una
+  actualización trae una migración nueva que aún no ejecutaste, la app lo avisa y
+  abre la misma lista.
 - **Instaladores** para Windows (x64) y macOS (Apple Silicon e Intel).
 - **Actualizaciones automáticas** desde GitHub Releases: al abrirse, la app busca una
   versión nueva y la instala. En Ajustes → Versión también se puede buscar a mano.

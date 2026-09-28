@@ -23,6 +23,7 @@ const { crearClienteLocal } = require('../backend/db/clienteLocal');
 const { crearServicioConexion } = require('../backend/services/conexion');
 const { crearServicioNegocio } = require('../backend/services/negocio');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
+const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/instalacion');
 const { normalizar } = require('../backend/core/util');
 const { DIR_DATOS_DEV, buscarExcel } = require('./comun');
 
@@ -731,8 +732,32 @@ async function main() {
     h = await pedir(s2.address().port, 'GET', '/api/resumen');
     assert.equal(h.status, 401);
     assert.equal(h.json.codigo, 'SIN_SESION');
-    s2.close();
     ok('sin sesion, la API de datos responde 401 SIN_SESION (la app muestra el acceso)');
+
+    // ── Asistente de configuracion: que migraciones tiene la base, solo con la clave publica ──
+    const archivosMig = fs.readdirSync(path.join(__dirname, '..', 'supabase', 'migrations')).filter((x) => x.endsWith('.sql')).sort();
+    assert.deepEqual(MIGRACIONES.map((m) => m.archivo), archivosMig, 'cada migracion de supabase/migrations tiene su sonda en backend/services/instalacion.js');
+    const instalacion = crearServicioInstalacion();
+    const filasBase = async () => (await clienteA.pg.query('select (select count(*) from public.compras) + (select count(*) from public.eventos_sniper) as n')).rows[0].n;
+    const filasAntes = await filasBase();
+    let estMig = await instalacion.comprobar(clienteA.comoAnon());
+    assert.deepEqual([estMig.instaladas, estMig.completa, estMig.siguiente, estMig.error], [archivosMig.length, true, null, null]);
+    assert.equal(await filasBase(), filasAntes, 'las sondas no escriben nada');
+    for (const [desde, instaladas] of [['20260928000000', 1], ['20260930000000', 3], ['20261005000000', 8]]) {
+      const parcial = await crearClienteLocal({ omitir: archivosMig.filter((x) => x >= desde) });
+      estMig = await instalacion.comprobar(parcial.comoAnon());
+      assert.deepEqual([estMig.instaladas, estMig.siguiente, estMig.completa], [instaladas, archivosMig[instaladas], false], `base sin ${desde} y posteriores`);
+      assert.deepEqual(estMig.migraciones.map((m) => m.instalada), archivosMig.map((_, i) => i < instaladas));
+      await parcial.cerrar();
+    }
+    h = await pedir(s2.address().port, 'GET', '/api/instalacion');
+    assert.deepEqual([h.status, h.json.completa, h.json.total], [200, true, archivosMig.length]);
+    h = await pedir(s2.address().port, 'GET', '/api/instalacion/sql/' + archivosMig[0]);
+    assert.ok(h.status === 200 && /create table/i.test(h.json.sql));
+    h = await pedir(s2.address().port, 'GET', '/api/instalacion/sql/' + encodeURIComponent('../../package.json'));
+    assert.equal(h.status, 404);
+    s2.close();
+    ok(`asistente: detecta que migraciones faltan con la clave publica (1, 3, 8 y ${archivosMig.length} de ${archivosMig.length}) sin escribir nada; copia el SQL sin sesion y solo de supabase/migrations`);
 
     h = await pedir(puerto, 'GET', '/api/icono/clothing_r26_scarface');
     if (h.status === 200) ok(`icono PNG servido desde cache (${h.bytes} bytes)`);

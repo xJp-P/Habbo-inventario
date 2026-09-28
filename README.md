@@ -46,6 +46,8 @@ Lo que tienes en mano no tiene precio ni ganancia: el precio aparece al publicar
 
 Tiempo aproximado: **10 minutos**. Solo necesitas una cuenta gratuita de Supabase.
 
+> **Atajo:** la app trae un **asistente** que recorre estos mismos pasos al abrirla por primera vez (opción *«Configurar desde cero»*): abre cada página de tu proyecto en Supabase, copia cada migración con un clic y detecta sola cuáles ya instalaste, sin pedirte nunca la clave secreta. Puedes instalar la app ([paso 5](#paso-5--conectar-la-app)) y dejar que te guíe, o seguir esta guía.
+
 | Paso | Qué haces | Dónde |
 |---|---|---|
 | [1](#paso-1--crear-el-proyecto-en-supabase) | Crear el proyecto | supabase.com |
@@ -138,7 +140,9 @@ Elige **una** de las dos opciones.
      xattr -cr "/Applications/Habbo Inventario.app"
      ```
 
-3. Ábrela. La primera vez te muestra **«Conectar con tu Supabase»**: pega la **Project URL** y la **clave pública** del paso 4 y pulsa **Guardar conexión**.
+3. Ábrela. La primera vez te pregunta cómo quieres empezar:
+   - **Ya tengo mi Supabase listo:** pega la **Project URL** y la **clave pública** del paso 4 y pulsa **Conectar**. Si a tu base le falta alguna migración, la app te muestra cuál y te deja copiarla.
+   - **Configurar desde cero:** el asistente te guía por los pasos 1 a 4 sin salir de la app.
 4. Entra con el email y la contraseña del paso 3.
 
 No hace falta editar ningún archivo: la app guarda la conexión en su carpeta de datos y tu sesión cifrada con la llave de tu sistema operativo. Desde ahí se **actualiza sola**: al abrirse busca una versión nueva en GitHub y la instala.
@@ -187,7 +191,7 @@ Requisitos: [Node.js](https://nodejs.org) **22.12 o superior** y [Git](https://g
    npm start
    ```
 
-Si no creas el `.env`, la app te pide la URL y la clave al abrirse, igual que en la opción A, y las guarda en `data/.env`. Si ambos existen, se usan primero las variables de entorno del sistema, luego el `.env` de la raíz y por último `data/.env`.
+Si no creas el `.env`, la app abre el mismo asistente que en la opción A y guarda la conexión en `data/.env`. Si ambos existen, se usan primero las variables de entorno del sistema, luego el `.env` de la raíz y por último `data/.env`.
 
 ### Paso 6 · Conectar SniperMercadillo (opcional)
 
@@ -209,8 +213,8 @@ Los reintentos del bot con el mismo `id_externo` se ignoran. El contrato complet
 | Mensaje o síntoma | Causa | Solución |
 |---|---|---|
 | *«Falta ejecutar antes …sql»* en el SQL Editor | Te saltaste una migración | Ejecuta la que indica y continúa en orden |
-| *«Esa es la clave secreta (service_role)»* | Pegaste la clave secreta | Usa la *Publishable key* o la **anon public** |
-| *«La Anon Key no parece válida»* | Clave incompleta o de otro lugar | Cópiala de nuevo desde Project Settings → API Keys |
+| *«Esa es la clave secreta (Secret key o service_role)»* | Pegaste la clave secreta | Usa la *Publishable key* o la **anon public** |
+| *«La clave pública no parece válida»* | Clave incompleta o de otro lugar | Cópiala de nuevo desde Project Settings → API Keys |
 | *«Invalid login credentials»* | Email o contraseña incorrectos, o usuario sin confirmar | Revisa el usuario en Authentication → Users (debe estar confirmado) |
 | La app no carga tus datos y el proyecto no responde | Supabase pausó el proyecto por inactividad | Reactívalo desde el panel de Supabase |
 | *«Windows protegió tu PC»* | La app no tiene certificado de pago | **Más información → Ejecutar de todas formas** |
