@@ -150,6 +150,24 @@ input[type=number]{-moz-appearance:textfield}
 .huerfanas-cab{display:flex;gap:10px;align-items:center}
 .huerfana-fila{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--yellow-bd)}
 .huerfana-fila:first-of-type{margin-top:10px}
+/* "Llegaron del Sniper" como acordeon: la fila de la grilla pasa de 0fr a 1fr (altura
+   real del contenido, sin numeros magicos) y el contenido se desvanece a la vez. */
+.huerfanas-boton{width:100%;background:none;border:none;padding:0;margin:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.huerfanas-iconos{display:flex;align-items:center;gap:4px;transition:opacity .2s ease}
+.huerfanas-iconos.oculto{opacity:0}
+.huerfanas-iconos .furni-ico{background:var(--bg2)}
+.huerfanas-accion{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--yellow);border:1px solid var(--yellow-bd);border-radius:99px;padding:4px 8px 4px 12px;white-space:nowrap}
+.huerfanas-boton:hover .huerfanas-accion{background:var(--bg2)}
+.chevron{display:inline-flex;transition:transform .32s cubic-bezier(.32,.72,0,1)}
+.chevron.abierto{transform:rotate(180deg)}
+.acordeon{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .34s cubic-bezier(.32,.72,0,1),opacity .24s ease}
+.acordeon.abierto{grid-template-rows:1fr;opacity:1}
+.acordeon-in{min-height:0;max-height:min(55vh,600px);overflow:hidden}
+.acordeon.abierto .acordeon-in{overflow-y:auto}
+/* Con "reducir movimiento" del sistema (p. ej. las animaciones de Windows apagadas) se
+   mantiene, mas corta: el despliegue lo pidio el usuario. */
+@media (prefers-reduced-motion:reduce){.acordeon{transition-duration:.2s,.16s}.chevron{transition-duration:.16s}}
+.precio-editable{white-space:nowrap}
 
 /* ── Buscador de furnis (autocompletado) ── */
 .auto{position:relative}

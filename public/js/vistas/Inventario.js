@@ -14,7 +14,9 @@
 // estado: en Comprado es TU precio de venta del furni (el mismo para todos sus lotes en
 // mano; el lapiz lo edita), en Publicado el precio de lista y en Vendido lo que entro.
 //
-// Arriba, destacadas en ambar, las compras HUERFANAS que llegaron de los SniperMercadillo:
+// Arriba, destacadas en ambar, las compras HUERFANAS que llegaron de los SniperMercadillo
+// (con mas de un furni, en un acordeon: cerrado muestra el resumen y se despliega con una
+// transicion suave; se recuerda si lo dejaste abierto):
 // agrupadas por furni, con el precio de venta listo para confirmar y la ganancia
 // esperada calculada al escribir (neta de la comision del mercadillo). "Activar" fija el
 // precio del furni y pasa sus lotes a "En venta". Debajo, la tabla de lotes con detalle
@@ -25,7 +27,7 @@ import { API } from '../core/api.js';
 import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace, leerNumero } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
-import { NombreFurni, EtiquetaPublicado, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
+import { NombreFurni, IconoFurni, EtiquetaPublicado, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
 import { calcularGananciaNeta, ingresoNeto, precioMinimoSinPerder } from '../core/comision.js';
 
 function FilaHuerfana(props) {
@@ -72,6 +74,46 @@ function FilaHuerfana(props) {
 }
 
 var FILTROS = [['comprado', 'Comprado'], ['publicado', 'Publicado'], ['vendido', 'Vendido']];
+
+// Si el acordeon de "Llegaron del Sniper" quedo abierto (preferencia de este equipo).
+var CLAVE_ACORDEON = 'hbi.sniper-abierto';
+function leerAcordeon() { try { return window.localStorage.getItem(CLAVE_ACORDEON) === '1'; } catch (_) { return false; } }
+function guardarAcordeon(v) { try { window.localStorage.setItem(CLAVE_ACORDEON, v ? '1' : '0'); } catch (_) { /* sin almacenamiento */ } }
+
+// Panel de las compras del Sniper por revisar. Con un solo furni se ve directo; con mas,
+// es un acordeon para no llenar la pantalla.
+function LlegaronDelSniper(props) {
+  var grupos = props.pendientes;
+  var sA = useState(leerAcordeon); var abierto = sA[0]; var setAbierto = sA[1];
+  var acordeon = grupos.length > 1;
+  var unidades = grupos.reduce(function (s, g) { return s + g.unidades; }, 0);
+  var costo = grupos.reduce(function (s, g) { return s + g.costo_cr; }, 0);
+  var filas = grupos.map(function (g) { return h(FilaHuerfana, { key: g.furni.id, grupo: g, tasa: props.tasa, onActivado: props.onActivado }); });
+  function alternar() { setAbierto(!abierto); guardarAcordeon(!abierto); }
+
+  var titulo = h('div', { style: { flex: 1, minWidth: 0 } },
+    h('div', { style: { fontWeight: 700, color: 'var(--yellow)' } }, 'Llegaron del Sniper · ' + grupos.length + (grupos.length === 1 ? ' furni' : ' furnis') + ' por revisar'),
+    h('div', { className: 'card-sub' }, acordeon
+      ? unidades + ' und · ' + fmtCr(costo) + ' cr invertidos. Cuentan en tu stock, pero no están en venta hasta que les confirmes un precio.'
+      : 'Cuentan en tu stock, pero no están en venta hasta que les confirmes un precio.'));
+
+  if (!acordeon) {
+    return h('div', { className: 'huerfanas' },
+      h('div', { className: 'huerfanas-cab' }, h(Ico, { name: 'radar', size: 20, color: 'var(--yellow)' }), titulo),
+      filas);
+  }
+  return h('div', { className: 'huerfanas' },
+    h('button', { className: 'huerfanas-cab huerfanas-boton', 'aria-expanded': abierto, onClick: alternar },
+      h(Ico, { name: 'radar', size: 20, color: 'var(--yellow)' }),
+      titulo,
+      h('span', { className: 'huerfanas-iconos' + (abierto ? ' oculto' : '') },
+        grupos.slice(0, 5).map(function (g) { return h(IconoFurni, { key: g.furni.id, classname: g.furni.classname, revision: g.furni.revision, size: 26 }); }),
+        grupos.length > 5 ? h('span', { className: 'mono suave', style: { fontSize: 12 } }, '+' + (grupos.length - 5)) : null),
+      h('span', { className: 'huerfanas-accion' }, abierto ? 'Ocultar' : 'Revisar',
+        h('span', { className: 'chevron' + (abierto ? ' abierto' : '') }, h(Ico, { name: 'chevdown', size: 16 })))),
+    h('div', { className: 'acordeon' + (abierto ? ' abierto' : ''), 'aria-hidden': !abierto, inert: abierto ? undefined : '' },
+      h('div', { className: 'acordeon-in' }, filas)));
+}
 var AYUDA_PRECIO_FURNI = 'Tu precio de venta para este furni: vale para todas sus unidades en mano. Con él se calcula la ganancia de lo que tienes en mano y se propone al publicar. Clic para cambiarlo.';
 
 // Columna "Venta c/u": el precio del furni (en mano, editable), el de lista (publicado)
@@ -144,14 +186,7 @@ export function InventarioView(props) {
   }
 
   return h('div', { className: 'contenedor fade-in' },
-    pendientes.length ? h('div', { className: 'huerfanas' },
-      h('div', { className: 'huerfanas-cab' },
-        h(Ico, { name: 'radar', size: 20, color: 'var(--yellow)' }),
-        h('div', { style: { flex: 1 } },
-          h('div', { style: { fontWeight: 700, color: 'var(--yellow)' } }, 'Llegaron del Sniper · ' + pendientes.length + (pendientes.length === 1 ? ' furni' : ' furnis') + ' por revisar'),
-          h('div', { className: 'card-sub' }, 'Cuentan en tu stock, pero no están en venta hasta que les confirmes un precio.'))),
-      pendientes.map(function (g) { return h(FilaHuerfana, { key: g.furni.id, grupo: g, tasa: props.tasa, onActivado: props.onCambio }); }))
-      : null,
+    pendientes.length ? h(LlegaronDelSniper, { pendientes: pendientes, tasa: props.tasa, onActivado: props.onCambio }) : null,
 
     h('div', { className: 'barra' },
       h('div', { style: { position: 'relative', flex: 1, minWidth: 200 } },
