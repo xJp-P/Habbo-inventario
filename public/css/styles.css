@@ -89,6 +89,10 @@ input[type=number]{-moz-appearance:textfield}
 .btn-morado:hover{border-color:var(--purple)}
 .confirmar-ico{flex:none;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--green-bg,rgba(46,160,67,.15));color:var(--green)}
 .confirmar-ico.peligro{background:var(--red-bg);color:var(--red)}
+.precio-editable{display:inline-flex;align-items:center;gap:5px;background:none;border:1px dashed transparent;border-radius:6px;padding:2px 6px;margin:-3px -6px;color:inherit;font:inherit;cursor:pointer}
+.precio-editable svg{opacity:.35;transition:opacity .15s}
+.precio-editable:hover{border-color:var(--border);background:var(--bg3)}
+.precio-editable:hover svg{opacity:1}
 .check{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2)}
 .check input{width:16px;height:16px;accent-color:var(--green2);cursor:pointer}
 .par-precios{display:grid;grid-template-columns:1fr 1fr;gap:10px}

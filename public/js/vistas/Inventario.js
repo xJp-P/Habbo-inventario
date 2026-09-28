@@ -10,6 +10,10 @@
 // Pestanas: Comprado (en mano), Publicado y Vendido. Un lote vive en una sola: lo
 // publicado no aparece en Comprado.
 //
+// Columnas de precio: "Compra c/u" (lo que pagaste) y "Venta c/u", que depende del
+// estado: en Comprado es TU precio de venta del furni (el mismo para todos sus lotes en
+// mano; el lapiz lo edita), en Publicado el precio de lista y en Vendido lo que entro.
+//
 // Arriba, destacadas en ambar, las compras HUERFANAS que llegaron de los SniperMercadillo:
 // agrupadas por furni, con el precio de venta listo para confirmar y la ganancia
 // esperada calculada al escribir (neta de la comision del mercadillo). "Activar" fija el
@@ -68,6 +72,25 @@ function FilaHuerfana(props) {
 }
 
 var FILTROS = [['comprado', 'Comprado'], ['publicado', 'Publicado'], ['vendido', 'Vendido']];
+var AYUDA_PRECIO_FURNI = 'Tu precio de venta para este furni: vale para todas sus unidades en mano. Con él se calcula la ganancia de lo que tienes en mano y se propone al publicar. Clic para cambiarlo.';
+
+// Columna "Venta c/u": el precio del furni (en mano, editable), el de lista (publicado)
+// o lo que entro (vendido).
+function PrecioVenta(props) {
+  var l = props.lote;
+  var enLingos = l.moneda_precio === 'lingos';
+  if (l.estado === 'publicado') {
+    return h('span', { className: 'morado', style: { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } },
+      h(Ico, { name: 'lock', size: 11, sw: 2.2 }), fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ''));
+  }
+  if (l.estado === 'vendido') {
+    return h('span', { title: l.comision_venta !== null && l.comision_venta !== undefined ? 'Neto que entró (ya sin la comisión del mercadillo)' : 'Lo que recibiste' },
+      fmtLg(l.precio_venta_real) + (l.moneda_venta_real === 'lingos' ? ' lg' : ''));
+  }
+  return h('button', { className: 'precio-editable', title: AYUDA_PRECIO_FURNI, onClick: function (e) { e.stopPropagation(); props.onEditar(); } },
+    l.precio_venta_cr === null ? h('span', { className: 'tenue' }, 'sin precio') : (enLingos ? fmtLg(l.precio_venta_lg) + ' lg' : fmtLg(l.precio_venta_cr)),
+    h(Ico, { name: 'edit', size: 11 }));
+}
 var ORIGEN = { excel: 'Excel', manual: 'Manual', sniper: 'Sniper' };
 
 export function InventarioView(props) {
@@ -148,8 +171,9 @@ export function InventarioView(props) {
             : filtro === 'publicado' ? 'No hay nada publicado en el mercadillo.' : filtro === 'vendido' ? 'Aún no hay ventas.' : 'No tienes nada en mano.')
         : h('table', { className: 'tabla' },
             h('thead', null, h('tr', null,
-              h('th', null, 'Nº'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Cant.'), h('th', { className: 'r' }, 'Precio'),
-              h('th', { className: 'r' }, 'Costo'), h('th', { className: 'r' }, 'Ganancia'), h('th', { className: 'r' }, 'Margen'), h('th', null, 'Estado'), h('th', null))),
+              h('th', null, 'Nº'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Cant.'), h('th', { className: 'r' }, 'Compra c/u'),
+              h('th', { className: 'r' }, 'Costo'), h('th', { className: 'r', title: 'Comprado: tu precio de venta del furni · Publicado: precio de lista · Vendido: lo que entró' }, 'Venta c/u'),
+              h('th', { className: 'r' }, 'Ganancia'), h('th', { className: 'r' }, 'Margen'), h('th', null, 'Estado'), h('th', null))),
             h('tbody', null, visibles.map(function (l) {
               var abiertoEste = abierto === l.id;
               var publicado = l.estado === 'publicado';
@@ -162,6 +186,7 @@ export function InventarioView(props) {
                 h('td', { className: 'r mono' }, l.cantidad),
                 h('td', { className: 'r mono' }, l.moneda_compra === 'lingos' ? fmtLg(l.precio_compra) + ' lg' : fmtLg(l.precio_compra)),
                 h('td', { className: 'r mono' }, fmtCr(l.costo_total_cr)),
+                h('td', { className: 'r mono' }, h(PrecioVenta, { lote: l, onEditar: function () { props.onEditarFurni(l); } })),
                 h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)),
                 h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)),
                 h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
@@ -177,7 +202,7 @@ export function InventarioView(props) {
                       h('button', { className: 'btn btn-chico', title: 'Lo vendiste en mano (intercambio o venta directa)', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
                   : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
               if (abiertoEste) {
-                filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: 9, className: 'detalle' },
+                filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: 10, className: 'detalle' },
                   h('div', { className: 'detalle-grid' },
                     h('div', null, h('div', { className: 'dato-l' }, 'Origen'), h('div', { className: 'dato-v' }, (ORIGEN[l.fuente] || l.fuente) + (l.instancia ? ' · ' + l.instancia : ''))),
                     h('div', null, h('div', { className: 'dato-l' }, 'Fecha de compra'), h('div', { className: 'dato-v' }, fmtD(l.fecha_compra))),
@@ -196,7 +221,6 @@ export function InventarioView(props) {
                     ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
                         h(Ico, { name: 'lock', size: 15 }), h('span', { style: { flex: 1 } }, manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO))
                     : h('div', { style: { display: 'flex', gap: 8 } },
-                        l.estado === 'comprado' ? h('button', { className: 'btn', onClick: function (e) { e.stopPropagation(); props.onEditarFurni(l); } }, h(Ico, { name: 'edit', size: 14 }), 'Precio del furni') : null,
                         h('button', { className: 'btn btn-peligro', onClick: function (e) { e.stopPropagation(); eliminar(l); }, disabled: enviando }, h(Ico, { name: 'trash', size: 14 }), 'Eliminar lote')))));
               }
               return filas;

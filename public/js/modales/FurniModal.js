@@ -1,8 +1,10 @@
 // public/js/modales/FurniModal.js — agregar un furni al Mercadillo o editar su precio.
 //
 // Alta: el nombre se elige del buscador del catalogo de Habbo.es (nombre oficial).
-// Edicion: nombre fijo; se cambian moneda, precio de venta y notas. Desde aca tambien
-// se elimina el furni (solo si no tiene lotes en el Inventario).
+// Edicion: nombre fijo; se cambian moneda, precio de venta y notas. El precio de venta es
+// TU precio para las unidades en mano de ese furni (todos sus lotes): con el se calcula
+// su ganancia esperada y se propone al publicar; lo publicado usa su precio de lista.
+// Desde aca tambien se elimina el furni (solo si no tiene lotes en el Inventario).
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -47,7 +49,7 @@ export function FurniModal(props) {
       onClose: function () { setConfirmandoBorrar(false); }, onConfirmar: eliminar });
   }
 
-  return h(Modal, { titulo: f ? 'Editar furni' : 'Agregar furni al Mercadillo', onClose: props.onClose },
+  return h(Modal, { titulo: f ? 'Precio de venta del furni' : 'Agregar furni', onClose: props.onClose },
     f ? h(NombreFurni, { furni: f, sub: f.classname || 'Sin vincular al catálogo' })
       : h(Fld, { label: 'Furni (nombre oficial de Habbo.es)' },
           h(Autocompletar, { autoFocus: true, propios: props.propios, error: !!error && !elegido,
@@ -56,6 +58,7 @@ export function FurniModal(props) {
               setElegido(it); setError('');
             },
             onEscribir: function () { setElegido(null); } })),
+    f ? h('div', { className: 'aviso' }, 'Vale para todas tus unidades en mano de este furni: con él se calcula su ganancia esperada y se propone como precio de lista al publicar. Lo que ya está publicado conserva su precio de lista.') : null,
     h(Fld, { label: 'Moneda de venta' }, h(SelectorMoneda, { valor: moneda, onChange: setMoneda })),
     h(Fld, { label: 'Precio de venta por unidad', ayuda: f && f.costo_promedio_cr ? 'Costo promedio: ' + fmtCr(f.costo_promedio_cr) + ' cr · mínimo para no perder: ' + fmtCr(f.precio_minimo_cr) + ' cr' : 'Puedes dejarlo vacío y ponerlo después.' },
       h('input', { className: 'inp inp-num', value: precio, placeholder: '0', inputMode: 'decimal',
