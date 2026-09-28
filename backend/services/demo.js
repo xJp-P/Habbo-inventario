@@ -3,7 +3,7 @@
 //   npm run demo   -> http://127.0.0.1:3435  (usuario demo@habbo.local / demo1234)
 //
 // Levanta el Postgres local (PGlite) con el MISMO esquema de supabase/migrations
-// (empieza vacio; `npm run migrar -- archivo.xlsx --demo` le carga un Excel) y permite
+// (empieza vacio; `npm run demo` importa el unico .xlsx de la raiz, si hay) y permite
 // simular eventos de un SniperMercadillo (compra, publicar, recuperar) desde Ajustes. Los eventos pasan por
 // la funcion SQL real registrar_eventos_sniper, con la clave "anon", un token de sniper
 // y SOLO el sprite_id del furni, igual que los envia el bot desde el VPS.

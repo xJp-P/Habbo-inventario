@@ -2,7 +2,7 @@
 // scripts/migracion.js — pasa el Excel original a tu base de datos de Supabase.
 //
 // Uso:
-//   npm run migrar                          (busca el Excel en la raiz del proyecto)
+//   npm run migrar                          (usa el unico .xlsx de la raiz del proyecto)
 //   npm run migrar -- ruta\al\archivo.xlsx
 //   npm run migrar -- --reemplazar          (borra tus furnis/lotes antes de importar)
 //   npm run migrar -- --mantener-nombres    (no corrige nombres al oficial de Habbo.es)

@@ -282,7 +282,7 @@ La base de datos está en Supabase; en tu PC solo queda la carpeta de datos de l
 | Comando | Qué hace |
 |---|---|
 | `npm start` | Abre la app de escritorio |
-| `npm run demo` | La app en el navegador (`http://127.0.0.1:3435`) **sin Supabase**: Postgres local (PGlite) con el mismo esquema. Empieza vacía; en Ajustes puedes simular compras, publicaciones y recuperaciones del Sniper |
+| `npm run demo` | La app en el navegador (`http://127.0.0.1:3435`) **sin Supabase**: Postgres local (PGlite) con el mismo esquema. Empieza vacía (si hay un único `.xlsx` en la raíz, lo importa); en Ajustes puedes simular compras, publicaciones y recuperaciones del Sniper |
 | `npm run web` | La app en el navegador contra tu Supabase |
 | `npm run verificar` | Pruebas de la lógica, la seguridad (RLS, clave pública, tokens) y la API sobre Postgres local |
 | `npm run supabase:probar` | Revisa tu proyecto real: conexión, esquema instalado, que la clave pública no vea datos y tu sesión |

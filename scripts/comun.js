@@ -20,13 +20,9 @@ function dirDatosApp() {
   return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), nombre);
 }
 
-// El Excel original en la raiz del proyecto (inventario_habbo.xlsx, Furnis_en_venta.xlsx
-// o el unico .xlsx que haya). null si no hay.
+// El unico .xlsx de la raiz del proyecto (sin contar los temporales ~$ que deja Excel
+// abierto). null si no hay ninguno o hay varios. El .gitignore excluye los .xlsx.
 function buscarExcel() {
-  for (const nombre of ['inventario_habbo.xlsx', 'Furnis_en_venta.xlsx']) {
-    const ruta = path.join(RAIZ, nombre);
-    if (fs.existsSync(ruta)) return ruta;
-  }
   const candidatos = fs.readdirSync(RAIZ).filter((f) => f.toLowerCase().endsWith('.xlsx') && !f.startsWith('~$'));
   return candidatos.length === 1 ? path.join(RAIZ, candidatos[0]) : null;
 }

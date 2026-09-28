@@ -2,7 +2,8 @@
 // scripts/servidor-web.js — corre la app en el navegador, sin Electron.
 //
 //   npm run web            -> http://127.0.0.1:3435, contra TU Supabase (.env)
-//   npm run demo           -> http://127.0.0.1:3435, con Postgres local y datos del Excel
+//   npm run demo           -> http://127.0.0.1:3435, con Postgres local (si la base esta vacia
+//                             y hay un unico .xlsx en la raiz, lo importa)
 //   npm run web -- 4000    -> otro puerto
 //
 // Sirve para desarrollar la interfaz con recarga rapida en cualquier navegador.

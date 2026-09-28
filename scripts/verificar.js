@@ -8,8 +8,9 @@
 // anon (lo unico que ve un sniper), el registro de compras del Sniper con token, los
 // eventos unificados del Sniper (compra, publicar, recuperar con FIFO), los lotes
 // huerfanos, la venta parcial, la comision del mercadillo (la funcion JS de la interfaz
-// contra la de la base), el Excel real (si esta en la raiz), el aviso en tiempo real y
-// las barreras de la API local. No toca tu Supabase ni tus datos.
+// contra la de la base), la importacion de Excel (con una planilla de prueba que genera
+// aqui), el asistente de configuracion, el aviso en tiempo real y las barreras de la API
+// local. No toca tu Supabase ni tus datos.
 
 const assert = require('assert/strict');
 const fs = require('fs');
@@ -22,10 +23,11 @@ const { crearApp } = require('../backend/server');
 const { crearClienteLocal } = require('../backend/db/clienteLocal');
 const { crearServicioConexion } = require('../backend/services/conexion');
 const { crearServicioNegocio } = require('../backend/services/negocio');
+const ExcelJS = require('exceljs');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
 const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/instalacion');
 const { normalizar } = require('../backend/core/util');
-const { DIR_DATOS_DEV, buscarExcel } = require('./comun');
+const { DIR_DATOS_DEV } = require('./comun');
 
 let pasos = 0;
 function ok(msg) { pasos++; console.log('  ok  ' + msg); }
@@ -248,7 +250,7 @@ async function main() {
   ok('precios en Lingos se convierten con la tasa vigente (50 -> 60)');
 
   // ── Tokens de sniper y funcion registrar_eventos_sniper (clave anon) ──
-  const tk = await negocio.crearToken('VPS Contabo 1');
+  const tk = await negocio.crearToken('VPS de prueba 1');
   assert.match(tk.token, /^hbi_[\w-]{40,}$/);
   const lista = await negocio.listarTokens();
   assert.equal(lista.length, 1);
@@ -642,7 +644,7 @@ async function main() {
     assert.equal(r.error.code, 'PT401');
     ok('estado_sniper responde; un token revocado deja de funcionar al instante');
 
-    // ── Aislamiento entre usuarios + Excel real ──
+    // ── Aislamiento entre usuarios + importacion de Excel ──
     const clienteB = clienteA.comoAnon();
     await clienteB.auth.signInWithPassword({ email: 'beto@prueba.local', password: 'clave-beto' });
     const conexB = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: clienteB });
@@ -650,31 +652,51 @@ async function main() {
     const negB = crearServicioNegocio({ conexion: conexB, furnidata });
     assert.equal((await negB.listarFurnis()).length, 0);
     ok('RLS: el segundo usuario no ve nada del primero');
-    const excel = buscarExcel();
-    if (excel) {
-      const datosExcel = await leerExcel(excel);
-      const inf = await importarDatos(negB, furnidata, datosExcel, {});
-      const e = (k) => datosExcel.resumenExcel[normalizar(k)];
-      assert.equal(inf.furnis, 30);
-      assert.equal(inf.compras, 42);
-      // Lo importado queda en mano: sin precio ni ganancia esperada (el precio de la hoja
-      // Inventario solo congelo las ventas que el Excel ya tenia).
-      assert.equal(inf.resumen.stock.unidades, e('Unidades en venta'));
-      assert.equal(inf.resumen.stock.costo_cr, e('Invertido'));
-      assert.equal(inf.resumen.vendido.ganancia_cr, e('Ganancia realizada'));
-      assert.equal(inf.resumen.publicado.unidades, 0);
-      assert.equal(inf.resumen.publicado.ganancia_cr, 0);
-      assert.equal(inf.resumen.datos.perdidas.length, 0);
-      const furnisB = await negB.listarFurnis();
-      assert.ok(furnisB.every((fb) => fb.ganancia_esperada_cr === null), 'nada importado tiene ganancia esperada');
-      const precioGuardado = (await clienteA.pg.query('select count(*)::int as n from public.furnis f join auth.users u on u.id = f.propietario where u.email = $1 and f.precio_venta is not null', ['beto@prueba.local'])).rows[0].n;
-      assert.equal(precioGuardado, 0, 'el importador ya no guarda un precio en el furni');
-      await rechaza(importarDatos(negB, furnidata, datosExcel, {}), /ya tiene furnis/);
-      assert.equal((await negocio.listarFurnis()).some((x) => x.nombre === 'Árbol de Créditos (Vale 500 créditos)'), false);
-      ok('Excel real importado en UNA transaccion: 30 furnis, 42 lotes; stock, inversion y ganancia realizada iguales al Excel; queda en mano, sin precio ni ganancia esperada');
-    } else {
-      console.log('  --  no hay Excel en la raiz: se omite la prueba de importacion');
-    }
+    // Planilla de prueba con la misma estructura que la plantilla del usuario (hojas
+    // Inventario, Mercadillo y Resumen), generada aqui: el repositorio no guarda Excels.
+    const rutaExcel = path.join(dir, 'planilla-de-prueba.xlsx');
+    const libro = new ExcelJS.Workbook();
+    const hInv = libro.addWorksheet('Inventario');
+    hInv.addRow(['Furni', 'Moneda de venta', 'Precio venta x und']);
+    hInv.addRow(['Dragón Velo de Arena', 'Créditos', 900]);
+    hInv.addRow(['cara con cicatrices', 'Créditos', 40]);
+    hInv.addRow(['Furni Inventado XYZ', 'Créditos', 10]);
+    const hMer = libro.addWorksheet('Mercadillo');
+    hMer.addRow(['Estado', 'Furni', 'Cantidad', 'Moneda de compra', 'Precio compra x und']);
+    hMer.addRow(['En venta', 'Dragón Velo de Arena', 2, 'Créditos', 700]);
+    hMer.addRow(['Vendido', 'Dragón Velo de Arena', 1, 'Créditos', 650]);
+    hMer.addRow(['En venta', 'cara con cicatrices', 3, 'Lingos', 1]);
+    hMer.addRow(['Vendido', 'Furni Inventado XYZ', 1, 'Créditos', 6]);
+    hMer.addRow(['En venta', 'Furni Inventado XYZ', 0, 'Créditos', 5]);
+    const hRes = libro.addWorksheet('Resumen');
+    hRes.addRow(['Creditos por 1 Lingo:', 50]);
+    hRes.addRow(['Unidades en venta', 5]);
+    hRes.addRow(['Invertido', 2 * 700 + 3 * 50]);
+    hRes.addRow(['Ganancia realizada', (900 - 650) + (10 - 6)]);
+    await libro.xlsx.writeFile(rutaExcel);
+
+    const datosExcel = await leerExcel(rutaExcel);
+    const inf = await importarDatos(negB, furnidata, datosExcel, {});
+    const e = (k) => datosExcel.resumenExcel[normalizar(k)];
+    assert.deepEqual([inf.furnis, inf.compras, inf.tasa], [3, 4, 50]);
+    assert.deepEqual(inf.correcciones.map((c) => [c.excel, c.oficial]), [['cara con cicatrices', 'Cara con Cicatrices']]);
+    assert.deepEqual(inf.sinVincular.map((x) => x.nombre), ['Furni Inventado XYZ']);
+    assert.ok(inf.avisos.some((a) => /cantidad invalida/.test(a)), 'la fila con cantidad 0 se omite con aviso');
+    // Lo importado queda en mano: sin precio ni ganancia esperada (el precio de la hoja
+    // Inventario solo congela las ventas que el Excel ya tenia). 3 lingos a 50 = 150 cr.
+    assert.equal(inf.resumen.stock.unidades, e('Unidades en venta'));
+    assert.equal(inf.resumen.stock.costo_cr, e('Invertido'));
+    assert.equal(inf.resumen.vendido.ganancia_cr, e('Ganancia realizada'));
+    assert.equal(inf.resumen.publicado.unidades, 0);
+    assert.equal(inf.resumen.publicado.ganancia_cr, 0);
+    assert.equal(inf.resumen.datos.perdidas.length, 0);
+    const furnisB = await negB.listarFurnis();
+    assert.ok(furnisB.every((fb) => fb.ganancia_esperada_cr === null), 'nada importado tiene ganancia esperada');
+    const precioGuardado = (await clienteA.pg.query('select count(*)::int as n from public.furnis f join auth.users u on u.id = f.propietario where u.email = $1 and f.precio_venta is not null', ['beto@prueba.local'])).rows[0].n;
+    assert.equal(precioGuardado, 0, 'el importador ya no guarda un precio en el furni');
+    await rechaza(importarDatos(negB, furnidata, datosExcel, {}), /ya tiene furnis/);
+    assert.equal((await negocio.listarFurnis()).some((x) => x.nombre === 'Furni Inventado XYZ'), false, 'lo importado por otro usuario no se ve');
+    ok('Excel importado en UNA transaccion (planilla de prueba): 3 furnis y 4 lotes; nombre corregido al oficial, uno sin vincular, fila invalida avisada, lingos a 50; stock, inversion y ganancia realizada iguales a la hoja Resumen; queda en mano');
 
     // ── Base de produccion a la que le falta 20260930000000 (caso real): la migracion
     //    20261001000000 se aplica sola, completa lo que faltaba y pasa a neto la venta vieja ──
@@ -721,7 +743,7 @@ async function main() {
     h = await pedir(puerto, 'GET', '/api/resumen', { origin: `http://127.0.0.1:${puerto}` });
     assert.equal(h.status, 200);
     ok('API local blindada: formularios 415, otro sitio 403, DNS rebinding 403; la app entra');
-    h = await pedir(puerto, 'POST', '/api/sniper/tokens', { cuerpo: { nombre: 'VPS Contabo 2' } });
+    h = await pedir(puerto, 'POST', '/api/sniper/tokens', { cuerpo: { nombre: 'VPS de prueba 2' } });
     assert.equal(h.status, 201);
     assert.match(h.json.token, /^hbi_/);
     ok('crear token desde la API de la app');

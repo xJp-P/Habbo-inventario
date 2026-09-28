@@ -1,12 +1,12 @@
-// backend/services/importarExcel.js — importa el Excel original (hojas "Inventario",
-// "Mercadillo" y "Resumen") a la base SQLite.
+// backend/services/importarExcel.js — importa una planilla de Excel (hojas "Inventario",
+// "Mercadillo" y "Resumen") a la base de Supabase del usuario.
 //
 // OJO CON LOS NOMBRES: en el Excel la hoja "Inventario" son los furnis con precio (en la
 // app: vista Mercadillo, tabla `furnis`) y la hoja "Mercadillo" son las compras (en la
 // app: vista Inventario, tabla `compras`). Aca se leen las hojas por su nombre del Excel.
 //
-// Lo usan el script `npm run migrar` y, mas adelante, el boton "Importar desde Excel" de
-// la app, para que cualquier usuario del repo pueda traer su propio archivo.
+// Lo usan el script `npm run migrar` y el boton "Importar desde Excel" de Ajustes, para
+// que cualquier usuario pueda traer su propio archivo.
 //
 // LECTURA TOLERANTE: las columnas se ubican por el TEXTO del encabezado, no por la letra,
 // asi que funciona aunque alguien haya movido columnas. Las celdas con formula se leen
