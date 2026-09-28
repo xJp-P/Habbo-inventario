@@ -15,7 +15,7 @@ import { leerNumero, fmtCr, fmtLg, fmtPct } from '../core/format.js';
 import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 import { calcularComision } from '../core/comision.js';
-import { gruposPorPrecioLista, repartirFifo } from '../core/lotes.js';
+import { gruposPorPrecioLista, repartirFifo, etiquetaLote } from '../core/lotes.js';
 
 function texto(n) { return String(n).replace('.', ','); }
 function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' lg' : ' cr'); }
@@ -88,7 +88,7 @@ export function VenderFurniModal(props) {
       lingos ? h('div', null, 'En lingos no hay comisión: se guarda ', h('b', { className: 'mono' }, fmtLg(p) + ' lingos'), ' por unidad.')
         : h('div', null, 'Entra a tu monedero: ', h('b', { className: 'mono' }, fmtCr(netoU) + ' cr'), ' por unidad (comisión ' + fmtCr(comisionU) + ' cr) · total ',
             h('b', { className: 'mono' }, fmtCr(netoU * q) + ' cr'), '. Se guarda ese neto.'),
-      h('div', { style: { marginTop: 6 } }, tomas.length === 1 ? 'Sale del lote Nº ' + tomas[0].lote.id : 'Salen de ' + tomas.length + ' lotes (Nº ' + tomas.map(function (t) { return t.lote.id; }).join(', ') + ')',
+      h('div', { style: { marginTop: 6 } }, tomas.length === 1 ? 'Sale del lote ' + etiquetaLote(tomas[0].lote) : 'Salen de ' + tomas.length + ' lotes (' + tomas.map(function (t) { return etiquetaLote(t.lote); }).join(', ') + ')',
         ', lo publicado hace más tiempo · ganancia real ',
         h('b', { className: 'mono ' + (ganancia > 0 ? 'pos' : ganancia < 0 ? 'neg' : '') }, (ganancia > 0 ? '+' : '') + fmtCr(ganancia) + ' cr'),
         ' · margen ', fmtPct(costo ? ganancia / costo : 0))) : null,

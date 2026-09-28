@@ -64,7 +64,7 @@ export function calcularPrecioLista(neto) {
 // precios de lista y cuantas unidades publico el Sniper y cuantas tu.
 export function resumenPublicado(lotes) {
   var r = { unidades: 0, costo: 0, bruto: 0, neto: 0, comision: 0, ganancia: 0, costoPromedio: null,
-    listaMin: null, listaMax: null, sniper: 0, manual: 0 };
+    listaMin: null, listaMax: null, sniper: 0, manual: 0, ltds: [] };
   for (var i = 0; i < lotes.length; i++) {
     var l = lotes[i];
     if (l.estado !== 'publicado') continue;
@@ -79,6 +79,7 @@ export function resumenPublicado(lotes) {
     r.listaMin = r.listaMin === null ? p : Math.min(r.listaMin, p);
     r.listaMax = r.listaMax === null ? p : Math.max(r.listaMax, p);
     if (l.publicado_por === 'manual') r.manual += l.cantidad; else r.sniper += l.cantidad;
+    if (l.numero_ltd) r.ltds.push(l.numero_ltd);
   }
   if (r.unidades) r.costoPromedio = r.costo / r.unidades;
   return r;

@@ -140,6 +140,8 @@ input[type=number]{-moz-appearance:textfield}
 .furni-ico{width:36px;height:36px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
 .furni-ico img{max-width:34px;max-height:34px;image-rendering:pixelated}
 .furni-nombre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.furni-linea{display:flex;align-items:center;gap:6px;min-width:0}
+.tag-ltd{flex-shrink:0;display:inline-flex;align-items:center;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:700;color:var(--gold);background:var(--yellow-bg);border:1px solid var(--yellow-bd);white-space:nowrap}
 
 /* ── Lotes huérfanos del Sniper ── */
 .huerfanas{background:var(--yellow-bg);border:1px solid var(--yellow-bd);border-radius:12px;padding:14px 16px;margin-bottom:18px}

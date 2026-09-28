@@ -71,7 +71,7 @@ export function MercadilloView(props) {
               var abiertoEste = abierto === f.id;
               var minimo = precioMinimoSinPerder(r.costoPromedio);
               var trs = [h('tr', { key: f.id, className: 'fila' + (abiertoEste ? ' abierta' : ''), onClick: function () { setAbierto(abiertoEste ? null : f.id); } },
-                h('td', null, h(NombreFurni, { furni: f })),
+                h('td', null, h(NombreFurni, { furni: f, ltds: r.ltds.slice().sort(function (a, b) { return a - b; }) })),
                 h('td', { className: 'r mono' },
                   h('span', { className: 'morado', style: { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } },
                     h(Ico, { name: 'lock', size: 11, sw: 2.2 }), rangoLista(r))),

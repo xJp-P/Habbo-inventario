@@ -24,7 +24,7 @@ import { API } from '../core/api.js';
 import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
-import { NombreFurni, IconoFurni, EtiquetaPublicado, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
+import { NombreFurni, IconoFurni, EtiquetaPublicado, EtiquetaLtd, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
 import { ingresoNeto } from '../core/comision.js';
 
 // Un furni que llego del Sniper sin revisar: cuantas, a cuanto, cuando y desde que VPS.
@@ -44,7 +44,7 @@ function FilaHuerfana(props) {
 
   return h('div', { className: 'huerfana-fila' },
     h('div', { style: { flex: 1, minWidth: 0 } },
-      h(NombreFurni, { furni: f, sub: h('span', null,
+      h(NombreFurni, { furni: f, ltds: g.lotes.filter(function (l) { return l.numero_ltd; }).map(function (l) { return l.numero_ltd; }), sub: h('span', null,
         g.unidades + ' und · pagaste ' + fmtLg(costoU) + ' c/u · ' + fmtCr(g.costo_cr) + ' cr en total · ' + fmtHace(g.recibido_en) + (g.instancias.length ? ' · ' + g.instancias.join(', ') : ''),
         f.nuevo ? h('span', { className: 'tag tag-azul', style: { marginLeft: 8 } }, 'Furni nuevo') : null) })),
     h('button', { className: 'btn btn-verde', onClick: confirmar, disabled: enviando, title: 'Pasa estas unidades a Comprado (en mano)' },
@@ -213,6 +213,10 @@ export function InventarioView(props) {
                 filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: conPrecio ? 10 : 7, className: 'detalle' },
                   h('div', { className: 'detalle-grid' },
                     h('div', null, h('div', { className: 'dato-l' }, 'Origen'), h('div', { className: 'dato-v' }, (ORIGEN[l.fuente] || l.fuente) + (l.instancia ? ' · ' + l.instancia : ''))),
+                    h('div', null, h('div', { className: 'dato-l' }, 'Número LTD'),
+                      h('div', { className: 'dato-v', style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                        l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : h('span', { className: 'tenue' }, '—'),
+                        h('button', { className: 'btn btn-chico', onClick: function (e) { e.stopPropagation(); props.onLtd(l); } }, l.numero_ltd ? 'Cambiar' : 'Agregar'))),
                     h('div', null, h('div', { className: 'dato-l' }, 'Fecha de compra'), h('div', { className: 'dato-v' }, fmtD(l.fecha_compra))),
                     h('div', null, h('div', { className: 'dato-l' }, 'Precio de compra en créditos'), h('div', { className: 'dato-v' }, fmtLg(l.precio_compra_cr) + ' cr')),
                     conPrecio ? h('div', null, h('div', { className: 'dato-l' }, l.estado === 'vendido' ? (l.comision_venta !== null && l.comision_venta !== undefined ? 'Entró a tu monedero (neto, congelado)' : 'Vendido a (congelado)') : 'Precio de lista'), h('div', { className: 'dato-v' }, fmtLg(l.precio_venta_cr) + ' cr')) : null,

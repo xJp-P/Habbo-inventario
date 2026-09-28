@@ -129,6 +129,14 @@ function crearServicioNegocio({ conexion, furnidata }) {
   }
 
   // ── Compras (vista INVENTARIO) ────────────────────────────────────────────
+  // Numero de serie de un LTD: 45, "45" o "#45". null si viene vacio.
+  function numeroLtd(v) {
+    if (v === undefined || v === null || String(v).trim() === '') return null;
+    const s = String(v).trim().replace(/^#\s*/, '');
+    if (!/^[0-9]{1,9}$/.test(s) || Number(s) < 1) throw new ClientError('El numero LTD debe ser un entero mayor que 0 (p. ej. 45 o #45).');
+    return Number(s);
+  }
+
   async function crearCompra(entrada) {
     const args = {
       p_cantidad: numeroValido(entrada.cantidad ?? 1, { campo: 'La cantidad', minimo: 1, entero: true }),
@@ -136,6 +144,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
       p_precio: numeroValido(entrada.precio_compra, { campo: 'El precio de compra' }),
       p_fecha: entrada.fecha_compra || hoyStr(),
       p_notas: entrada.notas || null,
+      p_numero_ltd: numeroLtd(entrada.numero_ltd),
     };
     if (entrada.furni_id) {
       args.p_furni_id = Number(entrada.furni_id);
@@ -282,6 +291,13 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { cantidad: r.cantidad, precio_neto: r.precio_neto, comision: r.comision, moneda: r.moneda, ventas: r.ventas };
   }
 
+  // Pone, cambia o quita (null) el numero LTD de un lote. Un lote de varias unidades en
+  // mano separa una unidad con ese numero (funcion asignar_ltd).
+  async function asignarLtd(id, numero) {
+    const r = await datos(db().rpc('asignar_ltd', { p_id: Number(id), p_numero: numeroLtd(numero) }));
+    return { separado: r.separado, lote: await compraPorId(r.lote_id) };
+  }
+
   // Deshace una publicacion manual: el lote vuelve a "comprado" (funcion retirar_lote).
   async function retirarLote(id) {
     const r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
@@ -416,7 +432,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
-    vender, revertirVenta, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
+    vender, revertirVenta, asignarLtd, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
     resolverNombre, sincronizarConCatalogo,
   };

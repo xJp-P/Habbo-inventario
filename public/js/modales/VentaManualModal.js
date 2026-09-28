@@ -22,7 +22,7 @@ import { leerNumero, fmtCr, fmtLg, fmtPct } from '../core/format.js';
 import { Modal, Fld, NombreFurni, IconoFurni, SelectorMoneda } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 import { calcularComision } from '../core/comision.js';
-import { repartirFifo } from '../core/lotes.js';
+import { repartirFifo, etiquetaLote } from '../core/lotes.js';
 
 // Lotes en mano de un furni, en el orden en que los toma vender_en_mano.
 function enMano(compras, furniId) {
@@ -127,7 +127,7 @@ export function VentaManualModal(props) {
         h('select', { className: 'inp', value: loteSel, onChange: function (e) { setLoteSel(e.target.value); setCant('1'); setError(''); } },
           h('option', { value: 'fifo' }, 'Automático: los más antiguos primero (' + total + ' und)'),
           lotes.map(function (l) {
-            return h('option', { key: l.id, value: String(l.id) }, 'Lote Nº ' + l.id + ' · ' + l.cantidad + ' und a ' + fmtLg(l.precio_compra_cr) + ' cr c/u' + (l.pendiente ? ' · por revisar' : ''));
+            return h('option', { key: l.id, value: String(l.id) }, 'Lote ' + etiquetaLote(l) + ' · ' + l.cantidad + ' und a ' + fmtLg(l.precio_compra_cr) + ' cr c/u' + (l.pendiente ? ' · por revisar' : ''));
           }))),
       h(Fld, { key: 'cant', label: '¿Cuántas vendiste?' },
         h('div', { style: { display: 'flex', gap: 6 } },
@@ -152,7 +152,7 @@ export function VentaManualModal(props) {
           ? h('div', null, 'Entra a tu monedero: ', h('b', { className: 'mono' }, fmtCr(netoU) + ' cr'), ' por unidad (comisión ' + fmtCr(comisionU) + ' cr) · total ',
               h('b', { className: 'mono' }, fmtCr(netoU * q) + ' cr'), '. Se guarda ese neto.')
           : h('div', null, 'Sin comisión: se guarda ', h('b', { className: 'mono' }, fmtM(p)), ' por unidad · total ', h('b', { className: 'mono' }, fmtM(p * q)), '.'),
-        h('div', { style: { marginTop: 6 } }, tomas.length === 1 ? 'Sale del lote Nº ' + tomas[0].lote.id : 'Salen de ' + tomas.length + ' lotes (Nº ' + tomas.map(function (t) { return t.lote.id; }).join(', ') + ')',
+        h('div', { style: { marginTop: 6 } }, tomas.length === 1 ? 'Sale del lote ' + etiquetaLote(tomas[0].lote) : 'Salen de ' + tomas.length + ' lotes (' + tomas.map(function (t) { return etiquetaLote(t.lote); }).join(', ') + ')',
           ' · ganancia real ', h('b', { className: 'mono ' + (ganancia > 0 ? 'pos' : ganancia < 0 ? 'neg' : '') }, (ganancia > 0 ? '+' : '') + fmtCr(ganancia) + ' cr'),
           ' · margen ', fmtPct(costo ? ganancia / costo : 0)),
         ganancia < 0 ? h('div', { className: 'neg', style: { marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' } }, h(Ico, { name: 'alert', size: 14 }), 'Por debajo de lo que costaron') : null) : null,

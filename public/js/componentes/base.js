@@ -54,12 +54,23 @@ export function IconoFurni(props) {
       : h(Ico, { name: 'box', size: Math.round(tam / 2), color: 'var(--text3)' }));
 }
 
+// Numero de serie de un LTD ("#45"), destacado.
+export function EtiquetaLtd(props) {
+  return h('span', { className: 'tag-ltd mono', title: 'LTD número ' + props.numero }, '#' + props.numero);
+}
+
+// Icono + nombre del furni. Si es un lote con numero LTD (furni.numero_ltd) o se pasan
+// varios (props.ltds), se muestran junto al nombre.
 export function NombreFurni(props) {
   var f = props.furni || {};
+  var ltds = props.ltds || (f.numero_ltd ? [f.numero_ltd] : []);
   return h('div', { className: 'furni' },
     h(IconoFurni, { classname: f.classname, revision: f.revision, size: props.size }),
     h('div', { style: { minWidth: 0 } },
-      h('div', { className: 'furni-nombre', title: f.nombre }, f.nombre),
+      h('div', { className: 'furni-linea' },
+        h('div', { className: 'furni-nombre', title: f.nombre }, f.nombre),
+        ltds.slice(0, 4).map(function (n) { return h(EtiquetaLtd, { key: n, numero: n }); }),
+        ltds.length > 4 ? h('span', { className: 'tenue mono', style: { fontSize: 11 } }, '+' + (ltds.length - 4)) : null),
       props.sub ? h('div', { className: 'tenue', style: { fontSize: 11 } }, props.sub) : null));
 }
 

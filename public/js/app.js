@@ -25,6 +25,7 @@ import { PublicarModal } from './modales/PublicarModal.js';
 import { VenderFurniModal } from './modales/VenderFurniModal.js';
 import { RetirarFurniModal } from './modales/RetirarFurniModal.js';
 import { VentaManualModal } from './modales/VentaManualModal.js';
+import { LtdModal } from './modales/LtdModal.js';
 
 var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
@@ -171,6 +172,7 @@ function App() {
       else setModal({ tipo: 'venta-manual', furni: furniDe(l.furni_id), lote: l });
     },
     onVentaManual: function () { setModal({ tipo: 'venta-manual' }); },
+    onLtd: function (l) { setModal({ tipo: 'ltd', lote: l }); },
     onPublicar: function (l) { setModal({ tipo: 'publicar', furni: furniDe(l.furni_id), lotes: enManoFifo(l.furni_id) }); },
     onCambio: cambio,
   });
@@ -213,6 +215,7 @@ function App() {
       h('div', { className: 'main-content' }, contenido)),
 
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis, compras: datos.compras, furni: modal.furni, lote: modal.lote, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender-furni' ? h(VenderFurniModal, { furni: modal.furni, lotes: modal.lotes, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'retirar-furni' ? h(RetirarFurniModal, { furni: modal.furni, lotes: modal.lotes, unidadesSniper: modal.unidadesSniper, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,

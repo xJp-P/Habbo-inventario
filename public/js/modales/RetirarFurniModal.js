@@ -13,7 +13,7 @@ import { _submitGuard } from '../core/ui.js';
 import { leerNumero, fmtLg } from '../core/format.js';
 import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
-import { gruposPorPrecioLista, repartirFifo } from '../core/lotes.js';
+import { gruposPorPrecioLista, repartirFifo, etiquetaLote } from '../core/lotes.js';
 
 function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' lg' : ' cr'); }
 
@@ -60,7 +60,7 @@ export function RetirarFurniModal(props) {
       h('div', null, h('b', { className: 'mono' }, q), ' und publicadas a ', fmtLista(g), ' vuelven a ', h('span', { className: 'tag tag-azul' }, 'Comprado'), ' (en mano)',
         q < g.unidades ? ' y quedan ' + (g.unidades - q) + ' publicadas a ese precio' : '', '.'),
       h('div', { className: 'suave', style: { marginTop: 6, fontSize: 12 } }, 'Salen primero las publicadas hace más tiempo (',
-        tomas.length === 1 ? 'lote Nº ' + tomas[0].lote.id : 'lotes Nº ' + tomas.map(function (t) { return t.lote.id; }).join(', '),
+        tomas.length === 1 ? 'lote ' + etiquetaLote(tomas[0].lote) : 'lotes ' + tomas.map(function (t) { return etiquetaLote(t.lote); }).join(', '),
         divide ? '; el último se divide' : '', ').')) : null,
     props.unidadesSniper > 0 ? h('div', { className: 'suave', style: { fontSize: 12 } },
       'Las ' + props.unidadesSniper + ' und que publicó el Sniper no se retiran aquí: se retiran desde el juego y el Sniper avisa.') : null,

@@ -575,6 +575,51 @@ async function main() {
     assert.ok(enManoFinal.every((c) => c.comision_venta === null && c.precio_venta_real === null));
     ok('venta manual (tradeo u otro keko): FIFO o de un lote; tradeo sin comision (creditos o lingos), mercadillo guarda el neto; revertir la deshace');
 
+    // ── Numero de serie de los LTD ──
+    const trono = await negocio.crearCompra({ nombre: 'Trono Dragón', cantidad: 1, precio_compra: 500, numero_ltd: '#45' });
+    assert.equal(trono.numero_ltd, 45);
+    await rechaza(negocio.crearCompra({ nombre: 'Trono Dragón', cantidad: 2, precio_compra: 500, numero_ltd: 46 }), /Un LTD es una sola unidad/);
+    await rechaza(negocio.crearCompra({ nombre: 'Trono Dragón', cantidad: 1, precio_compra: 500, numero_ltd: 'abc' }), /numero LTD/);
+    r = await sniper([compraVelo('cmp_ltd', 1, 900, { numero_ltd: '#77' })]);
+    assert.equal(r.data.procesados, 1);
+    assert.equal(r.data.eventos[0].numero_ltd, 77);
+    const loteLtd = await leerLote(r.data.eventos[0].compra_id);
+    assert.equal(loteLtd.numero_ltd, 77, 'v_compras expone el numero LTD');
+    r = await sniper([compraVelo('cmp_ltd2', 2, 900, { numero_ltd: 78 }), compraVelo('cmp_ltd3', 1, 900, { numero_ltd: 'setenta' })]);
+    assert.equal(r.data.procesados, 0);
+    assert.match(r.data.errores[0].error, /Un LTD es una sola unidad/);
+    assert.match(r.data.errores[1].error, /numero_ltd no valido/);
+    await negocio.activarPendientes({ compra_ids: [loteLtd.id] });
+    ok('numero LTD: en la compra manual ("#45") y en la del Sniper (numero_ltd "#77"); un LTD es una sola unidad; numeros invalidos se rechazan');
+
+    const tres = await negocio.crearCompra({ nombre: 'Trono Dragón', cantidad: 3, precio_compra: 480 });
+    let al = await negocio.asignarLtd(tres.id, '#12');
+    assert.equal(al.separado, true, 'un lote de 3 en mano separa una unidad con el numero');
+    assert.equal(al.lote.numero_ltd, 12);
+    assert.equal(al.lote.cantidad, 1);
+    assert.equal(al.lote.origen_id, null);
+    assert.equal((await leerLote(tres.id)).cantidad, 2);
+    al = await negocio.asignarLtd(al.lote.id, 13);
+    assert.equal(al.separado, false);
+    assert.equal(al.lote.numero_ltd, 13);
+    al = await negocio.asignarLtd(al.lote.id, null);
+    assert.equal(al.lote.numero_ltd, null);
+    const hl = await pedir(puerto, 'PUT', `/api/compras/${al.lote.id}/ltd`, { cuerpo: { numero_ltd: 14 } });
+    assert.equal(hl.status, 200);
+    assert.equal(hl.json.lote.numero_ltd, 14);
+    await rechaza(negocio.asignarLtd(p1.id, 5), /no esta en mano/);
+    const vTrono = await negocio.vender(tres.id, { cantidad: 1, precio_venta: 600 });
+    await negocio.asignarLtd(tres.id, 20);
+    const rvTrono = await negocio.revertirVenta(vTrono.venta.id);
+    assert.equal(rvTrono.fusionada, false, 'la venta deshecha no se une a un lote con numero LTD');
+    assert.deepEqual([(await leerLote(tres.id)).numero_ltd, (await leerLote(tres.id)).cantidad], [20, 1]);
+    await negocio.publicarLote(trono.id, { precio_lista: 1000 });
+    const pubTrono = (await negocio.listarCompras()).filter((c) => c.furni_id === trono.furni_id && c.estado === 'publicado');
+    assert.deepEqual(comision.resumenPublicado(pubTrono).ltds, [45], 'el Mercadillo sabe que LTD estan publicados');
+    await negocio.retirarLote(trono.id);
+    assert.equal((await leerLote(trono.id)).numero_ltd, 45, 'publicar y retirar conserva el numero');
+    ok('asignar numero LTD: separa una unidad de un lote en mano, cambia o quita; lo publicado de varias no; un lote numerado no se fusiona al revertir y conserva su numero');
+
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);
     assert.equal(est.data.pendientes, 0);

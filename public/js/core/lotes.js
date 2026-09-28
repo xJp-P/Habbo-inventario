@@ -35,6 +35,11 @@ export function gruposPorPrecioLista(lotes) {
   return grupos.sort(function (a, b) { return a.precio_lista_cr - b.precio_lista_cr; });
 }
 
+// "Nº 12" o "Nº 12 (#45)" si el lote es un LTD con numero.
+export function etiquetaLote(l) {
+  return 'Nº ' + l.id + (l.numero_ltd ? ' (#' + l.numero_ltd + ')' : '');
+}
+
 // Reparte `q` unidades entre los lotes, en el orden dado: [{ lote, toma }].
 export function repartirFifo(lotes, q) {
   var resta = q; var out = [];

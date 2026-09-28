@@ -19,7 +19,7 @@ Content-Type: application/json
 {
   "token_sniper": "hbi_…",
   "eventos": [
-    { "tipo_evento": "compra",    "id_externo": "123456789", "sprite_id": 4623, "cantidad": 1, "precio": 100, "moneda": "creditos", "hotel": "es", "notas": "Costo extra: 10 diamantes" },
+    { "tipo_evento": "compra",    "id_externo": "123456789", "sprite_id": 4623, "cantidad": 1, "precio": 100, "moneda": "creditos", "hotel": "es", "notas": "Costo extra: 10 diamantes", "numero_ltd": 45 },
     { "tipo_evento": "publicar",  "id_externo": "pub_1790571239704_4623_8841", "sprite_id": 4623, "cantidad": 1, "precio_lista": 125, "moneda": "creditos", "hotel": "es" },
     { "tipo_evento": "recuperar", "id_externo": "rec_1790571239962_4623_1203", "sprite_id": 4623, "cantidad": 1, "hotel": "es" }
   ]
@@ -43,6 +43,7 @@ Content-Type: application/json
 | `precio_lista` | | ✔ | | Precio unitario al que se publicó. Número JSON o texto, como `precio` |
 | `moneda` | opc. | opc. | | `creditos` (por defecto) o `lingos` |
 | `notas` | opc. | | | Texto libre; ahí van los costos en diamantes o puntos de un LTD |
+| `numero_ltd` | opc. | | | Número de serie de un LTD: `45`, `"45"` o `"#45"`. Un LTD es una sola unidad: con número, `cantidad` debe ser 1 (si no, el evento va a `errores`) |
 | `fecha` | opc. | | | ISO o milisegundos; por defecto hoy |
 | `instancia` | opc. | | | Si falta, se usa el nombre del token |
 | `classname`, `nombre`, `revision` | opc. | | | Si el bot los tiene, el furni nuevo nace con su nombre oficial |
