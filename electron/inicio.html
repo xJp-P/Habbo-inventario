@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!-- electron/inicio.html — ventana chica que se ve mientras la app busca actualizaciones y
+     arranca su servidor. Colores del tema oscuro de public/css/styles.css. -->
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src file:">
+<title>Habbo Inventario</title>
+<style>
+  :root{--bg:#0d1117;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#6e7681;--green:#3fb950;--green2:#238636;--red:#f85149;--yellow:#d29922}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;
+    -webkit-app-region:drag;user-select:none}
+  .vista{display:flex;flex-direction:column;align-items:center;text-align:center;width:100%;padding:0 28px}
+  .oculta{display:none}
+  img{width:64px;height:64px;image-rendering:pixelated;margin-bottom:12px}
+  h1{font-size:15px;font-weight:700}
+  #mensaje,#texto{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5}
+  .progreso{display:flex;align-items:center;gap:8px;margin-top:14px;visibility:hidden}
+  .progreso.visible{visibility:visible}
+  .barra{width:240px;height:5px;background:var(--bg3);border-radius:99px;overflow:hidden}
+  .relleno{height:100%;width:0;background:linear-gradient(90deg,var(--green2),var(--green));border-radius:99px;transition:width .25s ease}
+  .pct,.version{font-family:'Cascadia Code',Consolas,monospace;font-size:11px;color:var(--text3)}
+  .pct{min-width:34px;text-align:right}
+  .version{margin-top:14px}
+  .aviso{font-size:30px;line-height:1;color:var(--yellow);margin-bottom:10px}
+  .botones{display:flex;gap:8px;margin-top:18px;-webkit-app-region:no-drag}
+  button{font:inherit;font-size:12px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer;
+    background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+  button:hover{border-color:var(--text3)}
+  button.primario{background:var(--green2);border-color:var(--green2);color:#fff}
+  button.primario:hover{background:#2ea043}
+</style>
+</head>
+<body>
+  <div id="cargando" class="vista">
+    <img src="../public/img/icono.png" alt="">
+    <h1>Habbo Inventario</h1>
+    <p id="mensaje">Iniciando…</p>
+    <div class="progreso" id="progreso"><div class="barra"><div class="relleno" id="relleno"></div></div><span class="pct" id="pct"></span></div>
+    <div class="version" id="version"></div>
+  </div>
+  <div id="pregunta" class="vista oculta">
+    <div class="aviso">⚠</div>
+    <h1 id="titulo"></h1>
+    <p id="texto"></p>
+    <div class="botones" id="botones"></div>
+  </div>
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  $('version').textContent = 'v' + (new URLSearchParams(location.search).get('version') || '');
+  window.inicio.alCambiar(function (e) {
+    var pregunta = e.vista === 'pregunta';
+    $('cargando').classList.toggle('oculta', pregunta);
+    $('pregunta').classList.toggle('oculta', !pregunta);
+    if (pregunta) {
+      $('titulo').textContent = e.titulo || '';
+      $('texto').textContent = e.mensaje || '';
+      $('botones').textContent = '';
+      (e.botones || []).forEach(function (b) {
+        var boton = document.createElement('button');
+        boton.textContent = b.texto;
+        if (b.primario) boton.className = 'primario';
+        boton.addEventListener('click', function () { window.inicio.elegir(b.id); });
+        $('botones').appendChild(boton);
+      });
+      return;
+    }
+    $('mensaje').textContent = e.mensaje || '';
+    var conBarra = typeof e.porcentaje === 'number';
+    var p = Math.max(0, Math.min(100, e.porcentaje || 0));
+    $('progreso').classList.toggle('visible', conBarra);
+    $('relleno').style.width = p + '%';
+    $('pct').textContent = conBarra ? p + '%' : '';
+  });
+</script>
+</body>
+</html>

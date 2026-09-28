@@ -13,15 +13,22 @@
 // sesion-supabase.json (CIFRADO con la llave del sistema operativo), la cache del
 // catalogo de Habbo.es y los iconos.
 //
+// ARRANQUE: primero una ventana chica (electron/inicio.html) que busca actualizaciones en
+// GitHub Releases (electron/actualizaciones.js) y, si hay una version nueva, la instala
+// antes de abrir la app. Despues arranca el servidor y abre la ventana principal.
+//
 // Opciones de linea de comandos:
 //   --demo            usa el Postgres local del modo demo (sin Supabase)
 //   --prueba-arranque abre la ventana, confirma que la interfaz cargo y se cierra
 //                     (prueba automatica para CI y para verificar una instalacion)
+//   --simular-actualizacion[=error]  recorre el flujo de actualizacion con una version
+//                     ficticia (solo con npm start; no descarga nada)
 
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('path');
 const http = require('http');
 const { crearApp } = require('../backend/server');
+const actualizaciones = require('./actualizaciones');
 
 const PUERTO_PREFERIDO = 3435;
 const RAIZ = path.join(__dirname, '..');
@@ -29,7 +36,8 @@ const DEMO = process.argv.includes('--demo');
 const PRUEBA_ARRANQUE = process.argv.includes('--prueba-arranque');
 
 // Una sola instancia: abrir la app dos veces enfoca la ventana existente.
-if (!PRUEBA_ARRANQUE && !app.requestSingleInstanceLock()) {
+const SEGUNDA_INSTANCIA = !PRUEBA_ARRANQUE && !app.requestSingleInstanceLock();
+if (SEGUNDA_INSTANCIA) {
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -89,13 +97,69 @@ async function iniciarBackend() {
   ({ servidor, puerto } = await escuchar(backend.app, PUERTO_PREFERIDO));
 }
 
-function crearVentana() {
+// Empaquetada, cada ventana usa el icono del ejecutable; en desarrollo, el de recursos/.
+function iconoDesarrollo() {
+  return app.isPackaged ? undefined : path.join(RAIZ, 'recursos', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+}
+
+// ── Pantalla de inicio ───────────────────────────────────────────────────
+// Ventana chica mientras se buscan actualizaciones y arranca el servidor: recibe el
+// estado a pintar y, cuando hay que decidir algo, devuelve el boton elegido. Si la
+// cierras a mitad del arranque, la app no se abre.
+function crearPantallaInicio() {
+  const w = new BrowserWindow({
+    width: 420, height: 280,
+    frame: false, resizable: false, maximizable: false, fullscreenable: false,
+    center: true, show: false,
+    title: 'Habbo Inventario',
+    backgroundColor: '#0d1117',
+    icon: iconoDesarrollo(),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'inicio-preload.js'),
+    },
+  });
+  w.setMenu(null);
+  const contenido = w.webContents;
+  let cargada = false;
+  let ultimo = null;
+  let responder = null;
+  let cerradaPorNosotros = false;
+  const pantalla = { cancelada: false };
+
+  const enviar = () => { if (cargada && ultimo && !w.isDestroyed()) contenido.send('inicio:estado', ultimo); };
+  const alElegir = (e, id) => {
+    if (e.sender !== contenido || !responder) return;
+    const r = responder; responder = null; r(id);
+  };
+  ipcMain.on('inicio:eleccion', alElegir);
+  contenido.once('did-finish-load', () => { cargada = true; enviar(); });
+  w.once('ready-to-show', () => w.show());
+  w.on('closed', () => {
+    ipcMain.removeListener('inicio:eleccion', alElegir);
+    if (!cerradaPorNosotros) pantalla.cancelada = true;
+    if (responder) { const r = responder; responder = null; r('cerrar'); }
+  });
+  w.loadFile(path.join(__dirname, 'inicio.html'), { query: { version: app.getVersion() } });
+
+  pantalla.mostrar = (estado) => { ultimo = Object.assign({ vista: 'cargando' }, estado); enviar(); };
+  pantalla.preguntar = (p) => new Promise((resolve) => {
+    responder = resolve;
+    ultimo = Object.assign({ vista: 'pregunta' }, p);
+    enviar();
+  });
+  pantalla.cerrar = () => { cerradaPorNosotros = true; if (!w.isDestroyed()) w.close(); };
+  return pantalla;
+}
+
+function crearVentana(pantalla) {
   ventana = new BrowserWindow({
     width: 1400, height: 900, minWidth: 1000, minHeight: 680,
     title: 'Habbo Inventario',
     backgroundColor: '#0d1117',
-    // Empaquetada, la ventana usa el icono del ejecutable; en desarrollo, el de build/.
-    icon: app.isPackaged ? undefined : path.join(RAIZ, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    icon: iconoDesarrollo(),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -129,6 +193,7 @@ function crearVentana() {
   ventana.once('ready-to-show', () => {
     if (!PRUEBA_ARRANQUE) ventana.maximize();
     ventana.show();
+    if (pantalla) pantalla.cerrar();
   });
   ventana.on('closed', () => { ventana = null; });
   ventana.loadURL(`http://127.0.0.1:${puerto}`);
@@ -154,8 +219,27 @@ ipcMain.handle('app:elegir-excel', async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+// Actualizaciones desde Ajustes: buscar, descargar e instalar. El avance llega a la
+// interfaz por el evento 'app:actualizacion-estado'.
+ipcMain.handle('app:actualizacion', () => actualizaciones.obtenerEstado());
+ipcMain.handle('app:actualizacion-buscar', () => actualizaciones.buscar());
+ipcMain.handle('app:actualizacion-descargar', () => { actualizaciones.descargar(); return actualizaciones.obtenerEstado(); });
+ipcMain.handle('app:actualizacion-instalar', () => actualizaciones.instalar());
+ipcMain.handle('app:actualizacion-abrir-descarga', () => actualizaciones.abrirDescarga());
+actualizaciones.alCambiar((estado) => {
+  if (ventana && !ventana.isDestroyed()) ventana.webContents.send('app:actualizacion-estado', estado);
+});
+
 // ── Ciclo de vida ────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  if (SEGUNDA_INSTANCIA) return;
+  const pantalla = PRUEBA_ARRANQUE ? null : crearPantallaInicio();
+  if (pantalla) {
+    const r = await actualizaciones.alArrancar(pantalla);
+    if (r === 'instalando') return;
+    if (r === 'cerrar' || pantalla.cancelada) { pantalla.cerrar(); app.quit(); return; }
+    pantalla.mostrar({ mensaje: 'Iniciando…' });
+  }
   try {
     await iniciarBackend();
   } catch (e) {
@@ -165,7 +249,8 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  crearVentana();
+  if (pantalla && pantalla.cancelada) { app.quit(); return; }
+  crearVentana(pantalla);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) crearVentana();

@@ -22,6 +22,45 @@ function Campo(props) {
     h('span', { className: 'suave', style: { fontSize: 13 } }, props.l), h('div', { style: { minWidth: 0 } }, props.children));
 }
 
+// Version instalada y actualizaciones (solo en la app de escritorio). Al abrirse, la app
+// ya busca sola; aqui se busca a mano, por ejemplo si lleva dias abierta.
+function Actualizaciones() {
+  var api = window.electronAPI;
+  var sI = useState(null); var info = sI[0]; var setInfo = sI[1];
+  var sE = useState(null); var est = sE[0]; var setEst = sE[1];
+  useEffect(function () {
+    api.info().then(setInfo);
+    api.actualizacion.estado().then(setEst);
+    return api.actualizacion.alCambiar(setEst);
+  }, []);
+  if (!info || !est) return null;
+
+  var a = api.actualizacion;
+  function boton(texto, accion, icono, clase) {
+    return h('button', { className: 'btn btn-chico' + (clase ? ' ' + clase : ''), onClick: function () { accion(); } }, h(Ico, { name: icono, size: 12 }), texto);
+  }
+  var texto = null; var clase = 'suave'; var accion = null; var avance = null;
+  switch (est.fase) {
+    case 'desarrollo': texto = 'Se actualiza sola en la app instalada.'; break;
+    case 'inactiva': accion = boton('Buscar actualizaciones', a.buscar, 'refresh'); break;
+    case 'buscando': texto = 'Buscando actualizaciones…'; break;
+    case 'al-dia': texto = est.nota || 'Tienes la última versión.'; accion = boton('Buscar de nuevo', a.buscar, 'refresh'); break;
+    case 'disponible':
+      texto = 'Hay una versión nueva: v' + est.version; clase = 'pos';
+      accion = est.manual ? boton('Abrir la descarga', a.abrirDescarga, 'download', 'btn-verde') : boton('Descargar e instalar', a.descargar, 'download', 'btn-verde');
+      break;
+    case 'descargando': texto = 'Descargando la v' + est.version + '… ' + (est.porcentaje || 0) + '%'; avance = est.porcentaje || 0; break;
+    case 'lista': texto = 'La v' + est.version + ' está lista para instalarse.'; clase = 'pos'; accion = boton('Reiniciar e instalar', a.instalar, 'refresh', 'btn-verde'); break;
+    default: texto = est.error || 'No se pudo buscar.'; clase = 'neg'; accion = boton('Reintentar', a.buscar, 'refresh');
+  }
+  return h(Campo, { l: 'Versión' },
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' } },
+      h('span', { className: 'mono' }, 'v' + info.version),
+      texto ? h('span', { className: clase, style: { fontSize: 12 } }, texto) : null,
+      avance !== null ? h('div', { className: 'barra-avance' }, h('div', { style: { width: avance + '%' } })) : null,
+      accion));
+}
+
 export function AjustesView(props) {
   var cuenta = props.cuenta;
   var sC = useState(null); var conexion = sC[0]; var setConexion = sC[1];
@@ -159,6 +198,7 @@ export function AjustesView(props) {
         h('div', { className: 'card-titulo', style: { marginBottom: 4 } }, h(Ico, { name: 'settings', size: 16 }), 'Cuenta y apariencia'),
         h(Campo, { l: 'Sesión' }, h('span', null, cuenta.usuario ? cuenta.usuario.email : '-')),
         h(Campo, { l: 'Supabase' }, h('span', { className: 'mono suave', style: { fontSize: 12, wordBreak: 'break-all' } }, cuenta.demo ? 'Modo demo (local)' : cuenta.url)),
+        electron ? h(Actualizaciones) : null,
         h(Campo, { l: 'Tema' },
           h('div', { className: 'segmento', style: { maxWidth: 240 } },
             [['dark', 'Oscuro'], ['light', 'Claro']].map(function (t) {

@@ -79,6 +79,19 @@ async function main() {
   const cache = path.join(DIR_DATOS_DEV, 'furnidata-es.json');
   if (fs.existsSync(cache)) fs.copyFileSync(cache, path.join(dir, 'furnidata-es.json'));
 
+  // ── Empaquetado: lo que la app instalada necesita para actualizarse ──
+  // electron-builder quita "build" del package.json que va dentro de la app: leerlo en
+  // tiempo de ejecucion rompe el arranque de la app instalada.
+  const paquete = require('../package.json');
+  const codigoElectron = fs.readdirSync(path.join(__dirname, '..', 'electron')).filter((f) => f.endsWith('.js'))
+    .map((f) => fs.readFileSync(path.join(__dirname, '..', 'electron', f), 'utf8'));
+  assert.ok(codigoElectron.every((c) => !/paquete\.build|package\.json'\)\.build/.test(c)), 'electron/ no lee "build" del package.json');
+  const actualizador = fs.readFileSync(path.join(__dirname, '..', 'electron', 'actualizaciones.js'), 'utf8');
+  const { owner, repo } = paquete.build.publish;
+  assert.ok(actualizador.includes(`{ owner: '${owner}', repo: '${repo}' }`), 'el actualizador apunta al repositorio de build.publish');
+  assert.ok(actualizador.includes('`' + paquete.build.mac.artifactName.replace('${ext}', 'zip') + '`'), 'el .zip de Mac tiene el nombre que genera electron-builder');
+  ok(`empaquetado: el actualizador apunta a ${owner}/${repo} y al .zip de Mac que genera electron-builder`);
+
   // ── Base: Postgres local con el esquema de Supabase y dos usuarios ──
   const clienteA = await crearClienteLocal();
   await clienteA.crearUsuario('ana@prueba.local', 'clave-ana');

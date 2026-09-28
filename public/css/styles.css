@@ -143,6 +143,10 @@ input[type=number]{-moz-appearance:textfield}
 .furni-linea{display:flex;align-items:center;gap:6px;min-width:0}
 .tag-ltd{flex-shrink:0;display:inline-flex;align-items:center;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:700;color:var(--gold);background:var(--yellow-bg);border:1px solid var(--yellow-bd);white-space:nowrap}
 
+/* ── Descarga de una actualizacion (Ajustes) ── */
+.barra-avance{width:100%;max-width:240px;height:5px;background:var(--bg3);border-radius:99px;overflow:hidden}
+.barra-avance>div{height:100%;background:var(--green);border-radius:99px;transition:width .25s ease}
+
 /* ── Lotes huérfanos del Sniper ── */
 .huerfanas{background:var(--yellow-bg);border:1px solid var(--yellow-bd);border-radius:12px;padding:14px 16px;margin-bottom:18px}
 .huerfanas-cab{display:flex;gap:10px;align-items:center}

@@ -1,8 +1,12 @@
 name: Instaladores
 
-# Se ejecuta al publicar una etiqueta de version (v0.1.0, v0.2.0...) o a mano desde la
+# Se ejecuta al subir una etiqueta de version (v1.0.0, v1.1.0...) o a mano desde la
 # pestaña Actions. Genera el .exe de Windows y los .dmg/.zip de Mac (Apple Silicon e
-# Intel) y los sube como borrador de Release en GitHub.
+# Intel) y los sube a un Release en BORRADOR de GitHub, junto con latest.yml y
+# latest-mac.yml (lo que leen las apps instaladas para actualizarse).
+#
+# Nada llega a los equipos hasta que publicas el borrador en la pestaña Releases.
+# La version sale del package.json: la etiqueta debe coincidir (v + version).
 on:
   push:
     tags: ['v*']
@@ -20,8 +24,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install
-      - name: Compilar y publicar instalador .exe
+      - run: npm ci
+      - name: Compilar y subir el instalador .exe
         run: npx electron-builder --win nsis --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,8 +42,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install
-      - name: Compilar y publicar .dmg + .zip
+      - run: npm ci
+      - name: Compilar y subir .dmg + .zip
         run: npx electron-builder --mac dmg zip --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

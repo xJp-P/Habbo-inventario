@@ -1,14 +1,14 @@
 {
   "name": "habbo-inventario",
   "productName": "Habbo Inventario",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Inventario de compra y venta de furnis para Habbo.es con base de datos en Supabase: stock, costos, ganancias y compras en tiempo real desde SniperMercadillo.",
   "author": "xJp-P",
   "license": "MIT",
-  "homepage": "https://github.com/xJp-P/habbo-inventario",
+  "homepage": "https://github.com/xJp-P/Habbo-inventario",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xJp-P/habbo-inventario.git"
+    "url": "https://github.com/xJp-P/Habbo-inventario.git"
   },
   "main": "electron/main.js",
   "engines": {
@@ -22,13 +22,16 @@
     "verificar": "node scripts/verificar.js",
     "supabase:probar": "node scripts/probar-supabase.js",
     "prueba-arranque": "electron . --prueba-arranque",
+    "simular-actualizacion": "electron . --simular-actualizacion",
     "build:win": "electron-builder --win nsis --x64",
     "build:mac": "electron-builder --mac dmg zip",
+    "build:dir": "electron-builder --dir",
     "release:win": "electron-builder --win nsis --x64 --publish always",
     "release:mac": "electron-builder --mac dmg zip --publish always"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
+    "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "react": "18.3.1",
@@ -45,7 +48,7 @@
     "copyright": "Copyright © 2026 xJp-P",
     "directories": {
       "output": "dist",
-      "buildResources": "build"
+      "buildResources": "recursos"
     },
     "files": [
       "electron/**/*",
@@ -66,7 +69,7 @@
         }
       ],
       "artifactName": "Habbo-Inventario-Windows-${version}.${ext}",
-      "icon": "build/icon.ico"
+      "icon": "recursos/icon.ico"
     },
     "nsis": {
       "oneClick": false,
@@ -77,9 +80,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Habbo Inventario",
       "deleteAppDataOnUninstall": false,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico"
+      "installerIcon": "recursos/icon.ico",
+      "uninstallerIcon": "recursos/icon.ico",
+      "installerHeaderIcon": "recursos/icon.ico"
     },
     "mac": {
       "target": [
@@ -101,7 +104,7 @@
       "category": "public.app-category.productivity",
       "identity": null,
       "artifactName": "Habbo-Inventario-Mac-${version}-${arch}.${ext}",
-      "icon": "build/icon.png"
+      "icon": "recursos/icon.png"
     },
     "dmg": {
       "title": "Habbo Inventario ${version}"
@@ -109,7 +112,7 @@
     "publish": {
       "provider": "github",
       "owner": "xJp-P",
-      "repo": "habbo-inventario",
+      "repo": "Habbo-inventario",
       "releaseType": "draft"
     }
   }
