@@ -23,10 +23,11 @@ export function VenderModal(props) {
   var furni = props.furni || {};
   var tasa = props.tasa || 50;
   var sQ = useState(String(l.cantidad)); var cant = sQ[0]; var setCant = sQ[1];
-  // Un lote publicado se propone a su precio de lista; uno comprado, al precio del furni.
+  // Se usa para lo publicado (lo en mano se vende con VentaManualModal): se propone su
+  // precio de lista.
   var publicado = l.estado === 'publicado';
-  var precioBase = publicado ? l.precio_lista : furni.precio_venta;
-  var sM = useState(publicado ? l.moneda_lista : furni.moneda_venta || 'creditos'); var moneda = sM[0]; var setMoneda = sM[1];
+  var precioBase = publicado ? l.precio_lista : null;
+  var sM = useState(publicado ? l.moneda_lista : 'creditos'); var moneda = sM[0]; var setMoneda = sM[1];
   var sP = useState(precioBase !== null && precioBase !== undefined ? String(precioBase).replace('.', ',') : ''); var precio = sP[0]; var setPrecio = sP[1];
   var sF = useState(nowStr()); var fecha = sF[0]; var setFecha = sF[1];
   var sErr = useState(''); var error = sErr[0]; var setError = sErr[1];

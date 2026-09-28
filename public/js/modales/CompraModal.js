@@ -1,7 +1,8 @@
 // public/js/modales/CompraModal.js — registrar a mano una compra (un lote) en el Inventario.
 //
-// El furni se elige del catalogo de Habbo.es; si no estaba en el Mercadillo, se agrega
-// solo (sin precio de venta). Las compras del Sniper NO pasan por aca: llegan solas.
+// El furni se elige del catalogo de Habbo.es; si no estaba entre tus furnis, se agrega
+// solo. Lo comprado queda en mano, sin precio: el precio se pone al publicar o al vender.
+// Las compras del Sniper NO pasan por aca: llegan solas.
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -40,8 +41,8 @@ export function CompraModal(props) {
   var alEnter = function (e) { if (e.key === 'Enter') guardar(); };
 
   return h(Modal, { titulo: h('span', null, h(Ico, { name: 'plus', size: 16 }), ' Registrar compra'), onClose: props.onClose },
-    fijo ? h(NombreFurni, { furni: fijo, sub: 'Precio de venta: ' + (fijo.precio_venta !== null ? fijo.precio_venta + ' ' + (fijo.moneda_venta === 'lingos' ? 'lingos' : 'cr') : 'sin precio') })
-      : h(Fld, { label: 'Furni (nombre oficial de Habbo.es)', ayuda: elegido && !elegido.propio ? 'Nuevo: se agregará a tu Mercadillo sin precio de venta.' : null },
+    fijo ? h(NombreFurni, { furni: fijo, sub: fijo.classname || '' })
+      : h(Fld, { label: 'Furni (nombre oficial de Habbo.es)', ayuda: elegido && !elegido.propio ? 'Nuevo: se agregará a tus furnis.' : null },
           h(Autocompletar, { autoFocus: true, propios: props.propios, error: !!error && !elegido,
             onElegir: function (it, propio) { setElegido({ item: it, propio: propio }); setError(''); },
             onEscribir: function () { setElegido(null); } })),

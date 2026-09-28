@@ -153,6 +153,7 @@ async function importarDatos(negocio, furnidata, datos, { corregirNombres = true
     return { nombre: nombreExcel, classname: null, revision: null, tipo: 'ninguna', sugerencias: r.sugerencias };
   }
 
+  const precioExcel = new Map();
   function altaFurni(nombreExcel, moneda, precio, filaExcel, hoja) {
     const claveExcel = normalizar(nombreExcel);
     if (clavePorNombreExcel.has(claveExcel)) {
@@ -166,10 +167,10 @@ async function importarDatos(negocio, furnidata, datos, { corregirNombres = true
       clavePorNombreExcel.set(claveExcel, clave);
       return clave;
     }
-    furnis.set(clave, {
-      clave, nombre: res.nombre, classname: res.classname, revision: res.revision,
-      moneda_venta: monedaDesdeTexto(moneda), precio_venta: precio,
-    });
+    furnis.set(clave, { clave, nombre: res.nombre, classname: res.classname, revision: res.revision });
+    // El precio de la hoja Inventario NO se guarda en el furni (lo en mano no tiene
+    // precio): solo congela el de las ventas que el Excel ya tenia.
+    precioExcel.set(clave, { moneda: monedaDesdeTexto(moneda), precio });
     if (res.nombre !== nombreExcel) {
       informe.correcciones.push({ excel: nombreExcel, oficial: res.nombre, classname: res.classname, tipo: res.tipo });
     }
@@ -188,7 +189,7 @@ async function importarDatos(negocio, furnidata, datos, { corregirNombres = true
   const compras = [];
   for (const c of datos.compras) {
     if (!clavePorNombreExcel.has(normalizar(c.nombre))) {
-      informe.avisos.push(`Fila ${c.fila} de la hoja Mercadillo: "${c.nombre}" no estaba en la hoja Inventario; se agrego sin precio.`);
+      informe.avisos.push(`Fila ${c.fila} de la hoja Mercadillo: "${c.nombre}" no estaba en la hoja Inventario; se agrego igual.`);
     }
     const clave = altaFurni(c.nombre, 'Créditos', null, c.fila, 'Mercadillo');
     if (!c.cantidad || c.cantidad < 1 || !Number.isInteger(c.cantidad)) {
@@ -204,9 +205,9 @@ async function importarDatos(negocio, furnidata, datos, { corregirNombres = true
     if (c.estado === 'vendido') {
       // El Excel no guarda el precio real de venta: se congela el precio actual de la
       // hoja Inventario (lo mismo que mostraba el Excel al momento de importar).
-      const furni = furnis.get(clave);
-      monedaVenta = furni.moneda_venta;
-      precioVenta = furni.precio_venta;
+      const furni = precioExcel.get(clave);
+      monedaVenta = furni.moneda;
+      precioVenta = furni.precio;
       if (precioVenta === null || precioVenta === undefined) {
         monedaVenta = monedaDesdeTexto(c.moneda);
         precioVenta = c.precio;

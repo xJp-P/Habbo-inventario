@@ -67,7 +67,7 @@ async function crearDemo({ dirDatos }) {
     const f = azar(furnis);
     if (tipo === 'publicar') {
       const disponible = f.stock - f.unidades_publicadas;
-      const base = f.precio_venta_cr || Math.ceil((f.costo_promedio_cr || 10) * 1.3);
+      const base = f.lista_max_cr || Math.ceil((f.costo_promedio_cr || 10) * 1.3);
       return {
         tipo_evento: 'publicar', id_externo: id, sprite_id: f.sprite_id, tipo: f.tipo,
         cantidad: Math.min(disponible, 1 + Math.floor(Math.random() * 2)), precio_lista: Math.round(base), moneda: 'creditos', hotel: 'es',

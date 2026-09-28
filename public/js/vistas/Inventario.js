@@ -10,67 +10,45 @@
 // Pestanas: Comprado (en mano), Publicado y Vendido. Un lote vive en una sola: lo
 // publicado no aparece en Comprado.
 //
-// Columnas de precio: "Compra c/u" (lo que pagaste) y "Venta c/u", que depende del
-// estado: en Comprado es TU precio de venta del furni (el mismo para todos sus lotes en
-// mano; el lapiz lo edita), en Publicado el precio de lista y en Vendido lo que entro.
+// Lo que esta en mano (Comprado) no tiene precio ni ganancia: solo cuantos y lo que
+// costaron. El precio aparece al publicar (precio de lista) o al vender (precio real),
+// asi que "Venta c/u", "Ganancia" y "Margen" solo existen en Publicado y Vendido.
 //
-// Arriba, destacadas en ambar, las compras HUERFANAS que llegaron de los SniperMercadillo
-// (con mas de un furni, en un acordeon: cerrado muestra el resumen y se despliega con una
-// transicion suave; se recuerda si lo dejaste abierto):
-// agrupadas por furni, con el precio de venta listo para confirmar y la ganancia
-// esperada calculada al escribir (neta de la comision del mercadillo). "Activar" fija el
-// precio del furni y pasa sus lotes a "En venta". Debajo, la tabla de lotes con detalle
-// al clic, Vender y Revertir.
+// Arriba, destacadas en ambar, las compras que llegaron de los SniperMercadillo "por
+// revisar", agrupadas por furni (con mas de un furni, en un acordeon: cerrado muestra el
+// resumen y se despliega con una transicion suave; se recuerda si lo dejaste abierto).
+// "Confirmar" las pasa a en mano. Debajo, la tabla de lotes con detalle al clic.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
-import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace, leerNumero } from '../core/format.js';
+import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
 import { NombreFurni, IconoFurni, EtiquetaPublicado, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
-import { calcularGananciaNeta, ingresoNeto, precioMinimoSinPerder } from '../core/comision.js';
+import { ingresoNeto } from '../core/comision.js';
 
+// Un furni que llego del Sniper sin revisar: cuantas, a cuanto, cuando y desde que VPS.
+// "Confirmar" lo pasa a en mano (sin precio: el precio se pone al publicar o al vender).
 function FilaHuerfana(props) {
   var g = props.grupo;
   var f = g.furni;
-  // Sin precio propio, se propone el de lista con que el Sniper ya publico otras unidades.
-  var sugerido = f.precio_venta !== null ? f.precio_venta
-    : f.precio_lista_actual !== null && f.precio_lista_actual !== undefined && f.moneda_lista_actual === f.moneda_venta ? f.precio_lista_actual : null;
-  var precioInicial = sugerido !== null ? String(sugerido).replace('.', ',') : '';
-  var sP = useState(precioInicial); var precio = sP[0]; var setPrecio = sP[1];
-  var sE = useState(''); var error = sE[0]; var setError = sE[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
   var costoU = g.unidades ? g.costo_cr / g.unidades : 0;
-  var p = leerNumero(precio);
-  var pCr = p !== null && !isNaN(p) ? (f.moneda_venta === 'lingos' ? p * props.tasa : p) : null;
-  var lingos = f.moneda_venta === 'lingos';
-  var gan = pCr !== null ? (lingos ? pCr - costoU : calcularGananciaNeta(pCr, costoU)) * g.unidades : null;
-  var minimo = lingos ? Math.ceil(costoU) : precioMinimoSinPerder(costoU);
 
-  function activar() {
-    if (p === null || isNaN(p) || p <= 0) { setError('Pon un precio de venta a "' + f.nombre + '" antes de activarlo.'); return; }
+  function confirmar() {
     _submitGuard(enviando, setEnviando, function () {
-      return API.post('/api/pendientes/activar', { furni_id: f.id, precio_venta: p })
-        .then(function (r) { if (r) props.onActivado(f.nombre + ': ' + r.activados + ' lote(s) en venta a ' + fmtLg(p) + (f.moneda_venta === 'lingos' ? ' lingos' : ' cr')); });
+      return API.post('/api/pendientes/activar', { furni_id: f.id })
+        .then(function (r) { if (r) props.onActivado(f.nombre + ': ' + g.unidades + ' und pasaron a tu stock en mano'); });
     });
   }
 
   return h('div', { className: 'huerfana-fila' },
     h('div', { style: { flex: 1, minWidth: 0 } },
       h(NombreFurni, { furni: f, sub: h('span', null,
-        g.unidades + ' und · pagaste ' + fmtLg(costoU) + ' c/u · ' + fmtHace(g.recibido_en) + (g.instancias.length ? ' · ' + g.instancias.join(', ') : ''),
-        f.nuevo ? h('span', { className: 'tag tag-azul', style: { marginLeft: 8 } }, 'Nuevo en tu Mercadillo') : null) })),
-    h('div', { style: { textAlign: 'right' } },
-      h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' } },
-        h('input', { className: 'inp inp-num' + (error ? ' error' : ''), style: { width: 96, padding: '6px 10px' }, value: precio, placeholder: 'Precio', inputMode: 'decimal',
-          onChange: function (e) { setPrecio(e.target.value); setError(''); }, onKeyDown: function (e) { if (e.key === 'Enter') activar(); } }),
-        h('span', { className: 'suave', style: { fontSize: 12 } }, f.moneda_venta === 'lingos' ? 'lingos' : 'cr'),
-        h('button', { className: 'btn btn-verde', onClick: activar, disabled: enviando }, 'Activar')),
-      h('div', { style: { fontSize: 11, marginTop: 4 }, className: error ? 'neg' : 'suave' },
-        error || (gan === null ? 'Sin precio · mínimo para no perder ' + (minimo === null ? '-' : fmtCr(minimo) + ' cr')
-          : h('span', null, 'Ganancia esperada ', h('b', { className: 'mono ' + (gan > 0 ? 'pos' : gan < 0 ? 'neg' : '') }, (gan > 0 ? '+' : '') + fmtCr(gan)),
-              lingos ? null : ' (neta de comisión)',
-              gan < 0 ? h('span', { className: 'neg' }, ' · debajo del costo') : null)))));
+        g.unidades + ' und · pagaste ' + fmtLg(costoU) + ' c/u · ' + fmtCr(g.costo_cr) + ' cr en total · ' + fmtHace(g.recibido_en) + (g.instancias.length ? ' · ' + g.instancias.join(', ') : ''),
+        f.nuevo ? h('span', { className: 'tag tag-azul', style: { marginLeft: 8 } }, 'Furni nuevo') : null) })),
+    h('button', { className: 'btn btn-verde', onClick: confirmar, disabled: enviando, title: 'Pasa estas unidades a Comprado (en mano)' },
+      h(Ico, { name: 'check', size: 14, sw: 2.4 }), 'Confirmar'));
 }
 
 var FILTROS = [['comprado', 'Comprado'], ['publicado', 'Publicado'], ['vendido', 'Vendido']];
@@ -93,9 +71,8 @@ function LlegaronDelSniper(props) {
 
   var titulo = h('div', { style: { flex: 1, minWidth: 0 } },
     h('div', { style: { fontWeight: 700, color: 'var(--yellow)' } }, 'Llegaron del Sniper · ' + grupos.length + (grupos.length === 1 ? ' furni' : ' furnis') + ' por revisar'),
-    h('div', { className: 'card-sub' }, acordeon
-      ? unidades + ' und · ' + fmtCr(costo) + ' cr invertidos. Cuentan en tu stock, pero no están en venta hasta que les confirmes un precio.'
-      : 'Cuentan en tu stock, pero no están en venta hasta que les confirmes un precio.'));
+    h('div', { className: 'card-sub' }, (acordeon ? unidades + ' und · ' + fmtCr(costo) + ' cr invertidos. ' : '')
+      + 'Confírmalas para pasarlas a tu stock en mano; si el Sniper las publica, pasan solas a Publicado.'));
 
   if (!acordeon) {
     return h('div', { className: 'huerfanas' },
@@ -114,24 +91,15 @@ function LlegaronDelSniper(props) {
     h('div', { className: 'acordeon' + (abierto ? ' abierto' : ''), 'aria-hidden': !abierto, inert: abierto ? undefined : '' },
       h('div', { className: 'acordeon-in' }, filas)));
 }
-var AYUDA_PRECIO_FURNI = 'Tu precio de venta para este furni: vale para todas sus unidades en mano. Con él se calcula la ganancia de lo que tienes en mano y se propone al publicar. Clic para cambiarlo.';
-
-// Columna "Venta c/u": el precio del furni (en mano, editable), el de lista (publicado)
-// o lo que entro (vendido).
+// Columna "Venta c/u" (solo Publicado y Vendido): el precio de lista o lo que entro.
 function PrecioVenta(props) {
   var l = props.lote;
-  var enLingos = l.moneda_precio === 'lingos';
   if (l.estado === 'publicado') {
     return h('span', { className: 'morado', style: { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } },
       h(Ico, { name: 'lock', size: 11, sw: 2.2 }), fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ''));
   }
-  if (l.estado === 'vendido') {
-    return h('span', { title: l.comision_venta !== null && l.comision_venta !== undefined ? 'Neto que entró (ya sin la comisión del mercadillo)' : 'Lo que recibiste' },
-      fmtLg(l.precio_venta_real) + (l.moneda_venta_real === 'lingos' ? ' lg' : ''));
-  }
-  return h('button', { className: 'precio-editable', title: AYUDA_PRECIO_FURNI, onClick: function (e) { e.stopPropagation(); props.onEditar(); } },
-    l.precio_venta_cr === null ? h('span', { className: 'tenue' }, 'sin precio') : (enLingos ? fmtLg(l.precio_venta_lg) + ' lg' : fmtLg(l.precio_venta_cr)),
-    h(Ico, { name: 'edit', size: 11 }));
+  return h('span', { title: l.comision_venta !== null && l.comision_venta !== undefined ? 'Neto que entró (ya sin la comisión del mercadillo)' : 'Lo que recibiste' },
+    fmtLg(l.precio_venta_real) + (l.moneda_venta_real === 'lingos' ? ' lg' : ''));
 }
 var ORIGEN = { excel: 'Excel', manual: 'Manual', sniper: 'Sniper' };
 
@@ -151,6 +119,8 @@ export function InventarioView(props) {
     return c;
   }, [compras]);
 
+  // Solo lo publicado y lo vendido tienen precio (y con el, ganancia y margen).
+  var conPrecio = filtro !== 'comprado';
   var visibles = compras.filter(function (l) {
     return l.estado === filtro && (!q || normalizar(l.nombre).indexOf(normalizar(q)) !== -1);
   }).sort(function (a, b) { return (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0) || b.id - a.id; });
@@ -208,8 +178,10 @@ export function InventarioView(props) {
         : h('table', { className: 'tabla' },
             h('thead', null, h('tr', null,
               h('th', null, 'Nº'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Cant.'), h('th', { className: 'r' }, 'Compra c/u'),
-              h('th', { className: 'r' }, 'Costo'), h('th', { className: 'r', title: 'Comprado: tu precio de venta del furni · Publicado: precio de lista · Vendido: lo que entró' }, 'Venta c/u'),
-              h('th', { className: 'r' }, 'Ganancia'), h('th', { className: 'r' }, 'Margen'), h('th', null, 'Estado'), h('th', null))),
+              h('th', { className: 'r' }, 'Costo'),
+              conPrecio ? h('th', { className: 'r', title: filtro === 'publicado' ? 'Precio de lista' : 'Lo que entró (neto si fue en el mercadillo)' }, 'Venta c/u') : null,
+              conPrecio ? h('th', { className: 'r' }, 'Ganancia') : null, conPrecio ? h('th', { className: 'r' }, 'Margen') : null,
+              h('th', null, 'Estado'), h('th', null))),
             h('tbody', null, visibles.map(function (l) {
               var abiertoEste = abierto === l.id;
               var publicado = l.estado === 'publicado';
@@ -222,9 +194,9 @@ export function InventarioView(props) {
                 h('td', { className: 'r mono' }, l.cantidad),
                 h('td', { className: 'r mono' }, l.moneda_compra === 'lingos' ? fmtLg(l.precio_compra) + ' lg' : fmtLg(l.precio_compra)),
                 h('td', { className: 'r mono' }, fmtCr(l.costo_total_cr)),
-                h('td', { className: 'r mono' }, h(PrecioVenta, { lote: l, onEditar: function () { props.onEditarFurni(l); } })),
-                h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)),
-                h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)),
+                conPrecio ? h('td', { className: 'r mono' }, h(PrecioVenta, { lote: l })) : null,
+                conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)) : null,
+                conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)) : null,
                 h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
                   : publicado ? h(EtiquetaPublicado, { manual: manual, texto: 'Publicado · ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') })
                   : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
@@ -238,12 +210,12 @@ export function InventarioView(props) {
                       h('button', { className: 'btn btn-chico', title: 'Lo vendiste fuera del Sniper: tradeo o venta desde otro keko', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
                   : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
               if (abiertoEste) {
-                filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: 10, className: 'detalle' },
+                filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: conPrecio ? 10 : 7, className: 'detalle' },
                   h('div', { className: 'detalle-grid' },
                     h('div', null, h('div', { className: 'dato-l' }, 'Origen'), h('div', { className: 'dato-v' }, (ORIGEN[l.fuente] || l.fuente) + (l.instancia ? ' · ' + l.instancia : ''))),
                     h('div', null, h('div', { className: 'dato-l' }, 'Fecha de compra'), h('div', { className: 'dato-v' }, fmtD(l.fecha_compra))),
                     h('div', null, h('div', { className: 'dato-l' }, 'Precio de compra en créditos'), h('div', { className: 'dato-v' }, fmtLg(l.precio_compra_cr) + ' cr')),
-                    h('div', null, h('div', { className: 'dato-l' }, l.estado === 'vendido' ? (l.comision_venta !== null && l.comision_venta !== undefined ? 'Entró a tu monedero (neto, congelado)' : 'Vendido a (congelado)') : publicado ? 'Precio de lista' : 'Precio de venta actual'), h('div', { className: 'dato-v' }, l.precio_venta_cr === null ? 'sin precio' : fmtLg(l.precio_venta_cr) + ' cr')),
+                    conPrecio ? h('div', null, h('div', { className: 'dato-l' }, l.estado === 'vendido' ? (l.comision_venta !== null && l.comision_venta !== undefined ? 'Entró a tu monedero (neto, congelado)' : 'Vendido a (congelado)') : 'Precio de lista'), h('div', { className: 'dato-v' }, fmtLg(l.precio_venta_cr) + ' cr')) : null,
                     l.estado === 'vendido' && l.comision_pagada_cr !== null && l.comision_pagada_cr !== undefined ? h('div', null, h('div', { className: 'dato-l' }, 'Comisión del mercadillo pagada'),
                       h('div', { className: 'dato-v' }, fmtCr(l.comision_pagada_cr * l.cantidad) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · el comprador pagó ' + fmtLg(l.precio_venta_cr + l.comision_pagada_cr) + ' c/u'))) : null,
                     l.precio_lista !== null && l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Estaba publicado a'), h('div', { className: 'dato-v' }, fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr'))) : null,
@@ -263,5 +235,8 @@ export function InventarioView(props) {
             })))),
     confirmacion ? h(Confirmar, Object.assign({}, confirmacion, { enviando: enviando,
       onClose: function () { setConfirmacion(null); }, onConfirmar: function () { ejecutar(confirmacion.accion); } })) : null,
-    h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, 'La ganancia de lo comprado usa el precio de venta del furni; la de lo publicado, su precio de lista; ambas descuentan la comisión del mercadillo de Habbo.es. La de lo vendido usa el precio real congelado al vender (si se vendió en el mercadillo, el neto que entró a tu monedero).'));
+    h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, filtro === 'comprado'
+      ? 'Lo que tienes en mano no tiene precio ni ganancia: solo lo que costó. El precio se pone al publicar o al vender.'
+      : filtro === 'publicado' ? 'La ganancia de lo publicado usa su precio de lista y ya descuenta la comisión del mercadillo de Habbo.es.'
+      : 'La ganancia de lo vendido usa el precio real congelado al vender (si fue en el mercadillo, el neto que entró a tu monedero).'));
 }

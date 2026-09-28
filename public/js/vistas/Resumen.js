@@ -1,12 +1,14 @@
-// public/js/vistas/Resumen.js — tablero: tasa del Lingo, mercancia en venta, compras
-// del Sniper por revisar, ventas realizadas, datos rapidos y alerta de perdidas.
-// Replica la hoja "Resumen" del Excel (mismas cifras, verificadas en la migracion).
+// public/js/vistas/Resumen.js — tablero: tasa del Lingo, compras del Sniper por revisar,
+// lo publicado en el mercadillo (la UNICA fuente de ganancia esperada), lo que tienes en
+// mano (solo lo que costo: aun no tiene precio), ventas realizadas, datos rapidos y
+// alerta de lo publicado que deja perdida.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
 import { fmtCr, fmtLg, fmtPct, leerNumero } from '../core/format.js';
 import { Ico } from '../componentes/iconos.js';
 import { NombreFurni } from '../componentes/base.js';
+import { precioMinimoSinPerder } from '../core/comision.js';
 
 function Kpi(props) {
   return h('div', { className: 'kpi-card' },
@@ -29,7 +31,7 @@ export function ResumenView(props) {
     API.put('/api/config/tasa', { tasa_lingo: n }).then(function (x) { if (x) props.onCambio('Tasa del Lingo actualizada'); });
   }
 
-  var ev = r.en_venta, vd = r.vendido, pr = r.por_revisar, d = r.datos;
+  var pb = r.publicado, mano = r.en_mano, vd = r.vendido, pr = r.por_revisar, d = r.datos;
   return h('div', { className: 'contenedor fade-in' },
     h('div', { className: 'card', style: { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 } },
       h(Ico, { name: 'diamond', size: 22, color: 'var(--purple)' }),
@@ -45,17 +47,22 @@ export function ResumenView(props) {
       h(Ico, { name: 'radar', size: 22, color: 'var(--yellow)' }),
       h('div', { style: { flex: 1 } },
         h('div', { style: { fontWeight: 700, color: 'var(--yellow)' } }, 'Por revisar: ' + pr.unidades + ' und del Sniper'),
-        h('div', { className: 'card-sub' }, fmtCr(pr.costo_cr) + ' cr invertidos que aún no están en venta · ' + d.furnis_por_revisar + ' furni(s)')),
+        h('div', { className: 'card-sub' }, fmtCr(pr.costo_cr) + ' cr invertidos, sin confirmar · ' + d.furnis_por_revisar + ' furni(s)')),
       h('button', { className: 'btn', onClick: function () { props.onNav('inventario'); } }, 'Revisar', h(Ico, { name: 'chevright', size: 14 }))) : null,
 
-    h('div', { className: 'seccion-titulo' }, h(Ico, { name: 'store', size: 16, color: 'var(--green)' }), 'Mercancía en venta'),
+    h('div', { className: 'seccion-titulo' }, h(Ico, { name: 'store', size: 16, color: 'var(--purple)' }), 'En el mercadillo (publicado)'),
     h('div', { className: 'kpi-grid' },
-      h(Kpi, { label: 'Unidades', valor: fmtCr(ev.unidades), sub: r.publicado.unidades
-        ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--purple)' } }, h(Ico, { name: 'lock', size: 11 }), r.publicado.unidades + ' publicadas en el mercadillo')
-        : d.furnis_con_stock + ' furnis con stock' }),
-      h(Kpi, { label: 'Inversión', valor: fmtCr(ev.costo_cr) + ' cr', sub: fmtLg(ev.costo_lg) + ' lingos' }),
-      h(Kpi, { label: 'Retorno si vendes todo', valor: fmtCr(ev.retorno_cr) + ' cr', sub: ev.comision_cr ? 'Neto de ' + fmtCr(ev.comision_cr) + ' cr de comisión' : fmtLg(ev.retorno_lg) + ' lingos' }),
-      h(Kpi, { label: 'Ganancia esperada', valor: signo(ev.ganancia_cr), clase: ev.ganancia_cr >= 0 ? 'pos' : 'neg', sub: 'Margen ' + fmtPct(ev.margen) + ' · tras comisión' })),
+      h(Kpi, { label: 'Unidades publicadas', valor: fmtCr(pb.unidades), sub: d.furnis_publicados + (d.furnis_publicados === 1 ? ' furni' : ' furnis') }),
+      h(Kpi, { label: 'Inversión publicada', valor: fmtCr(pb.costo_cr) + ' cr', sub: fmtLg(pb.costo_lg) + ' lingos' }),
+      h(Kpi, { label: 'Te entraría si se vende todo', valor: fmtCr(pb.retorno_cr) + ' cr', sub: pb.comision_cr ? 'Neto de ' + fmtCr(pb.comision_cr) + ' cr de comisión' : fmtLg(pb.retorno_lg) + ' lingos' }),
+      h(Kpi, { label: 'Ganancia esperada', valor: signo(pb.ganancia_cr), clase: pb.ganancia_cr > 0 ? 'pos' : pb.ganancia_cr < 0 ? 'neg' : '', sub: pb.unidades ? 'Margen ' + fmtPct(pb.margen) + ' · tras comisión' : 'Nada publicado todavía' })),
+
+    mano.unidades > 0 ? h('div', { className: 'card', style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 } },
+      h(Ico, { name: 'box', size: 20, color: 'var(--text2)' }),
+      h('div', { style: { flex: 1 } },
+        h('div', { className: 'card-titulo' }, 'En mano: ' + fmtCr(mano.unidades) + ' und · ' + fmtCr(mano.costo_cr) + ' cr invertidos'),
+        h('div', { className: 'card-sub' }, 'Sin precio ni ganancia hasta que lo publiques o lo vendas · ' + mano.lotes + (mano.lotes === 1 ? ' lote' : ' lotes'))),
+      h('button', { className: 'btn', onClick: function () { props.onNav('inventario'); } }, 'Ver', h(Ico, { name: 'chevright', size: 14 }))) : null,
 
     h('div', { className: 'seccion-titulo' }, h(Ico, { name: 'tag', size: 16, color: 'var(--green)' }), 'Ventas realizadas'),
     h('div', { className: 'kpi-grid' },
@@ -68,26 +75,27 @@ export function ResumenView(props) {
       h('div', { className: 'card' },
         h('div', { className: 'card-titulo', style: { marginBottom: 10 } }, 'Datos rápidos'),
         [['Furnis distintos', d.furnis_distintos], ['Furnis con stock', d.furnis_con_stock], ['Furnis publicados', d.furnis_publicados], ['Furnis por revisar', d.furnis_por_revisar],
-          ['Compras registradas', d.compras_registradas], ['Furnis sin precio', d.sin_precio.length]].map(function (x) {
+          ['Compras registradas', d.compras_registradas]].map(function (x) {
           return h('div', { key: x[0], style: { display: 'flex', justifyContent: 'space-between', padding: '4px 0' } },
             h('span', { className: 'suave', style: { fontSize: 13 } }, x[0]), h('span', { className: 'mono' }, x[1]));
         }),
         d.mayor_ganancia ? h('div', { style: { marginTop: 12 } },
-          h('div', { className: 'dato-l', style: { marginBottom: 6 } }, 'Mayor ganancia esperada'),
+          h('div', { className: 'dato-l', style: { marginBottom: 6 } }, 'Mayor ganancia esperada (publicado)'),
           h(NombreFurni, { furni: d.mayor_ganancia, sub: h('span', { className: 'mono pos' }, signo(d.mayor_ganancia.ganancia_esperada_cr)) })) : null),
 
       d.perdidas.length
         ? h('div', { className: 'card', style: { borderColor: 'var(--red-bd)', background: 'var(--red-bg)' } },
             h('div', { className: 'card-titulo', style: { color: 'var(--red)', marginBottom: 6 } }, h(Ico, { name: 'alert', size: 16 }),
-              d.perdidas.length + ' furni' + (d.perdidas.length === 1 ? '' : 's') + ' deja' + (d.perdidas.length === 1 ? '' : 'n') + ' pérdida al precio actual'),
+              d.perdidas.length + ' furni' + (d.perdidas.length === 1 ? '' : 's') + ' publicado' + (d.perdidas.length === 1 ? '' : 's') + ' deja' + (d.perdidas.length === 1 ? '' : 'n') + ' pérdida'),
             d.perdidas.map(function (f) {
               return h('div', { key: f.id, style: { display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderTop: '1px solid var(--red-bd)', cursor: 'pointer' },
                 onClick: function () { props.onVerFurni(f.id); } },
                 h('div', { style: { flex: 1, minWidth: 0 } }, h(NombreFurni, { furni: f,
-                  sub: 'Vendes a ' + fmtCr(f.precio_venta_cr) + ' · costo prom. ' + fmtLg(f.costo_promedio_cr) + ' · mínimo ' + fmtCr(f.precio_minimo_cr) })),
+                  sub: 'Publicado a ' + (f.lista_min_cr === f.lista_max_cr ? fmtCr(f.lista_min_cr) : fmtCr(f.lista_min_cr) + '–' + fmtCr(f.lista_max_cr)) + ' cr · costo prom. ' + fmtLg(f.costo_publicado_cr)
+                    + ' · mínimo ' + fmtCr(precioMinimoSinPerder(f.costo_publicado_cr)) })),
                 h('span', { className: 'mono neg', style: { fontWeight: 700 } }, fmtCr(f.ganancia_esperada_cr)));
             }))
         : h('div', { className: 'card', style: { display: 'flex', gap: 10, alignItems: 'center' } },
             h(Ico, { name: 'checkCircle', size: 20, color: 'var(--green)' }),
-            h('div', null, h('div', { className: 'card-titulo' }, 'Ningún furni deja pérdida'), h('div', { className: 'card-sub' }, 'Todos los precios de venta cubren su costo promedio.')))));
+            h('div', null, h('div', { className: 'card-titulo' }, 'Nada publicado deja pérdida'), h('div', { className: 'card-sub' }, 'Todos los precios de lista cubren lo que costó lo publicado, tras la comisión.')))));
 }

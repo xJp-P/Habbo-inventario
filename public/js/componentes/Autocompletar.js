@@ -1,7 +1,7 @@
 // public/js/componentes/Autocompletar.js — buscador predictivo de furnis de Habbo.es.
 //
 // Sugiere nombres OFICIALES del catalogo (furnidata de Habbo.es) con su icono mientras
-// escribes; marca los que ya estan en tu Mercadillo. Solo acepta un furni elegido de la
+// escribes; marca los que ya estan entre tus furnis. Solo acepta un furni elegido de la
 // lista: asi el nombre guardado siempre es el oficial exacto. Teclado: flechas, Enter
 // para elegir, Escape para cerrar.
 
@@ -63,6 +63,6 @@ export function Autocompletar(props) {
           h('div', { style: { flex: 1, minWidth: 0 } },
             h('div', { className: 'furni-nombre', style: { fontSize: 13 } }, it.nombre),
             h('div', { className: 'tenue mono', style: { fontSize: 11 } }, it.classname)),
-          p ? h('span', { className: 'tag tag-verde' }, 'En tu Mercadillo') : null);
+          p ? h('span', { className: 'tag tag-verde' }, 'Ya lo tienes') : null);
       })) : null);
 }

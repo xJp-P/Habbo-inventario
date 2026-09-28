@@ -103,8 +103,6 @@ function crearServicioNegocio({ conexion, furnidata }) {
       revision: oficial.revision,
       sprite_id: oficial.sprite_id ?? null,
       tipo: oficial.tipo || 'suelo',
-      moneda_venta: monedaDesdeTexto(entrada.moneda_venta),
-      precio_venta: numeroValido(entrada.precio_venta, { campo: 'El precio de venta', opcional: true }),
       notas: entrada.notas || null,
     }).select('id').single());
     return furniPorId(fila.id);
@@ -116,8 +114,6 @@ function crearServicioNegocio({ conexion, furnidata }) {
     if ('nombre' in cambios || 'classname' in cambios) {
       Object.assign(campos, resolverNombre({ nombre: cambios.nombre ?? actual.nombre, classname: cambios.classname }));
     }
-    if ('moneda_venta' in cambios) campos.moneda_venta = monedaDesdeTexto(cambios.moneda_venta);
-    if ('precio_venta' in cambios) campos.precio_venta = numeroValido(cambios.precio_venta, { campo: 'El precio de venta', opcional: true });
     if ('notas' in cambios) campos.notas = cambios.notas || null;
     if (!Object.keys(campos).length) return actual;
     await datos(db().from('furnis').update(campos).eq('id', Number(id)).select('id'));
@@ -293,7 +289,8 @@ function crearServicioNegocio({ conexion, furnidata }) {
   }
 
   // ── Lotes huerfanos (llegados del Sniper, pendientes de activar) ──────────
-  // Agrupados por furni: un precio por furni activa todos sus lotes.
+  // Agrupados por furni. "Confirmar" los pasa a en mano (sin precio: el precio se pone
+  // al publicar o al vender).
   async function pendientesPorFurni() {
     const lotes = await listarCompras({ pendientes: true });
     if (!lotes.length) return [];
@@ -307,9 +304,8 @@ function crearServicioNegocio({ conexion, furnidata }) {
         grupos.set(l.furni_id, {
           furni: {
             id: f.id, nombre: f.nombre, classname: f.classname, revision: f.revision,
-            moneda_venta: f.moneda_venta, precio_venta: f.precio_venta, costo_promedio_cr: f.costo_promedio_cr,
-            precio_minimo_cr: f.precio_minimo_cr, stock_activo: f.stock_activo, nuevo: f.stock_activo <= 0 && f.precio_venta === null,
-            precio_lista_actual: f.precio_lista_actual, moneda_lista_actual: f.moneda_lista_actual,
+            // Nuevo: todo lo que se compro de este furni es lo que acaba de llegar.
+            nuevo: f.unidades_compradas === f.unidades_pendientes,
           },
           lotes: [], unidades: 0, costo_cr: 0, recibido_en: null, instancias: [],
         });
@@ -324,13 +320,12 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return [...grupos.values()].sort((a, b) => String(b.recibido_en).localeCompare(String(a.recibido_en)));
   }
 
-  async function activarPendientes({ furni_id, compra_ids, precio_venta, moneda_venta } = {}) {
+  // Confirma lo "por revisar" de un furni (todo, o los lotes indicados): pasa a en mano.
+  async function activarPendientes({ furni_id, compra_ids } = {}) {
     const ids = Array.isArray(compra_ids) && compra_ids.length ? compra_ids.map(Number) : null;
     const r = await datos(db().rpc('activar_pendientes', {
       p_furni_id: furni_id ? Number(furni_id) : null,
       p_compra_ids: ids,
-      p_precio: numeroValido(precio_venta, { campo: 'El precio de venta', opcional: true }),
-      p_moneda: moneda_venta ? monedaDesdeTexto(moneda_venta) : null,
     }));
     return { activados: r.activados, furni: await furniPorId(r.furni_id) };
   }

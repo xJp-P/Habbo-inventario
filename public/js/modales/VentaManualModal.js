@@ -24,8 +24,6 @@ import { Ico } from '../componentes/iconos.js';
 import { calcularComision } from '../core/comision.js';
 import { repartirFifo } from '../core/lotes.js';
 
-function texto(n) { return String(n).replace('.', ','); }
-
 // Lotes en mano de un furni, en el orden en que los toma vender_en_mano.
 function enMano(compras, furniId) {
   return compras.filter(function (c) { return c.furni_id === furniId && c.estado === 'comprado'; })
@@ -50,8 +48,8 @@ export function VentaManualModal(props) {
   var sL = useState(props.lote ? String(props.lote.id) : 'fifo'); var loteSel = sL[0]; var setLoteSel = sL[1];
   var sQ = useState(props.lote ? String(props.lote.cantidad) : '1'); var cant = sQ[0]; var setCant = sQ[1];
   var sD = useState('tradeo'); var donde = sD[0]; var setDonde = sD[1];
-  var sM = useState(inicial && inicial.moneda_venta ? inicial.moneda_venta : 'creditos'); var moneda = sM[0]; var setMoneda = sM[1];
-  var sP = useState(inicial && inicial.precio_venta !== null && inicial.precio_venta !== undefined ? texto(inicial.precio_venta) : ''); var precio = sP[0]; var setPrecio = sP[1];
+  var sM = useState('creditos'); var moneda = sM[0]; var setMoneda = sM[1];
+  var sP = useState(''); var precio = sP[0]; var setPrecio = sP[1];
   var sFe = useState(nowStr()); var fecha = sFe[0]; var setFecha = sFe[1];
   var sErr = useState(''); var error = sErr[0]; var setError = sErr[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
@@ -87,8 +85,6 @@ export function VentaManualModal(props) {
 
   function elegirFurni(f) {
     setFurniId(f.id); setLoteSel('fifo'); setCant('1'); setError('');
-    setMoneda(f.moneda_venta || 'creditos');
-    setPrecio(f.precio_venta !== null && f.precio_venta !== undefined ? texto(f.precio_venta) : '');
   }
   function cambiarDonde(d) { setDonde(d); setError(''); }
   function cambiarCant(d) { var n = (qValida ? q : 1) + d; setCant(String(Math.max(1, Math.min(maximo, n)))); }

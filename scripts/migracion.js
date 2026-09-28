@@ -51,27 +51,20 @@ function credencialesEnv(dirDatos) {
 }
 
 const cr = (n) => (n === null || n === undefined ? '-' : Math.round(n).toLocaleString('es-CO'));
-const pct = (n) => (n * 100).toFixed(2).replace('.', ',') + ' %';
 
 function comparar(resumen, excel) {
   const e = (etiqueta) => excel[normalizar(etiqueta)];
   const filas = [
-    ['Unidades en venta', resumen.en_venta.unidades, e('Unidades en venta')],
-    ['Invertido (Créditos)', resumen.en_venta.costo_cr, e('Invertido')],
-    ['Venta esperada (Créditos)', resumen.sin_comision.retorno_cr, e('Venta esperada')],
-    ['Ganancia esperada (Créditos)', resumen.sin_comision.ganancia_cr, e('Ganancia esperada')],
+    ['Unidades en stock', resumen.stock.unidades, e('Unidades en venta')],
+    ['Invertido (Créditos)', resumen.stock.costo_cr, e('Invertido')],
     ['Unidades vendidas', resumen.vendido.unidades, e('Unidades vendidas')],
     ['Ganancia realizada (Créditos)', resumen.vendido.ganancia_cr, e('Ganancia realizada')],
     ['Furnis distintos', resumen.datos.furnis_distintos, e('Furnis distintos en el Inventario')],
     ['Furnis con stock', resumen.datos.furnis_con_stock, e('Furnis con stock disponible')],
     ['Compras registradas', resumen.datos.compras_registradas, e('Compras registradas en el Mercadillo')],
-    ['Mayor ganancia esperada', resumen.sin_comision.mayor_ganancia_cr, e('Mayor ganancia esperada (Créditos)')],
-    ['Furnis con pérdida', resumen.sin_comision.perdidas.length, e('Furnis que dejan pérdida al precio actual')],
-    // Lo que el Excel no tenia: la comision del mercadillo de Habbo.es.
-    ['Comisión del mercadillo', resumen.en_venta.comision_cr, undefined],
-    ['Ganancia esperada NETA', resumen.en_venta.ganancia_cr, undefined],
-    ['Furnis con pérdida tras comisión', resumen.datos.perdidas.length, undefined],
   ];
+  // La venta y la ganancia esperadas del Excel valoraban el stock en mano a un precio del
+  // furni; la app ya no lo hace (solo lo publicado tiene precio), asi que no se comparan.
   let diferencias = 0;
   const tabla = filas.map(([concepto, app, xls]) => {
     const igual = xls === undefined ? null : Math.abs(Number(app) - Number(xls)) < 0.5;
@@ -134,12 +127,12 @@ async function main() {
   const { tabla, diferencias } = comparar(r, datos.resumenExcel);
   console.log('Comparacion con el Resumen del Excel:');
   console.table(tabla);
-  console.log(`Margen esperado: ${pct(r.en_venta.margen)} · Tasa: ${r.tasa} Créditos por Lingo`);
+  console.log(`Tasa: ${r.tasa} Créditos por Lingo · lo importado queda en mano (sin precio): publícalo desde el Inventario.`);
   if (r.datos.perdidas.length) {
-    console.log('\nFurnis que dejan PERDIDA al precio actual:');
+    console.log('\nFurnis publicados que dejan PERDIDA:');
     console.table(r.datos.perdidas.map((f) => ({
-      Furni: f.nombre, Stock: f.stock, 'Precio venta': cr(f.precio_venta_cr),
-      'Costo promedio': Number(f.costo_promedio_cr).toFixed(2).replace('.', ','),
+      Furni: f.nombre, Publicadas: f.unidades_publicadas, 'Precio de lista': cr(f.lista_min_cr),
+      'Costo promedio': Number(f.costo_publicado_cr).toFixed(2).replace('.', ','),
       'Precio mínimo': cr(f.precio_minimo_cr), 'Pérdida esperada': cr(f.ganancia_esperada_cr),
     })));
   }

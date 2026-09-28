@@ -9,9 +9,9 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 
 | Vista | Qué muestra |
 |---|---|
-| **Resumen** | Tasa del Lingo, mercancía en venta (inversión, retorno, ganancia y margen), compras del Sniper por revisar, ventas realizadas, datos rápidos y alerta de furnis con pérdida |
+| **Resumen** | Tasa del Lingo, compras del Sniper por revisar, lo **publicado** (inversión, lo que te entraría, ganancia esperada y margen: la única ganancia esperada), lo que tienes **en mano** (solo unidades y costo), ventas realizadas, datos rápidos y alerta de lo publicado que deja pérdida |
 | **Mercadillo** | Solo lo que está **publicado** en el mercadillo de Habbo.es (por el Sniper o por ti): precio de lista, unidades, costo promedio y ganancia esperada neta de lo publicado. En cada fila, **Vendido** y **Retirar** (preguntan cuántas unidades y, si hay varios precios de lista, de cuál; se aplican FIFO). Al hacer clic: lo que te entraría, la comisión, el precio mínimo para no perder y sus lotes |
-| **Inventario** | Cada lote, en tres pestañas: **Comprado** (en mano), **Publicado** (con candado) y **Vendido**; un lote vive en una sola. Arriba, destacadas, las compras que llegaron del Sniper ("huérfanas") para ponerles precio y activarlas. **Publicar** pasa al mercadillo todas las unidades en mano de un furni (por ejemplo, lo que venía del Excel), con el precio de lista o, marcando «Ingresar precio neto», con lo que quieres recibir (la app calcula el precio de lista); **Retirar** lo deshace. **Venta** (o «Vender» en un lote en mano) registra una venta hecha fuera del Sniper: un tradeo (sin comisión, en créditos o lingos) o una venta en el mercadillo desde otro keko (se guarda el neto); sale de un lote o de los más antiguos primero. Vender una parte divide el lote y congela el precio real de venta |
+| **Inventario** | Cada lote, en tres pestañas: **Comprado** (en mano), **Publicado** (con candado) y **Vendido**; un lote vive en una sola. Lo que está en mano no tiene precio ni ganancia: solo cuántas y lo que costaron; el precio aparece al publicar o al vender. Arriba, destacadas, las compras que llegaron del Sniper "por revisar", para confirmarlas (en un acordeón si son varias). **Publicar** pasa al mercadillo todas las unidades en mano de un furni (por ejemplo, lo que venía del Excel), con el precio de lista o, marcando «Ingresar precio neto», con lo que quieres recibir (la app calcula el precio de lista); **Retirar** lo deshace. **Venta** (o «Vender» en un lote en mano) registra una venta hecha fuera del Sniper: un tradeo (sin comisión, en créditos o lingos) o una venta en el mercadillo desde otro keko (se guarda el neto); sale de un lote o de los más antiguos primero. Vender una parte divide el lote y congela el precio real de venta |
 | **Ajustes** | Tokens de tus snipers (uno por VPS), importar desde Excel, catálogo de Habbo.es, tema y cuenta |
 
 ## Cómo funciona
@@ -48,7 +48,7 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 | Paso | Dónde | Qué hacer |
 |---|---|---|
 | 1 | [supabase.com](https://supabase.com) | Crea un proyecto (el plan gratis alcanza) |
-| 2 | SQL Editor | Ejecuta, **en orden**, cada archivo de [`supabase/migrations/`](supabase/migrations/): pega su contenido y pulsa **Run** (`20260927000000_esquema_inicial.sql`, luego `20260928000000_eventos_sniper.sql`, `20260929000000_precio_lista_y_comision.sql`, `20260930000000_venta_neta_mercadillo.sql`, `20261001000000_publicacion_manual.sql`, `20261002000000_publicar_furni.sql`, `20261003000000_vender_retirar_furni.sql` y `20261004000000_venta_en_mano.sql`) |
+| 2 | SQL Editor | Ejecuta, **en orden**, cada archivo de [`supabase/migrations/`](supabase/migrations/): pega su contenido y pulsa **Run** (`20260927000000_esquema_inicial.sql`, luego `20260928000000_eventos_sniper.sql`, `20260929000000_precio_lista_y_comision.sql`, `20260930000000_venta_neta_mercadillo.sql`, `20261001000000_publicacion_manual.sql`, `20261002000000_publicar_furni.sql`, `20261003000000_vender_retirar_furni.sql`, `20261004000000_venta_en_mano.sql` y `20261005000000_sin_precio_de_referencia.sql`) |
 | 3 | Authentication → Users | **Add user** con tu email y contraseña, marcando *Auto Confirm User* |
 | 4 | Authentication → Sign In / Providers → Email | Desactiva *Allow new users to sign up* (nadie más puede crearse cuenta en tu proyecto) |
 | 5 | Project Settings → API | Copia la **Project URL** y la **anon public key** |
@@ -69,7 +69,7 @@ Al abrir la app por primera vez te pide la URL y la clave, y después tu email y
 
 ### Comisión del mercadillo
 
-Toda ganancia esperada (Mercadillo, Inventario y Resumen) descuenta la comisión que cobra el mercadillo de Habbo.es al vender a un precio *p* en créditos:
+La ganancia esperada existe solo para lo **publicado** (lo que tienes en mano no tiene precio hasta que lo publicas o lo vendes) y descuenta la comisión que cobra el mercadillo de Habbo.es al vender a un precio *p* en créditos:
 
 ```
 comisión = ⌈(p² + 16000·p) / 800000⌉      (2 → 1 · 150 → 4 · 2.500 → 58 · 99.999 → 14.500)
@@ -88,7 +88,7 @@ El bot envía tres tipos de evento a un único endpoint (`registrar_eventos_snip
 
 | Evento | Qué pasa en el Inventario |
 |---|---|
-| **compra** | Entra como lote **huérfano** ("Por revisar"): cuenta en tu stock, pero no está en venta hasta que le confirmes un precio |
+| **compra** | Entra como lote **"Por revisar"**: cuenta en tu stock; al confirmarlo pasa a en mano, y si el Sniper lo publica pasa solo a Publicado |
 | **publicar** | Las unidades pasan a **Publicado** (con candado y su precio de lista), tomadas en orden FIFO; si es una parte del lote, el lote se divide |
 | **recuperar** | Las unidades publicadas vuelven a **Comprado** (FIFO), sin precio de lista |
 
@@ -172,7 +172,7 @@ docs/                integración con SniperMercadillo
 | Tabla / vista | Vista de la app | Contenido |
 |---|---|---|
 | `config` | — | Ajustes por usuario (tasa del Lingo) |
-| `furnis` | Mercadillo | Nombre oficial único, classname, revisión del icono, moneda y precio de venta |
+| `furnis` | Mercadillo | Nombre oficial único, classname, revisión del icono, sprite. (`precio_venta` y `moneda_venta` quedan en desuso: el precio se pone al publicar o al vender) |
 | `compras` | Inventario | Lotes: estado (`comprado`, `publicado`, `vendido`), cantidad, precio de compra, precio de lista, `publicado_por` (`sniper` o `manual`), precio real al vender (neto si fue en el mercadillo), `comision_venta`, `origen_id` (lote dividido), `fuente`, `id_externo`, `pendiente` (huérfano), `instancia`, `notas` |
 | `tokens_sniper` | Ajustes | Nombre, prefijo y huella de cada token |
 | `eventos_sniper` | — | Bitácora de cada evento del bot, con `id_externo` único (idempotencia) |

@@ -57,27 +57,9 @@ export function calcularPrecioLista(neto) {
   return precioMinimoSinPerder(neto);
 }
 
-// Ganancia esperada de un furni (columna "Ganancia esp." del Mercadillo): cada unidad en
-// stock, comprada o publicada, vendida a su precio (el de lista si está publicada, el
-// del furni si no) menos la comisión y menos lo que costó. `lotes` son las filas de
-// v_compras de ese furni. null si no hay stock o algún lote en stock no tiene precio.
-export function gananciaEsperadaFurni(furni, lotes) {
-  if (!furni || !(furni.stock > 0)) return null;
-  var total = 0;
-  for (var i = 0; i < lotes.length; i++) {
-    var l = lotes[i];
-    if (l.estado !== 'comprado' && l.estado !== 'publicado') continue;
-    if (l.precio_venta_cr === null || l.precio_venta_cr === undefined) return null;
-    var porUnidad = l.moneda_precio === 'lingos'
-      ? l.precio_venta_cr - l.precio_compra_cr
-      : calcularGananciaNeta(l.precio_venta_cr, l.precio_compra_cr);
-    total += porUnidad * l.cantidad;
-  }
-  return total;
-}
-
-// Lo PUBLICADO de un furni (vista Mercadillo): suma solo sus lotes 'publicado', cada uno a
-// su precio de lista menos la comision (sin comision si la lista es en lingos). Devuelve
+// Lo PUBLICADO de un furni (vista Mercadillo; lo unico con ganancia esperada): suma solo
+// sus lotes 'publicado', cada uno a su precio de lista menos la comision (sin comision si
+// la lista es en lingos). Devuelve
 // unidades, costo, venta bruta y neta, comision, ganancia neta, costo promedio, rango de
 // precios de lista y cuantas unidades publico el Sniper y cuantas tu.
 export function resumenPublicado(lotes) {

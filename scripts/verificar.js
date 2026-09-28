@@ -140,14 +140,14 @@ async function main() {
 
   // ── Nombres oficiales ──
   await rechaza(negocio.crearFurni({ nombre: 'Alas Brillante' }), /Quisiste decir "Alas Brillantes"/);
-  const cara = await negocio.crearFurni({ nombre: 'cara con cicatrices', moneda_venta: 'Créditos', precio_venta: 25 });
+  const cara = await negocio.crearFurni({ nombre: 'cara con cicatrices' });
   assert.equal(cara.nombre, 'Cara con Cicatrices');
   assert.equal(cara.classname, 'clothing_r26_scarface');
   assert.equal(cara.estado, 'sin_compras');
   await rechaza(negocio.crearFurni({ nombre: 'Cara con Cicatrices' }), /ya esta en el Mercadillo/);
   ok('nombres oficiales de Habbo.es: sugiere, corrige y no deja repetir');
 
-  // ── Lotes y calculos ──
+  // ── Lotes y calculos: lo que esta en mano solo tiene costo ──
   const lote = await negocio.crearCompra({ furni_id: cara.id, cantidad: 17, moneda_compra: 'creditos', precio_compra: 24 });
   await negocio.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 2, precio_compra: 32 });
   let f = await negocio.furniPorId(cara.id);
@@ -158,38 +158,57 @@ async function main() {
   assert.equal(f.compra_max_cr, 32);
   assert.equal(f.precio_minimo_cr, 26, 'a 25 la comision (1) deja 24 < 24,84: el minimo es 26');
   assert.equal(f.estado, 'en_venta');
-  assert.equal(f.en_perdida, true, 'a 25 cr, tras la comision, no cubre el costo promedio');
-  ok('stock 19, costo promedio 24,84, compra mas barata/cara, precio minimo 26 (con comision)');
-  await negocio.actualizarFurni(cara.id, { precio_venta: 26 });
-  assert.equal((await negocio.furniPorId(cara.id)).en_perdida, false);
-  await negocio.actualizarFurni(cara.id, { precio_venta: 24 });
-  assert.equal((await negocio.furniPorId(cara.id)).en_perdida, true);
-  assert.equal((await negocio.resumen()).datos.perdidas.length, 1);
-  ok('precio que no cubre el costo tras la comision: marca perdida y sale en la alerta');
-  await negocio.actualizarFurni(cara.id, { precio_venta: 30 });
+  assert.equal(f.ganancia_esperada_cr, null, 'lo en mano no tiene ganancia esperada');
+  assert.equal(f.en_perdida, false);
+  const enManoCara = (await negocio.listarCompras()).filter((c) => c.furni_id === cara.id);
+  assert.ok(enManoCara.every((c) => c.precio_venta_cr === null && c.ganancia_cr === null && c.margen === null && c.comision_cr === null),
+    'un lote en mano no tiene precio, ganancia, margen ni comision');
+  let r0 = await negocio.resumen();
+  assert.equal(r0.publicado.ganancia_cr, 0);
+  assert.equal(r0.en_mano.unidades, 19);
+  assert.equal(r0.en_mano.costo_cr, 472);
+  assert.equal(r0.datos.perdidas.length, 0);
+  ok('lo en mano solo tiene costo: stock 19, costo promedio 24,84, compra mas barata/cara, precio minimo 26; sin ganancia esperada ni perdida');
+
+  // ── La ganancia esperada sale SOLO de lo publicado ──
+  await rechaza(negocio.publicarFurni(cara.id, {}), /Falta el precio de lista/);
+  await negocio.publicarFurni(cara.id, { cantidad: 5, precio_lista: 30 });
   f = await negocio.furniPorId(cara.id);
-  assert.equal(f.ganancia_esperada_bruta_cr, 19 * 30 - 472);
-  assert.equal(f.comision_esperada_cr, 19);
-  assert.equal(f.ganancia_esperada_cr, 19 * (30 - 1) - 472);
-  assert.equal(comision.gananciaEsperadaFurni(f, await negocio.listarCompras()), f.ganancia_esperada_cr);
-  const r0 = await negocio.resumen();
-  assert.equal(r0.en_venta.comision_cr, 19);
-  assert.equal(r0.en_venta.ganancia_cr, 79);
-  assert.equal(r0.sin_comision.ganancia_cr, 98);
-  ok('ganancia esperada NETA: 19 und a 30 cr pagan 19 cr de comision -> +79 (sin comision serian +98), igual en la vista, el Resumen y la columna');
+  assert.equal(f.ganancia_esperada_cr, 5 * (29 - 24));
+  assert.equal(f.comision_esperada_cr, 5);
+  assert.equal(f.costo_publicado_cr, 24);
+  assert.equal(f.en_perdida, false);
+  assert.equal(comision.resumenPublicado((await negocio.listarCompras()).filter((c) => c.furni_id === cara.id)).ganancia, f.ganancia_esperada_cr);
+  r0 = await negocio.resumen();
+  assert.equal(r0.publicado.unidades, 5);
+  assert.equal(r0.publicado.ganancia_cr, 25, 'solo lo publicado aporta ganancia esperada');
+  assert.equal(r0.publicado.comision_cr, 5);
+  assert.equal(r0.en_mano.unidades, 14);
+  assert.equal(r0.stock.unidades, 19);
+  assert.equal(r0.stock.costo_cr, 472);
+  await negocio.retirarFurni(cara.id, {});
+  await negocio.publicarFurni(cara.id, { cantidad: 2, precio_lista: 24 });
+  f = await negocio.furniPorId(cara.id);
+  assert.equal(f.ganancia_esperada_cr, 2 * (23 - 24));
+  assert.equal(f.en_perdida, true, 'a 24 de lista entran 23: no cubre lo que costo');
+  r0 = await negocio.resumen();
+  assert.deepEqual(r0.datos.perdidas.map((x) => x.nombre), ['Cara con Cicatrices']);
+  await negocio.retirarFurni(cara.id, {});
+  assert.equal((await negocio.furniPorId(cara.id)).ganancia_esperada_cr, null);
+  assert.equal((await negocio.compraPorId(lote.id)).cantidad, 17);
+  ok('ganancia esperada, comision y perdida solo de lo publicado: 5 a 30 cr -> +25 (5 de comision); 2 a 24 cr -> perdida; al retirar desaparecen');
 
   // ── Venta parcial, precio congelado, reversion ──
-  const v = await negocio.vender(lote.id, { cantidad: 5 });
+  await rechaza(negocio.vender(lote.id, { cantidad: 5 }), /Falta el precio de venta/);
+  const v = await negocio.vender(lote.id, { cantidad: 5, precio_venta: 30 });
   assert.equal(v.dividida, true);
   assert.equal(v.original.cantidad, 12);
   assert.equal(v.venta.cantidad, 5);
   assert.equal(v.venta.origen_id, lote.id);
+  assert.equal(v.venta.precio_venta_real, 30);
   assert.equal(v.venta.ganancia_cr, 30);
   assert.equal((await negocio.furniPorId(cara.id)).n_compras, 2);
-  ok('venta parcial: el lote de 17 queda en 12 y nace una fila "vendido" de 5');
-  await negocio.actualizarFurni(cara.id, { precio_venta: 99 });
-  assert.equal((await negocio.compraPorId(v.venta.id)).ganancia_cr, 30);
-  ok('cambiar el precio del furni NO altera ventas pasadas');
+  ok('venta parcial: exige su precio (lo en mano no tiene uno); el lote de 17 queda en 12 y nace una fila "vendido" de 5 con el precio congelado');
   const r1 = await negocio.resumen();
   assert.equal(r1.vendido.retorno_cr, 150);
   assert.ok(cerca(r1.vendido.margen, 0.25));
@@ -204,12 +223,13 @@ async function main() {
   ok('vender todo deja "Agotado"; no deja vender dos veces ni borrar con lotes');
 
   // ── Lingos y tasa ──
-  const corona = await negocio.crearFurni({ nombre: 'Corona de Oro de 24 kt', moneda_venta: 'Lingos', precio_venta: 100 });
-  await negocio.crearCompra({ furni_id: corona.id, cantidad: 1, moneda_compra: 'lingos', precio_compra: 70 });
+  const corona = await negocio.crearFurni({ nombre: 'Corona de Oro de 24 kt' });
+  const loteCorona = await negocio.crearCompra({ furni_id: corona.id, cantidad: 1, moneda_compra: 'lingos', precio_compra: 70 });
   await negocio.fijarTasa(60);
-  f = await negocio.furniPorId(corona.id);
-  assert.equal(f.precio_venta_cr, 6000);
-  assert.ok(cerca(f.ganancia_esperada_lg, 30));
+  assert.equal((await negocio.compraPorId(loteCorona.id)).precio_compra_cr, 4200);
+  const ventaCorona = await negocio.vender(loteCorona.id, { moneda_venta: 'lingos', precio_venta: 100 });
+  assert.equal(ventaCorona.venta.ganancia_cr, 1800);
+  assert.ok(cerca(ventaCorona.venta.ganancia_lg, 30));
   await negocio.fijarTasa(50);
   ok('precios en Lingos se convierten con la tasa vigente (50 -> 60)');
 
@@ -289,7 +309,6 @@ async function main() {
     assert.equal(fv.unidades_publicadas, 2);
     assert.equal(fv.unidades_pendientes, 3);
     assert.equal(fv.sprite_id, velo.sprite_id);
-    assert.equal(fv.precio_venta, null);
     assert.equal(fv.precio_lista_actual, 360, 'el furni sin precio propio expone su precio de lista');
     assert.equal(fv.moneda_lista_actual, 'creditos');
     ok('CICLO: compra de 5 -> publica 3 (el lote se divide: 2 + 3 publicados a 360) -> recupera 1 (vuelve a su lote: 3 + 2); reintentos ignorados');
@@ -387,7 +406,7 @@ async function main() {
     await rechaza(negocio.eliminarCompra(idCompra), /publicado en el mercadillo/);
     const res = await negocio.resumen();
     assert.equal(res.publicado.unidades, 8);
-    assert.ok(res.en_venta.unidades >= 8);
+    assert.ok(res.stock.unidades >= 8);
     assert.equal(res.datos.furnis_publicados, 1);
     ok('lote publicado: no se edita ni se borra a mano y cuenta en el Resumen');
 
@@ -405,10 +424,9 @@ async function main() {
     assert.equal(sak[0].sprite_id, sakura.sprite_id);
     assert.equal(furnis.some((f) => /^Sprite \d+/.test(f.nombre)), false);
     ok('furni que llega solo con sprite_id: se une al que ya tenias (sin duplicados ni nombres provisionales)');
-    await rechaza(negocio.activarPendientes({ furni_id: sak[0].id }), /Ponle un precio de venta/);
-    const act = await negocio.activarPendientes({ furni_id: sak[0].id, precio_venta: 180 });
+    const act = await negocio.activarPendientes({ furni_id: sak[0].id });
     assert.equal(act.activados, 1);
-    ok('activar un huerfano exige precio; con precio pasa a "En venta"');
+    ok('confirmar lo "por revisar" del Sniper lo pasa a en mano, sin pedir precio');
 
     // ── Publicar y retirar a mano (lo que ya estaba en el mercadillo, p. ej. del Excel) ──
     const lotesSak = (await negocio.listarCompras()).filter((c) => c.furni_id === sak[0].id && c.estado === 'comprado');
@@ -426,17 +444,20 @@ async function main() {
     let rt = await negocio.retirarLote(pm.publicado.id);
     assert.equal(rt.fusionada, true);
     assert.equal((await leerLote(loteA.id)).cantidad, 2, 'retirar devuelve las unidades a su lote');
-    const hp = await pedir(puerto, 'POST', `/api/compras/${loteA.id}/publicar`, { cuerpo: {} });
+    const sinPrecio = await pedir(puerto, 'POST', `/api/compras/${loteA.id}/publicar`, { cuerpo: {} });
+    assert.equal(sinPrecio.status, 400);
+    assert.match(sinPrecio.json.error, /Falta el precio de lista/);
+    const hp = await pedir(puerto, 'POST', `/api/compras/${loteA.id}/publicar`, { cuerpo: { precio_lista: 180 } });
     assert.equal(hp.status, 200);
     assert.equal(hp.json.dividida, false);
     assert.equal(hp.json.publicado.id, loteA.id);
-    assert.equal(hp.json.publicado.precio_lista, 180, 'sin precio de lista se usa el del furni');
+    assert.equal(hp.json.publicado.precio_lista, 180);
     await rechaza(negocio.actualizarCompra(loteA.id, { cantidad: 9 }), /Retíralo primero/);
     await rechaza(negocio.eliminarCompra(loteA.id), /Retíralo primero/);
     await rechaza(negocio.publicarLote(loteA.id, { precio_lista: 10 }), /Solo se publica un lote comprado/);
     await rechaza(negocio.publicarLote(loteB.id, { cantidad: 5, precio_lista: 10 }), /Solo hay 1 unidad/);
     await rechaza(negocio.retirarLote(p1.id), /lo publico el Sniper/);
-    ok('publicar a mano: una parte (el lote se divide) o todo (al precio del furni); retirar lo devuelve; lo del Sniper no se retira desde la app');
+    ok('publicar a mano: exige precio de lista; una parte (el lote se divide) o todo; retirar lo devuelve; lo del Sniper no se retira desde la app');
 
     r = await sniper([{ tipo_evento: 'publicar', id_externo: 'pub_sak', sprite_id: sakura.sprite_id, cantidad: 1, precio_lista: 190, moneda: 'creditos', hotel: 'es' }]);
     assert.equal(r.data.procesados, 1);
@@ -571,36 +592,27 @@ async function main() {
     assert.equal((await negB.listarFurnis()).length, 0);
     ok('RLS: el segundo usuario no ve nada del primero');
     const excel = buscarExcel();
-    let netas = [];
-    let comisionExcel = 0;
     if (excel) {
       const datosExcel = await leerExcel(excel);
       const inf = await importarDatos(negB, furnidata, datosExcel, {});
       const e = (k) => datosExcel.resumenExcel[normalizar(k)];
       assert.equal(inf.furnis, 30);
       assert.equal(inf.compras, 42);
-      assert.equal(inf.resumen.en_venta.unidades, e('Unidades en venta'));
-      assert.equal(inf.resumen.en_venta.costo_cr, e('Invertido'));
-      // El Excel no descontaba la comision: se compara con las cifras sin ella.
-      const sc = inf.resumen.sin_comision;
-      assert.equal(sc.retorno_cr, e('Venta esperada'));
-      assert.equal(sc.ganancia_cr, e('Ganancia esperada'));
-      assert.equal(sc.perdidas.length, e('Furnis que dejan pérdida al precio actual'));
-      assert.deepEqual([...sc.perdidas].sort(), ['Cara con Cicatrices', 'Dragón Velo de Arena']);
-      assert.ok(Math.abs(sc.mayor_ganancia_cr - e('Mayor ganancia esperada (Créditos)')) < 0.5);
-      assert.ok(Math.abs(inf.resumen.en_venta.ganancia_cr - (sc.ganancia_cr - inf.resumen.en_venta.comision_cr)) < 1e-6);
-      netas = inf.resumen.datos.perdidas.map((p) => p.nombre);
-      assert.ok(sc.perdidas.every((n) => netas.includes(n)), 'lo que perdia sin comision sigue perdiendo con ella');
-      const lotesB = await negB.listarCompras();
-      for (const fb of await negB.listarFurnis()) {
-        const js = comision.gananciaEsperadaFurni(fb, lotesB.filter((l) => l.furni_id === fb.id));
-        assert.ok(js === fb.ganancia_esperada_cr || Math.abs(js - fb.ganancia_esperada_cr) < 1e-6, `columna Ganancia esp. de ${fb.nombre}: ${js} vs ${fb.ganancia_esperada_cr}`);
-      }
-      comisionExcel = inf.resumen.en_venta.comision_cr;
+      // Lo importado queda en mano: sin precio ni ganancia esperada (el precio de la hoja
+      // Inventario solo congelo las ventas que el Excel ya tenia).
+      assert.equal(inf.resumen.stock.unidades, e('Unidades en venta'));
+      assert.equal(inf.resumen.stock.costo_cr, e('Invertido'));
+      assert.equal(inf.resumen.vendido.ganancia_cr, e('Ganancia realizada'));
+      assert.equal(inf.resumen.publicado.unidades, 0);
+      assert.equal(inf.resumen.publicado.ganancia_cr, 0);
+      assert.equal(inf.resumen.datos.perdidas.length, 0);
+      const furnisB = await negB.listarFurnis();
+      assert.ok(furnisB.every((fb) => fb.ganancia_esperada_cr === null), 'nada importado tiene ganancia esperada');
+      const precioGuardado = (await clienteA.pg.query('select count(*)::int as n from public.furnis f join auth.users u on u.id = f.propietario where u.email = $1 and f.precio_venta is not null', ['beto@prueba.local'])).rows[0].n;
+      assert.equal(precioGuardado, 0, 'el importador ya no guarda un precio en el furni');
       await rechaza(importarDatos(negB, furnidata, datosExcel, {}), /ya tiene furnis/);
       assert.equal((await negocio.listarFurnis()).some((x) => x.nombre === 'Árbol de Créditos (Vale 500 créditos)'), false);
-      ok(`Excel real importado en UNA transaccion: 30 furnis, 42 lotes, totales y perdidas iguales al Excel (sin comision); con comision: ${Math.round(comisionExcel)} cr, ${netas.length} furnis con perdida`);
-      ok('columna "Ganancia esp." (JS, lote por lote) = vista de la base en los 30 furnis del Excel');
+      ok('Excel real importado en UNA transaccion: 30 furnis, 42 lotes; stock, inversion y ganancia realizada iguales al Excel; queda en mano, sin precio ni ganancia esperada');
     } else {
       console.log('  --  no hay Excel en la raiz: se omite la prueba de importacion');
     }

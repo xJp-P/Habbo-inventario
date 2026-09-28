@@ -6,8 +6,9 @@
 // todas sus unidades en mano, tomandolas de sus lotes del mas antiguo al mas nuevo
 // (FIFO, igual que el Sniper), y el furni sale por completo de Comprado. Si publicas
 // menos, el ultimo lote que entra se divide. Lo "por revisar" (recien comprado por el
-// Sniper) no se toca: lo publica el Sniper. El precio de lista es en creditos y se
-// propone el del furni. Con "Ingresar precio neto" escribes lo que quieres que te entre
+// Sniper) no se toca: lo publica el Sniper. El precio de lista es en creditos y se pone
+// aqui (lo en mano no tiene precio); si el furni ya tiene algo publicado, se propone ese
+// mismo precio de lista. Con "Ingresar precio neto" escribes lo que quieres que te entre
 // y se calcula el precio de lista (el menor que deja ese neto tras la comision). Siempre
 // se ven los dos: lo que paga el comprador y lo que entra a tu monedero, y la ganancia.
 // Lo publicado a mano se retira desde su fila.
@@ -29,7 +30,7 @@ export function PublicarModal(props) {
   var total = lotes.reduce(function (s, l) { return s + l.cantidad; }, 0);
   var costoTotal = lotes.reduce(function (s, l) { return s + l.precio_compra_cr * l.cantidad; }, 0);
   var sQ = useState(String(total)); var cant = sQ[0]; var setCant = sQ[1];
-  var precioBase = furni.moneda_venta === 'creditos' ? furni.precio_venta : null;
+  var precioBase = furni.moneda_lista_actual === 'creditos' ? furni.precio_lista_actual : null;
   var sP = useState(precioBase !== null && precioBase !== undefined ? String(precioBase).replace('.', ',') : ''); var precio = sP[0]; var setPrecio = sP[1];
   var sNeto = useState(false); var modoNeto = sNeto[0]; var setModoNeto = sNeto[1];
   var sErr = useState(''); var error = sErr[0]; var setError = sErr[1];

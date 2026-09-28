@@ -64,7 +64,7 @@ export function NombreFurni(props) {
 }
 
 var ESTADOS = {
-  en_venta: ['tag-verde', 'En venta'],
+  en_venta: ['tag-verde', 'En mano'],
   publicado: ['tag-morado', 'Publicado', 'lock'],
   por_revisar: ['tag-ambar', 'Por revisar'],
   agotado: ['tag-gris', 'Agotado'],
