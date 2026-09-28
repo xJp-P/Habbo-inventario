@@ -55,7 +55,7 @@ Content-Type: application/json
 |---|---|
 | **compra** | Crea un lote `comprado` y **huérfano** ("Por revisar"): cuenta en el stock, pero no está en venta hasta que el usuario le confirma un precio en la app. Si el sprite no existía, crea un furni provisional que la app nombra con el catálogo oficial |
 | **publicar** | Toma unidades de los lotes `comprado` (también los "por revisar") en orden **FIFO**: del más antiguo al más nuevo (los importados del Excel, sin fecha, primero). Un lote que entra entero pasa a `publicado`; si entra una parte, se divide y nace un lote `publicado` con ese pedazo. Guarda `precio_lista` |
-| **recuperar** | Toma unidades de los lotes `publicado` en orden FIFO (lo publicado hace más tiempo primero) y las devuelve a `comprado`, limpiando el precio de lista. Si su lote de origen sigue `comprado` al mismo costo, se reúnen con él |
+| **recuperar** | Toma unidades de los lotes `publicado` en orden FIFO (lo publicado hace más tiempo primero) y las devuelve a `comprado`, limpiando el precio de lista. Primero lo que publicó el Sniper; solo después lo que el usuario publicó a mano en la app. Si su lote de origen sigue `comprado` al mismo costo, se reúnen con él |
 
 - Si no alcanza el stock, se aplica lo que haya y la respuesta trae `faltante`.
 - Si no hay **nada** que aplicar (p. ej. publicar un sprite sin stock), el evento va a `errores` y **no queda registrado**: el bot puede reintentarlo más tarde con el mismo `id_externo`.

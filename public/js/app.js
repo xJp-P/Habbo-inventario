@@ -22,6 +22,7 @@ import { AjustesView } from './vistas/Ajustes.js';
 import { FurniModal } from './modales/FurniModal.js';
 import { CompraModal } from './modales/CompraModal.js';
 import { VenderModal } from './modales/VenderModal.js';
+import { PublicarModal } from './modales/PublicarModal.js';
 
 var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
@@ -130,6 +131,7 @@ function App() {
     compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni,
     onNueva: function () { setModal({ tipo: 'compra' }); },
     onVender: function (l) { setModal({ tipo: 'vender', lote: l, furni: datos.furnis.find(function (f) { return f.id === l.furni_id; }) }); },
+    onPublicar: function (l) { setModal({ tipo: 'publicar', lote: l, furni: datos.furnis.find(function (f) { return f.id === l.furni_id; }) }); },
     onCambio: cambio,
   });
   else contenido = h(AjustesView, {
@@ -172,6 +174,7 @@ function App() {
 
     modal && modal.tipo === 'furni' ? h(FurniModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'publicar' ? h(PublicarModal, { lote: modal.lote, furni: modal.furni, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender' ? h(VenderModal, { lote: modal.lote, furni: modal.furni, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
 
     toast ? h('div', { key: toast.id, className: 'toast', style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } }, toast.msg) : null);

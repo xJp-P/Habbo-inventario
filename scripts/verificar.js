@@ -361,6 +361,11 @@ async function main() {
     const sqlVentaNeta = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260930000000_venta_neta_mercadillo.sql'), 'utf8');
     await clienteA.pg.exec(sqlVentaNeta);
     await clienteA.pg.exec(sqlVentaNeta);
+    // Las migraciones posteriores recrean vistas y funciones: se vuelven a aplicar encima.
+    const dirMig = path.join(__dirname, '..', 'supabase', 'migrations');
+    for (const m of fs.readdirSync(dirMig).filter((x) => x.endsWith('.sql') && x > '20260930000000_venta_neta_mercadillo.sql').sort()) {
+      await clienteA.pg.exec(fs.readFileSync(path.join(dirMig, m), 'utf8'));
+    }
     const corregida = await leerLote(vieja.venta.id);
     assert.equal(corregida.precio_venta_real, 342);
     assert.equal(corregida.comision_venta, 8);
@@ -396,6 +401,54 @@ async function main() {
     const act = await negocio.activarPendientes({ furni_id: sak[0].id, precio_venta: 180 });
     assert.equal(act.activados, 1);
     ok('activar un huerfano exige precio; con precio pasa a "En venta"');
+
+    // ── Publicar y retirar a mano (lo que ya estaba en el mercadillo, p. ej. del Excel) ──
+    const lotesSak = (await negocio.listarCompras()).filter((c) => c.furni_id === sak[0].id && c.estado === 'comprado');
+    const loteA = lotesSak.find((c) => c.fuente === 'manual');   // 2 und a 170
+    const loteB = lotesSak.find((c) => c.fuente === 'sniper');   // 1 und a 150
+    const pm = await negocio.publicarLote(loteA.id, { cantidad: 1, precio_lista: 200 });
+    assert.equal(pm.dividida, true);
+    assert.equal(pm.original.cantidad, 1);
+    assert.equal(pm.publicado.estado, 'publicado');
+    assert.equal(pm.publicado.publicado_por, 'manual');
+    assert.equal(pm.publicado.precio_lista, 200);
+    assert.equal(pm.publicado.moneda_lista, 'creditos');
+    assert.equal(pm.publicado.origen_id, loteA.id);
+    assert.equal(pm.publicado.ganancia_cr, comision.calcularGananciaNeta(200, 170));
+    let rt = await negocio.retirarLote(pm.publicado.id);
+    assert.equal(rt.fusionada, true);
+    assert.equal((await leerLote(loteA.id)).cantidad, 2, 'retirar devuelve las unidades a su lote');
+    const hp = await pedir(puerto, 'POST', `/api/compras/${loteA.id}/publicar`, { cuerpo: {} });
+    assert.equal(hp.status, 200);
+    assert.equal(hp.json.dividida, false);
+    assert.equal(hp.json.publicado.id, loteA.id);
+    assert.equal(hp.json.publicado.precio_lista, 180, 'sin precio de lista se usa el del furni');
+    await rechaza(negocio.actualizarCompra(loteA.id, { cantidad: 9 }), /Retíralo primero/);
+    await rechaza(negocio.eliminarCompra(loteA.id), /Retíralo primero/);
+    await rechaza(negocio.publicarLote(loteA.id, { precio_lista: 10 }), /Solo se publica un lote comprado/);
+    await rechaza(negocio.publicarLote(loteB.id, { cantidad: 5, precio_lista: 10 }), /Solo hay 1 unidad/);
+    await rechaza(negocio.retirarLote(p1.id), /lo publico el Sniper/);
+    ok('publicar a mano: una parte (el lote se divide) o todo (al precio del furni); retirar lo devuelve; lo del Sniper no se retira desde la app');
+
+    r = await sniper([{ tipo_evento: 'publicar', id_externo: 'pub_sak', sprite_id: sakura.sprite_id, cantidad: 1, precio_lista: 190, moneda: 'creditos', hotel: 'es' }]);
+    assert.equal(r.data.procesados, 1);
+    assert.equal((await leerLote(loteB.id)).publicado_por, 'sniper');
+    r = await sniper([{ tipo_evento: 'recuperar', id_externo: 'rec_sak', sprite_id: sakura.sprite_id, cantidad: 1, hotel: 'es' }]);
+    assert.equal(r.data.eventos[0].lotes[0].desde_lote, loteB.id, 'el Sniper recupera primero lo que publico el, aunque lo manual sea mas antiguo');
+    assert.equal((await leerLote(loteA.id)).estado, 'publicado');
+    const devueltoB = await leerLote(loteB.id);
+    assert.equal(devueltoB.estado, 'comprado');
+    assert.equal(devueltoB.publicado_por, null);
+    const vm = await negocio.vender(loteA.id, { cantidad: 1 });
+    assert.equal(vm.venta.precio_venta_real, 180 - comision.calcularComision(180), 'lo publicado a mano tambien se vende neto');
+    assert.equal(vm.venta.publicado_por, 'manual');
+    assert.equal((await negocio.revertirVenta(vm.venta.id)).compra.publicado_por, 'manual');
+    rt = await negocio.retirarLote(loteA.id);
+    assert.equal(rt.fusionada, false);
+    assert.equal(rt.compra.estado, 'comprado');
+    assert.equal(rt.compra.pendiente, false);
+    assert.equal(rt.compra.precio_lista, null);
+    ok('el Sniper recupera primero lo suyo; lo publicado a mano se vende neto, revertir lo deja publicado y retirar lo vuelve a Comprado');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);

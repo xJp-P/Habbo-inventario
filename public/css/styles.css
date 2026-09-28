@@ -85,6 +85,8 @@ input[type=number]{-moz-appearance:textfield}
 .btn-verde:hover{background:#2ea043;border-color:#2ea043}
 .btn-peligro{color:var(--red);border-color:var(--red-bd);background:var(--red-bg)}
 .btn-chico{padding:3px 10px;font-size:12px}
+.btn-morado{color:var(--purple);border-color:var(--purple-bd);background:var(--purple-bg)}
+.btn-morado:hover{border-color:var(--purple)}
 .btn-icono{background:var(--bg3);border:1px solid var(--border);border-radius:99px;padding:6px 8px;cursor:pointer;display:flex;align-items:center}
 .mono{font-family:'Cascadia Code','Consolas',monospace}
 .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap}

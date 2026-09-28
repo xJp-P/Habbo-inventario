@@ -58,8 +58,9 @@ export function EtiquetaEstado(props) {
 
 // Candado de lo publicado en el mercadillo de Habbo: su stock lo mueve el Sniper.
 export var AYUDA_PUBLICADO = 'Publicado en el mercadillo de Habbo: el Sniper controla este stock (publicar / recuperar). No lo cambies a mano; solo registra la venta cuando se venda.';
+export var AYUDA_PUBLICADO_MANUAL = 'Lo publicaste tú en el mercadillo de Habbo. Cuando se venda, registra la venta con «Vendido»; si lo quitas del mercadillo, usa «Retirar del mercadillo».';
 export function EtiquetaPublicado(props) {
-  return h('span', { className: 'tag tag-morado', title: AYUDA_PUBLICADO },
+  return h('span', { className: 'tag tag-morado', title: props.manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO },
     h(Ico, { name: 'lock', size: 11, sw: 2.2 }), props.texto || 'Publicado');
 }
 

@@ -155,11 +155,14 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return compraPorId(r.compra_id);
   }
 
-  // Un lote publicado esta en el mercadillo de Habbo: su stock lo mueve el Sniper
-  // (publicar / recuperar). A mano solo se registra su venta.
+  // Un lote publicado esta en el mercadillo de Habbo: no se edita ni se borra. Si lo
+  // publico el Sniper, el Sniper lo mueve (publicar / recuperar); si lo publicaste tu,
+  // lo retiras con retirarLote. En los dos casos se registra su venta cuando se vende.
   function exigirNoPublicado(lote) {
     if (lote.estado === 'publicado') {
-      throw new ClientError('Ese lote esta publicado en el mercadillo: su stock lo controla el Sniper. Solo puedes registrar su venta.', 409);
+      throw new ClientError(lote.publicado_por === 'manual'
+        ? 'Ese lote esta publicado en el mercadillo. Retíralo primero si quieres cambiarlo.'
+        : 'Ese lote esta publicado en el mercadillo: su stock lo controla el Sniper. Solo puedes registrar su venta.', 409);
     }
   }
 
@@ -210,6 +213,28 @@ function crearServicioNegocio({ conexion, furnidata }) {
 
   async function revertirVenta(id) {
     const r = await datos(db().rpc('revertir_venta', { p_id: Number(id) }));
+    return { fusionada: r.fusionada, compra: await compraPorId(r.compra_id) };
+  }
+
+  // Publicar a mano (lo que pusiste tu en el mercadillo, p. ej. lo que venia del Excel):
+  // todo el lote o una parte, a un precio de lista en creditos (funcion publicar_lote).
+  async function publicarLote(id, entrada = {}) {
+    const r = await datos(db().rpc('publicar_lote', {
+      p_id: Number(id),
+      p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
+        ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a publicar', minimo: 1, entero: true }),
+      p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
+    }));
+    return {
+      dividida: r.dividida,
+      original: r.original_id ? await compraPorId(r.original_id) : null,
+      publicado: await compraPorId(r.lote_id),
+    };
+  }
+
+  // Deshace una publicacion manual: el lote vuelve a "comprado" (funcion retirar_lote).
+  async function retirarLote(id) {
+    const r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
     return { fusionada: r.fusionada, compra: await compraPorId(r.compra_id) };
   }
 
@@ -342,7 +367,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
-    vender, revertirVenta, pendientesPorFurni, activarPendientes,
+    vender, revertirVenta, publicarLote, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
     resolverNombre, sincronizarConCatalogo,
   };

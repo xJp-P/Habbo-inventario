@@ -50,6 +50,8 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.delete('/api/compras/:id', async (req, res) => res.json(await negocio.eliminarCompra(id(req))));
   r.post('/api/compras/:id/vender', async (req, res) => res.json(await negocio.vender(id(req), req.body || {})));
   r.post('/api/compras/:id/revertir', async (req, res) => res.json(await negocio.revertirVenta(id(req))));
+  r.post('/api/compras/:id/publicar', async (req, res) => res.json(await negocio.publicarLote(id(req), req.body || {})));
+  r.post('/api/compras/:id/retirar', async (req, res) => res.json(await negocio.retirarLote(id(req))));
 
   // ── Lotes huerfanos (llegados del Sniper) ────────────────────────────────
   r.get('/api/pendientes', async (_req, res) => res.json(await negocio.pendientesPorFurni()));

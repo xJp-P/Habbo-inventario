@@ -1,10 +1,11 @@
 // public/js/vistas/Inventario.js — tus lotes comprados (tabla `compras`; la hoja
 // "Mercadillo" del Excel).
 //
-// Ciclo de un lote: Comprado -> Publicado (lo puso a la venta el Sniper en el mercadillo
-// de Habbo; lleva candado y su precio de lista) -> Vendido, o de vuelta a Comprado si el
-// Sniper lo recupera. Lo publicado no se edita ni se borra a mano: solo se registra su
-// venta cuando se vende.
+// Ciclo de un lote: Comprado -> Publicado (en el mercadillo de Habbo; lleva candado y su
+// precio de lista) -> Vendido, o de vuelta a Comprado si se retira. Lo publica el Sniper
+// (y lo recupera el Sniper) o lo publicas tu con el boton "Publicar" (y lo retiras tu
+// desde su detalle). Lo publicado no se edita ni se borra: se registra su venta con
+// "Vendido" cuando se vende.
 //
 // Arriba, destacadas en ambar, las compras HUERFANAS que llegaron de los SniperMercadillo:
 // agrupadas por furni, con el precio de venta listo para confirmar y la ganancia
@@ -17,7 +18,7 @@ import { API } from '../core/api.js';
 import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace, leerNumero } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
-import { NombreFurni, EtiquetaPublicado, AYUDA_PUBLICADO } from '../componentes/base.js';
+import { NombreFurni, EtiquetaPublicado, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
 import { calcularGananciaNeta, ingresoNeto, precioMinimoSinPerder } from '../core/comision.js';
 
 function FilaHuerfana(props) {
@@ -91,6 +92,14 @@ export function InventarioView(props) {
       return API.post('/api/compras/' + l.id + '/revertir', {}).then(function (r) { if (r) props.onCambio(r.fusionada ? 'Venta deshecha: las unidades volvieron a su lote' : 'Venta deshecha'); });
     });
   }
+  function retirar(l) {
+    if (!window.confirm('¿Retirar del mercadillo el lote Nº ' + l.id + ' (' + l.cantidad + ' × ' + l.nombre + ')? Vuelve a Comprado.')) return;
+    _submitGuard(enviando, setEnviando, function () {
+      return API.post('/api/compras/' + l.id + '/retirar', {}).then(function (r) {
+        if (r) { setAbierto(null); props.onCambio(r.fusionada ? 'Retirado: las unidades volvieron a su lote en Comprado' : 'Retirado: el lote volvió a Comprado'); }
+      });
+    });
+  }
   function eliminar(l) {
     if (!window.confirm('¿Eliminar el lote Nº ' + l.id + ' (' + l.cantidad + ' × ' + l.nombre + ')? No se puede deshacer.')) return;
     _submitGuard(enviando, setEnviando, function () {
@@ -129,6 +138,7 @@ export function InventarioView(props) {
             h('tbody', null, visibles.map(function (l) {
               var abiertoEste = abierto === l.id;
               var publicado = l.estado === 'publicado';
+              var manual = publicado && l.publicado_por === 'manual';
               var clase = 'fila' + (abiertoEste ? ' abierta' : '') + (l.pendiente ? ' huerfana' : '') + (l.estado === 'vendido' ? ' vendida' : '') + (publicado ? ' publicada' : '');
               var g = l.ganancia_cr;
               var filas = [h('tr', { key: l.id, className: clase, onClick: function () { setAbierto(abiertoEste ? null : l.id); } },
@@ -140,12 +150,14 @@ export function InventarioView(props) {
                 h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)),
                 h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)),
                 h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
-                  : publicado ? h(EtiquetaPublicado, { texto: 'Publicado · ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') })
+                  : publicado ? h(EtiquetaPublicado, { manual: manual, texto: 'Publicado · ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') })
                   : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
                 h('td', { className: 'r' }, publicado
                   ? h('button', { className: 'btn btn-chico', title: 'Registrar la venta de lo publicado', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido')
                   : l.estado === 'comprado'
-                  ? h('button', { className: 'btn btn-chico', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender')
+                  ? h('span', { style: { display: 'inline-flex', gap: 6 } },
+                      h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pásalo a Publicado', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
+                      h('button', { className: 'btn btn-chico', title: 'Lo vendiste en mano (intercambio o venta directa)', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
                   : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
               if (abiertoEste) {
                 filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: 9, className: 'detalle' },
@@ -157,7 +169,7 @@ export function InventarioView(props) {
                     l.estado === 'vendido' && l.comision_pagada_cr !== null && l.comision_pagada_cr !== undefined ? h('div', null, h('div', { className: 'dato-l' }, 'Comisión del mercadillo pagada'),
                       h('div', { className: 'dato-v' }, fmtCr(l.comision_pagada_cr * l.cantidad) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · el comprador pagó ' + fmtLg(l.precio_venta_cr + l.comision_pagada_cr) + ' c/u'))) : null,
                     l.precio_lista !== null && l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Estaba publicado a'), h('div', { className: 'dato-v' }, fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr'))) : null,
-                    publicado && l.publicado_en ? h('div', null, h('div', { className: 'dato-l' }, 'Publicado'), h('div', { className: 'dato-v' }, fmtHace(l.publicado_en))) : null,
+                    publicado && l.publicado_en ? h('div', null, h('div', { className: 'dato-l' }, 'Publicado'), h('div', { className: 'dato-v' }, fmtHace(l.publicado_en) + (manual ? ' · por ti' : ' · por el Sniper'))) : null,
                     l.estado !== 'vendido' && l.comision_cr ? h('div', null, h('div', { className: 'dato-l' }, 'Recibes por unidad (tras comisión)'),
                       h('div', { className: 'dato-v' }, fmtLg(ingresoNeto(l.precio_venta_cr, l.moneda_precio)) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · comisión ' + fmtCr(l.comision_cr)))) : null,
                     l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Fecha de venta'), h('div', { className: 'dato-v' }, fmtD(l.fecha_venta))) : null,
@@ -165,7 +177,8 @@ export function InventarioView(props) {
                   l.notas ? h('div', { className: 'suave', style: { fontSize: 12, marginBottom: 10 } }, l.notas) : null,
                   publicado
                     ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
-                        h(Ico, { name: 'lock', size: 15 }), AYUDA_PUBLICADO)
+                        h(Ico, { name: 'lock', size: 15 }), h('span', { style: { flex: 1 } }, manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO),
+                        manual ? h('button', { className: 'btn btn-chico', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar del mercadillo') : null)
                     : h('div', { style: { display: 'flex', gap: 8 } },
                         h('button', { className: 'btn btn-peligro', onClick: function (e) { e.stopPropagation(); eliminar(l); }, disabled: enviando }, h(Ico, { name: 'trash', size: 14 }), 'Eliminar lote')))));
               }
