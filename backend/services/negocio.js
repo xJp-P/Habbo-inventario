@@ -355,14 +355,14 @@ function crearServicioNegocio({ conexion, furnidata }) {
 
   // ── Tokens de los SniperMercadillo ────────────────────────────────────────
   // El token se genera aca y se muestra UNA vez; en Supabase solo queda su huella
-  // SHA-256, que es contra lo que compara la funcion registrar_compras_sniper.
+  // SHA-256, que es contra lo que comparan registrar_eventos_sniper y estado_sniper.
   function listarTokens() {
     return datos(db().from('tokens_sniper').select('id,nombre,prefijo,creado_en,ultimo_uso,revocado').order('creado_en', { ascending: false }));
   }
 
   async function crearToken(nombre) {
     const limpio = String(nombre || '').trim().slice(0, 60);
-    if (!limpio) throw new ClientError('Ponle un nombre al token (p. ej. "VPS Contabo 1").');
+    if (!limpio) throw new ClientError('Ponle un nombre al token (p. ej. "VPS 1").');
     const token = 'hbi_' + crypto.randomBytes(32).toString('base64url');
     const fila = await datos(db().from('tokens_sniper').insert({
       nombre: limpio,

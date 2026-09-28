@@ -82,7 +82,7 @@ export function AjustesView(props) {
   useEffect(cargar, []);
 
   function crearToken() {
-    if (!nombre.trim()) { props.onError('Ponle un nombre al token (p. ej. "VPS Contabo 1").'); return; }
+    if (!nombre.trim()) { props.onError('Ponle un nombre al token (p. ej. "VPS 1").'); return; }
     _submitGuard(enviando, setEnviando, function () {
       return API.post('/api/sniper/tokens', { nombre: nombre }).then(function (r) { if (r) { setNuevo(r); setNombre(''); cargar(); } });
     });
@@ -162,7 +162,7 @@ export function AjustesView(props) {
                   h('td', { className: 'r' }, t.revocado ? null : h('button', { className: 'btn btn-chico btn-peligro', onClick: function () { revocar(t); } }, 'Revocar')));
               }))),
         h('div', { style: { display: 'flex', gap: 8 } },
-          h('input', { className: 'inp', placeholder: 'Nombre del VPS (p. ej. Contabo 1)', value: nombre, onChange: function (e) { setNombre(e.target.value); }, onKeyDown: function (e) { if (e.key === 'Enter') crearToken(); } }),
+          h('input', { className: 'inp', placeholder: 'Nombre del VPS (p. ej. VPS 1)', value: nombre, onChange: function (e) { setNombre(e.target.value); }, onKeyDown: function (e) { if (e.key === 'Enter') crearToken(); } }),
           h('button', { className: 'btn btn-verde', onClick: crearToken, disabled: enviando }, h(Ico, { name: 'key', size: 14 }), 'Crear token'))),
       ejemplo ? h('details', { style: { marginTop: 12 } },
         h('summary', { className: 'suave', style: { cursor: 'pointer', fontSize: 13 } }, 'Ejemplo de envío (para configurar el sniper)'),

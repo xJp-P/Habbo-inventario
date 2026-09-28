@@ -12,8 +12,9 @@
 //     no puede enviar JSON, y un fetch con JSON desde otro origen exige una verificacion
 //     previa (CORS) que este servidor nunca aprueba.
 //
-// La interfaz de la app (misma origen 127.0.0.1) y las extensiones locales (sin Origin)
-// pasan sin problema. Las extensiones ademas necesitan su token (services/sniper.js).
+// La interfaz de la app (misma origen 127.0.0.1) y los clientes locales sin Origin pasan
+// sin problema. Los SniperMercadillo no usan esta API: escriben directo en Supabase con
+// su token (funcion registrar_eventos_sniper).
 
 const HOSTS_LOCALES = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const METODOS_ESCRITURA = new Set(['POST', 'PUT', 'PATCH']);

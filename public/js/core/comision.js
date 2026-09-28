@@ -8,7 +8,7 @@
 // Solo aplica a precios en créditos (el mercadillo cobra en créditos); lo que se vende
 // en lingos es un intercambio directo y no paga comisión.
 //
-// La base de datos usa la misma fórmula (supabase/migrations/20260929000000_...sql,
+// La base de datos usa la misma fórmula (supabase/migrations/20260929000000_precio_lista_y_comision.sql,
 // función comision_mercadillo) y `npm run verificar` comprueba que ambas coinciden.
 // Este archivo también lo cargan las pruebas en Node (public/js/package.json lo marca
 // como módulo ES).

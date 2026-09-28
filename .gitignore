@@ -1,18 +1,51 @@
-node_modules/
-dist/
+# Habbo Inventario — lo que NUNCA debe llegar al repositorio.
 
-# Datos personales y secretos: NUNCA al repositorio
-CLAUDE.md
+# Dependencias
+node_modules/
+
+# Compilación e instaladores
+dist/
+build/
+release/
+out/
+
+# Secretos: configuración de Supabase y certificados de firma
 .env
 .env.*
 !.env.example
-data/
-*.db
-*.bak
-*.xlsx
-~$*.xlsx
+*.pem
+*.key
+*.p12
+*.pfx
 
+# Sesiones y datos locales de la app (catálogo, iconos, base del modo demo)
+data/
+sesion-supabase.json
+demo-db/
+demo-token.txt
+
+# Bases de datos locales
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Datos personales (planillas y respaldos)
+*.xlsx
+*.xls
+*.csv
+~$*
+*.bak
+
+# Contexto privado para asistentes de IA
+CLAUDE.md
+.claude/
+
+# Registros y temporales
+*.log
+*.tmp
+
+# Sistema operativo
 .DS_Store
 Thumbs.db
-.claude/
-*.log
+desktop.ini
