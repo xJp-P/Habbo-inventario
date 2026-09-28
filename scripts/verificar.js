@@ -26,6 +26,7 @@ const { crearServicioNegocio } = require('../backend/services/negocio');
 const ExcelJS = require('exceljs');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
 const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/instalacion');
+const { validarConfiguracion, leerConfiguracion } = require('../backend/db/supabase');
 const { normalizar } = require('../backend/core/util');
 const { DIR_DATOS_DEV } = require('./comun');
 
@@ -94,6 +95,22 @@ async function main() {
   assert.ok(actualizador.includes(`{ owner: '${owner}', repo: '${repo}' }`), 'el actualizador apunta al repositorio de build.publish');
   assert.ok(actualizador.includes('`' + paquete.build.mac.artifactName.replace('${ext}', 'zip') + '`'), 'el .zip de Mac tiene el nombre que genera electron-builder');
   ok(`empaquetado: el actualizador apunta a ${owner}/${repo} y al .zip de Mac que genera electron-builder`);
+
+  // ── URL del proyecto: el panel de Supabase a veces la muestra con /rest/v1/ ──
+  const claveEjemplo = 'sb_publishable_' + 'x'.repeat(24);
+  for (const [entrada, esperada] of [
+    ['https://abcd1234.supabase.co/rest/v1/', 'https://abcd1234.supabase.co'],
+    ['  https://abcd1234.supabase.co/  ', 'https://abcd1234.supabase.co'],
+    ['https://abcd1234.supabase.co/auth/v1', 'https://abcd1234.supabase.co'],
+    ['http://127.0.0.1:54321/rest/v1/', 'http://127.0.0.1:54321'],
+  ]) {
+    assert.equal(validarConfiguracion({ url: entrada, anonKey: claveEjemplo }).url, esperada, entrada);
+  }
+  const dirEnv = fs.mkdtempSync(path.join(os.tmpdir(), 'habbo-env-'));
+  fs.writeFileSync(path.join(dirEnv, '.env'), `SUPABASE_URL=https://abcd1234.supabase.co/rest/v1/\nSUPABASE_ANON_KEY=${claveEjemplo}\n`);
+  if (!process.env.SUPABASE_URL) assert.equal(leerConfiguracion({ raiz: null, dirDatos: dirEnv }).url, 'https://abcd1234.supabase.co', 'un .env ya guardado con /rest/v1/ tambien se corrige');
+  fs.rmSync(dirEnv, { recursive: true, force: true });
+  ok('URL del proyecto: acepta la que muestra el panel con /rest/v1/ (u otra ruta de servicio) y deja solo la base');
 
   // ── Base: Postgres local con el esquema de Supabase y dos usuarios ──
   const clienteA = await crearClienteLocal();

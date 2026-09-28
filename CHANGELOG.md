@@ -10,6 +10,12 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Corregido
+
+- Conectar con Supabase fallaba con «Invalid path specified in request URL» si la
+  Project URL se pegaba con `/rest/v1/` (como la muestra el panel de Supabase). Ahora la
+  app deja solo la dirección base del proyecto, también en una conexión ya guardada.
+
 ## [1.0.0] - 2026-09-28
 
 Primera versión pública. Funciona solo con el hotel **Habbo.es**.

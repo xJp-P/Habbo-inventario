@@ -39,6 +39,18 @@ function leerEnv(ruta) {
   try { return parsearEnv(fs.readFileSync(ruta, 'utf8')); } catch (_) { return {}; }
 }
 
+// El panel de Supabase muestra a veces la URL de un servicio (…/rest/v1/, …/auth/v1) en
+// vez de la del proyecto. supabase-js agrega esas rutas por su cuenta, asi que con ellas
+// las peticiones iban a /rest/v1/rest/v1/… ("Invalid path specified in request URL").
+// Se deja solo la direccion base del proyecto.
+function normalizarUrl(texto) {
+  const t = String(texto || '').trim();
+  let u;
+  try { u = new URL(t); } catch (_) { return t.replace(/\/+$/, ''); }
+  if (/\.supabase\.(co|in)$/i.test(u.hostname)) return u.origin;
+  return (u.origin + u.pathname.replace(/\/(rest|auth|storage|realtime|functions|graphql)\/v1(\/.*)?$/i, '')).replace(/\/+$/, '');
+}
+
 function leerConfiguracion({ raiz, dirDatos }) {
   const fuentes = [
     { origen: 'entorno', vars: process.env },
@@ -47,14 +59,14 @@ function leerConfiguracion({ raiz, dirDatos }) {
   ];
   for (const f of fuentes) {
     if (f.vars.SUPABASE_URL && f.vars.SUPABASE_ANON_KEY) {
-      return { url: f.vars.SUPABASE_URL.trim().replace(/\/+$/, ''), anonKey: f.vars.SUPABASE_ANON_KEY.trim(), origen: f.origen };
+      return { url: normalizarUrl(f.vars.SUPABASE_URL), anonKey: f.vars.SUPABASE_ANON_KEY.trim(), origen: f.origen };
     }
   }
   return null;
 }
 
 function validarConfiguracion({ url, anonKey }) {
-  const u = String(url || '').trim().replace(/\/+$/, '');
+  const u = normalizarUrl(url);
   let host;
   try { host = new URL(u); } catch (_) { throw new ClientError('La URL de Supabase no es valida (ej: https://abcd1234.supabase.co).'); }
   const local = ['localhost', '127.0.0.1'].includes(host.hostname);
@@ -123,4 +135,4 @@ function crearClienteSupabase({ url, anonKey, dirDatos, cifrado = null, sinSesio
   });
 }
 
-module.exports = { leerConfiguracion, validarConfiguracion, guardarConfiguracion, crearClienteSupabase, parsearEnv, ARCHIVO_SESION };
+module.exports = { leerConfiguracion, validarConfiguracion, guardarConfiguracion, crearClienteSupabase, parsearEnv, normalizarUrl, ARCHIVO_SESION };

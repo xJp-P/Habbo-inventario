@@ -50,6 +50,7 @@ function interpretar(r) {
 
 function mensajeSinRespuesta(detalle) {
   if (/api key|apikey|jwt/i.test(detalle)) return 'Supabase no aceptó la clave pública. Revisa que sea la de este proyecto.';
+  if (/invalid path|no route matched/i.test(detalle)) return 'La URL del proyecto no es correcta: usa solo la dirección base, por ejemplo https://abcd1234.supabase.co.';
   if (/fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|network|getaddrinfo/i.test(detalle)) return 'No se pudo contactar tu proyecto de Supabase. Revisa la URL, tu internet o si el proyecto está pausado.';
   return 'No se pudo comprobar la base de datos: ' + detalle;
 }
