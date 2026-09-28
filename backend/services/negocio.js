@@ -270,6 +270,22 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { cantidad: r.cantidad, lotes: r.lotes };
   }
 
+  // Venta manual de lo que tienes en mano (tradeo, o venta desde un keko sin Sniper):
+  // de un lote o FIFO entre los lotes en mano del furni. En el mercadillo se guarda el
+  // neto y la comision; en un tradeo, el precio tal cual (funcion vender_en_mano).
+  async function venderEnMano(id, entrada = {}) {
+    const r = await datos(db().rpc('vender_en_mano', {
+      p_furni_id: Number(id),
+      p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad vendida', minimo: 1, entero: true }),
+      p_precio: numeroValido(entrada.precio, { campo: 'El precio de venta' }),
+      p_moneda: entrada.moneda ? monedaDesdeTexto(entrada.moneda) : 'creditos',
+      p_mercadillo: entrada.mercadillo === true,
+      p_fecha: entrada.fecha || hoyStr(),
+      p_lote_id: entrada.lote_id ? Number(entrada.lote_id) : null,
+    }));
+    return { cantidad: r.cantidad, precio_neto: r.precio_neto, comision: r.comision, moneda: r.moneda, ventas: r.ventas };
+  }
+
   // Deshace una publicacion manual: el lote vuelve a "comprado" (funcion retirar_lote).
   async function retirarLote(id) {
     const r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
@@ -405,7 +421,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
-    vender, revertirVenta, publicarLote, publicarFurni, venderFurni, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
+    vender, revertirVenta, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
     resolverNombre, sincronizarConCatalogo,
   };

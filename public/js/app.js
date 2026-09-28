@@ -25,6 +25,7 @@ import { VenderModal } from './modales/VenderModal.js';
 import { PublicarModal } from './modales/PublicarModal.js';
 import { VenderFurniModal } from './modales/VenderFurniModal.js';
 import { RetirarFurniModal } from './modales/RetirarFurniModal.js';
+import { VentaManualModal } from './modales/VentaManualModal.js';
 
 var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
@@ -164,7 +165,13 @@ function App() {
   else if (vista === 'inventario') contenido = h(InventarioView, {
     compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado,
     onNueva: function () { setModal({ tipo: 'compra' }); },
-    onVender: function (l) { setModal({ tipo: 'vender', lote: l, furni: datos.furnis.find(function (f) { return f.id === l.furni_id; }) }); },
+    // Lo publicado se vende en el mercadillo (con comision); lo que esta en mano, con la
+    // venta manual (tradeo u otro keko).
+    onVender: function (l) {
+      if (l.estado === 'publicado') setModal({ tipo: 'vender', lote: l, furni: furniDe(l.furni_id) });
+      else setModal({ tipo: 'venta-manual', furni: furniDe(l.furni_id), lote: l });
+    },
+    onVentaManual: function () { setModal({ tipo: 'venta-manual' }); },
     onPublicar: function (l) { setModal({ tipo: 'publicar', furni: furniDe(l.furni_id), lotes: enManoFifo(l.furni_id) }); },
     onEditarFurni: function (l) { setModal({ tipo: 'furni', furni: furniDe(l.furni_id) }); },
     onCambio: cambio,
@@ -209,6 +216,7 @@ function App() {
 
     modal && modal.tipo === 'furni' ? h(FurniModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis, compras: datos.compras, furni: modal.furni, lote: modal.lote, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender-furni' ? h(VenderFurniModal, { furni: modal.furni, lotes: modal.lotes, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'retirar-furni' ? h(RetirarFurniModal, { furni: modal.furni, lotes: modal.lotes, unidadesSniper: modal.unidadesSniper, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,

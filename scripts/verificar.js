@@ -527,6 +527,33 @@ async function main() {
     assert.match(hr.json.error, /publicó el Sniper/);
     ok('Retirar desde el Mercadillo: solo lo publicado por ti, FIFO y por precio de lista; una parte divide el lote; lo del Sniper no');
 
+    // ── Venta manual de lo que esta en mano (tradeo, o venta desde un keko sin Sniper) ──
+    const loteX = (await lotesDeSak('comprado')).find((c) => c.origen_id === loteA.id);
+    const vm1 = await negocio.venderEnMano(sak[0].id, { cantidad: 2, precio: 3, moneda: 'lingos' });
+    assert.deepEqual(vm1.ventas.map((v) => [v.lote_id, v.cantidad]), [[loteA.id, 1], [loteB.id, 1]], 'FIFO entre los lotes en mano');
+    assert.equal(vm1.comision, null);
+    const vendida1 = await leerLote(vm1.ventas[0].venta_id);
+    assert.equal(vendida1.precio_venta_real, 3);
+    assert.equal(vendida1.moneda_venta_real, 'lingos');
+    assert.equal(vendida1.comision_venta, null);
+    assert.equal(vendida1.ganancia_cr, 3 * 50 - 170, 'tradeo en lingos: sin comision, a la tasa vigente');
+    const vm2 = await negocio.venderEnMano(sak[0].id, { cantidad: 1, precio: 200, mercadillo: true, lote_id: loteX.id });
+    assert.equal(vm2.ventas[0].lote_id, loteX.id, 'de un lote concreto');
+    const vendida2 = await leerLote(vm2.ventas[0].venta_id);
+    assert.equal(vendida2.precio_venta_real, 200 - comision.calcularComision(200), 'en el mercadillo de otro keko: se guarda el neto');
+    assert.equal(vendida2.comision_venta, comision.calcularComision(200));
+    await rechaza(negocio.venderEnMano(sak[0].id, { cantidad: 1, precio: 5, moneda: 'lingos', mercadillo: true }), /cobra en creditos/);
+    await rechaza(negocio.venderEnMano(sak[0].id, { cantidad: 5, precio: 5 }), /Solo tienes 1 unidad/);
+    await rechaza(negocio.venderEnMano(fv.id, { cantidad: 1, precio: 5, lote_id: idCompra }), /no esta en mano/);
+    const hvm = await pedir(puerto, 'POST', `/api/furnis/${sak[0].id}/vender-en-mano`, { cuerpo: { cantidad: 1, precio: 180 } });
+    assert.equal(hvm.status, 200);
+    assert.equal(hvm.json.ventas[0].lote_id, loteC.id);
+    for (const v of [...vm1.ventas, ...vm2.ventas, ...hvm.json.ventas]) await negocio.revertirVenta(v.venta_id);
+    const enManoFinal = await lotesDeSak('comprado');
+    assert.equal(enManoFinal.reduce((s, c) => s + c.cantidad, 0), 4);
+    assert.ok(enManoFinal.every((c) => c.comision_venta === null && c.precio_venta_real === null));
+    ok('venta manual (tradeo u otro keko): FIFO o de un lote; tradeo sin comision (creditos o lingos), mercadillo guarda el neto; revertir la deshace');
+
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);
     assert.equal(est.data.pendientes, 0);

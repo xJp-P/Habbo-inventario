@@ -162,6 +162,7 @@ export function InventarioView(props) {
             title: x[0] === 'publicado' ? AYUDA_PUBLICADO : null },
           x[0] === 'publicado' ? h(Ico, { name: 'lock', size: 12, sw: 2.2 }) : null, x[1], h('span', { className: 'mono' }, cuenta[x[0]]));
       }),
+      h('button', { className: 'btn', onClick: props.onVentaManual, title: 'Registrar una venta hecha fuera del Sniper: un tradeo o una venta desde otro keko' }, h(Ico, { name: 'tag', size: 14 }), 'Venta'),
       h('button', { className: 'btn btn-verde', onClick: props.onNueva }, h(Ico, { name: 'plus', size: 14, sw: 2.4 }), 'Compra')),
 
     h('div', { className: 'tabla-caja' },
@@ -199,7 +200,7 @@ export function InventarioView(props) {
                   : l.estado === 'comprado'
                   ? h('span', { style: { display: 'inline-flex', gap: 6 } },
                       l.pendiente ? null : h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pasa a Publicado (todas sus unidades en mano)', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
-                      h('button', { className: 'btn btn-chico', title: 'Lo vendiste en mano (intercambio o venta directa)', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
+                      h('button', { className: 'btn btn-chico', title: 'Lo vendiste fuera del Sniper: tradeo o venta desde otro keko', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
                   : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
               if (abiertoEste) {
                 filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: 10, className: 'detalle' },

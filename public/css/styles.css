@@ -93,6 +93,9 @@ input[type=number]{-moz-appearance:textfield}
 .precio-editable svg{opacity:.35;transition:opacity .15s}
 .precio-editable:hover{border-color:var(--border);background:var(--bg3)}
 .precio-editable:hover svg{opacity:1}
+.lista-furnis{display:flex;flex-direction:column;gap:4px;margin-top:8px;max-height:280px;overflow-y:auto}
+.lista-furni{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font:inherit;font-size:13px;cursor:pointer;text-align:left}
+.lista-furni:hover{border-color:var(--green-bd);background:var(--green-bg)}
 .check{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2)}
 .check input{width:16px;height:16px;accent-color:var(--green2);cursor:pointer}
 .par-precios{display:grid;grid-template-columns:1fr 1fr;gap:10px}
