@@ -1,0 +1,17 @@
+node_modules/
+dist/
+
+# Datos personales y secretos: NUNCA al repositorio
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.bak
+*.xlsx
+~$*.xlsx
+
+.DS_Store
+Thumbs.db
+.claude/
+*.log
