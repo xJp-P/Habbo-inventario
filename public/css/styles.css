@@ -227,4 +227,4 @@ input[type=number]{-moz-appearance:textfield}
 .chip.morado.activo{background:var(--purple-bg);border-color:var(--purple-bd);color:var(--purple)}
 .tabla tbody tr.publicada td:first-child{box-shadow:inset 3px 0 0 var(--purple)}
 .morado{color:var(--purple)}
-.logo-app{width:30px;height:30px;image-rendering:pixelated;flex-shrink:0}
+.logo-app{width:30px;height:30px;flex-shrink:0}

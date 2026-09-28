@@ -34,7 +34,7 @@ function enlacesSupabase(url) {
 
 function Logo() {
   return h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 } },
-    h('img', { src: '/img/icono.png', alt: '', style: { width: 52, height: 52, imageRendering: 'pixelated' } }),
+    h('img', { src: '/img/icono.png', alt: '', style: { width: 52, height: 52 } }),
     h('div', null, h('div', { style: { fontWeight: 700, fontSize: 20 } }, 'Habbo Inventario'), h('div', { className: 'suave', style: { fontSize: 13 } }, 'Compra y venta de furnis · Habbo.es')));
 }
 
