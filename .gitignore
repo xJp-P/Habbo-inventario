@@ -2,6 +2,7 @@ node_modules/
 dist/
 
 # Datos personales y secretos: NUNCA al repositorio
+CLAUDE.md
 .env
 .env.*
 !.env.example
