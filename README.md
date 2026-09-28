@@ -24,6 +24,7 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 | **Resumen** | Lo **publicado** (inversión, lo que te entraría, ganancia esperada y margen), lo que tienes **en mano** (unidades y costo), ventas realizadas, compras del Sniper por revisar, alertas de lo publicado con pérdida y la tasa del Lingo |
 | **Mercadillo** | Solo lo que está publicado en el mercadillo de Habbo.es: precio de lista, unidades, costo promedio y ganancia neta esperada. En cada fila, **Vendido** y **Retirar** (de lo más antiguo a lo más nuevo, FIFO) |
 | **Inventario** | Cada lote en tres pestañas: **Comprado** (en mano, solo costo), **Publicado** y **Vendido**. Publicar, retirar, registrar ventas fuera del Sniper (tradeos sin comisión o ventas desde otro keko) y el número de serie de los **LTD** (#45). Arriba, las compras que llegaron del Sniper para revisarlas |
+| **Auditoría** | Compara el inventario de Habbo que envía cada sniper (uno por keko) con lo que la app tiene en mano y muestra **solo las diferencias**: sobrantes (entrada con costo, «son de este keko» o «volvieron de otro keko»), faltantes (las vendí, están en otro keko o borrar), LTD con otro número y furnis sin registrar (agregar o quitar de la auditoría) |
 | **Ajustes** | Tokens de tus snipers (uno por VPS), importar desde Excel, catálogo de Habbo.es, versión y actualizaciones, tema y cuenta |
 
 Lo que tienes en mano no tiene precio ni ganancia: el precio aparece al publicar o al vender. Vender una parte de un lote lo divide y congela el precio real de venta.
@@ -50,7 +51,7 @@ Tiempo aproximado: **10 minutos**. Solo necesitas una cuenta gratuita de Supabas
 | Paso | Qué haces | Dónde |
 |---|---|---|
 | [1](#paso-1--crear-el-proyecto-en-supabase) | Crear el proyecto | supabase.com |
-| [2](#paso-2--ejecutar-las-migraciones-en-orden) | Instalar la base de datos (10 archivos `.sql`, en orden) | SQL Editor de Supabase |
+| [2](#paso-2--ejecutar-las-migraciones-en-orden) | Instalar la base de datos (11 archivos `.sql`, en orden) | SQL Editor de Supabase |
 | [3](#paso-3--crear-tu-usuario-y-cerrar-el-registro) | Crear tu usuario y cerrar el registro | Authentication de Supabase |
 | [4](#paso-4--copiar-la-url-y-la-clave-pública) | Copiar la URL y la clave pública | Project Settings de Supabase |
 | [5](#paso-5--conectar-la-app) | Conectar la app: con el instalador **o** desde el código con `.env` | Tu PC |
@@ -87,6 +88,7 @@ Las migraciones son los archivos de [`supabase/migrations/`](supabase/migrations
 | 8 | `20261004000000_venta_en_mano.sql` | Ventas manuales (tradeos y otros kekos) |
 | 9 | `20261005000000_sin_precio_de_referencia.sql` | Lo que está en mano solo tiene costo |
 | 10 | `20261006000000_numero_ltd.sql` | Número de serie de los LTD |
+| 11 | `20261007000000_auditoria_inventario.sql` | Auditoría del inventario de Habbo (por keko) |
 
 Para cada archivo, en orden:
 

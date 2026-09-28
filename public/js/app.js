@@ -22,6 +22,7 @@ import { ResumenView } from './vistas/Resumen.js';
 import { MercadilloView } from './vistas/Mercadillo.js';
 import { InventarioView } from './vistas/Inventario.js';
 import { AjustesView } from './vistas/Ajustes.js';
+import { AuditoriaView } from './vistas/Auditoria.js';
 import { CompraModal } from './modales/CompraModal.js';
 import { VenderModal } from './modales/VenderModal.js';
 import { PublicarModal } from './modales/PublicarModal.js';
@@ -34,6 +35,7 @@ var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
   ['mercadillo', 'store', 'Mercadillo'],
   ['inventario', 'box', 'Inventario'],
+  ['auditoria', 'audit', 'Auditoría'],
   ['ajustes', 'plug', 'Ajustes'],
 ];
 
@@ -51,6 +53,7 @@ function App() {
   var sFil = useState(''); var filtroFurni = sFil[0]; var setFiltroFurni = sFil[1];
   var sFilE = useState('comprado'); var filtroEstado = sFilE[0]; var setFiltroEstado = sFilE[1];
   var sMig = useState(null); var faltanMig = sMig[0]; var setFaltanMig = sMig[1];
+  var sAud = useState(null); var resAuditoria = sAud[0]; var setResAuditoria = sAud[1];
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -84,6 +87,8 @@ function App() {
     return Promise.all([API.get('/api/resumen'), API.get('/api/furnis'), API.get('/api/compras'), API.get('/api/pendientes')])
       .then(function (r) {
         if (r.every(function (x) { return x; })) setDatos({ resumen: r[0], furnis: r[1], compras: r[2], pendientes: r[3] });
+        // Diferencias de la auditoria (aparte: sin la migracion responde vacio).
+        API.get('/api/auditoria/resumen').then(function (a) { if (a) setResAuditoria(a); });
       });
   }, []);
 
@@ -192,6 +197,10 @@ function App() {
     onPublicar: function (l) { setModal({ tipo: 'publicar', furni: furniDe(l.furni_id), lotes: enManoFifo(l.furni_id) }); },
     onCambio: cambio,
   });
+  else if (vista === 'auditoria') contenido = h(AuditoriaView, {
+    furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio,
+    onError: function (m) { avisar(m, 'error'); },
+  });
   else contenido = h(AjustesView, {
     cuenta: cuenta, tema: tema, onTema: setTema, onSalir: salir, onCambio: cambio,
     onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
@@ -215,7 +224,8 @@ function App() {
         return h('button', { key: n[0], className: 'nav-item' + (vista === n[0] ? ' active' : ''), onClick: function () { navegar(n[0]); } },
           h(Ico, { name: n[1], size: 18, color: vista === n[0] ? 'var(--green)' : 'var(--text3)' }),
           h('span', { style: { flex: 1 } }, n[2]),
-          n[0] === 'inventario' && huerfanos ? h('span', { className: 'tag tag-ambar', title: 'Furnis del Sniper por revisar' }, huerfanos) : null);
+          n[0] === 'inventario' && huerfanos ? h('span', { className: 'tag tag-ambar', title: 'Furnis del Sniper por revisar' }, huerfanos) : null,
+          n[0] === 'auditoria' && resAuditoria && resAuditoria.pendientes ? h('span', { className: 'tag tag-azul', title: 'Diferencias con el inventario de Habbo' }, resAuditoria.pendientes) : null);
       })),
       h('div', { className: 'sidebar-footer' },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },

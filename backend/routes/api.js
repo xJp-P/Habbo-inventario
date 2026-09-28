@@ -50,6 +50,14 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.post('/api/furnis/:id/vender-en-mano', async (req, res) => res.json(await negocio.venderEnMano(id(req), req.body || {})));
   r.post('/api/furnis/:id/retirar', async (req, res) => res.json(await negocio.retirarFurni(id(req), req.body || {})));
 
+  // ── Auditoria del inventario de Habbo (por keko) ─────────────────────────
+  r.get('/api/auditoria', async (req, res) => res.json(await negocio.auditoria(req.query.keko)));
+  r.get('/api/auditoria/resumen', async (_req, res) => res.json(await negocio.resumenAuditoria()));
+  r.post('/api/auditoria/mover', async (req, res) => res.json(await negocio.moverAKeko(req.body || {})));
+  r.post('/api/auditoria/baja', async (req, res) => res.json(await negocio.darDeBaja(req.body || {})));
+  r.post('/api/auditoria/excluir', async (req, res) => res.json(await negocio.excluirDeAuditoria(req.body || {})));
+  r.post('/api/auditoria/entrada', async (req, res) => res.status(201).json(await negocio.entradaAuditoria(req.body || {})));
+
   // ── Compras / lotes (vista Inventario) ───────────────────────────────────
   r.get('/api/compras', async (req, res) => res.json(await negocio.listarCompras({ pendientes: req.query.pendientes === '1' })));
   r.get('/api/compras/:id', async (req, res) => res.json(await negocio.compraPorId(id(req))));

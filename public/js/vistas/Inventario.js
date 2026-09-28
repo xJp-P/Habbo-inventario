@@ -213,6 +213,8 @@ export function InventarioView(props) {
                 filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: conPrecio ? 10 : 7, className: 'detalle' },
                   h('div', { className: 'detalle-grid' },
                     h('div', null, h('div', { className: 'dato-l' }, 'Origen'), h('div', { className: 'dato-v' }, (ORIGEN[l.fuente] || l.fuente) + (l.instancia ? ' · ' + l.instancia : ''))),
+                    l.estado !== 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Keko'),
+                      h('div', { className: 'dato-v' }, l.keko || h('span', { className: 'tenue' }, 'Sin asignar (se asigna en Auditoría)'))) : null,
                     h('div', null, h('div', { className: 'dato-l' }, 'Número LTD'),
                       h('div', { className: 'dato-v', style: { display: 'flex', alignItems: 'center', gap: 8 } },
                         l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : h('span', { className: 'tenue' }, '—'),

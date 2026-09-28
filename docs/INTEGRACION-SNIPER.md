@@ -101,3 +101,48 @@ Responde `{ "ok": true, "hotel": "es", "token": "<nombre del token>", "pendiente
 ## 4. Requisito del lado de la app
 
 Tras aplicar la migración hay que **abrir la app de escritorio una vez**: al iniciar sesión completa el `sprite_id` de los furnis que ya existían (los importados del Excel) a partir de su `classname`. Sin eso, un `publicar` de un furni antiguo no encontraría su stock. A partir de ahí la app mantiene todo sincronizado sola cada vez que recibe eventos.
+
+---
+
+## 5. Auditoría del inventario (requiere `20261007000000_auditoria_inventario.sql`)
+
+Cuando el bot termina de cargar el inventario completo del keko (último fragmento de `In.FurniList`, al iniciar sesión o al recargarlo), lo envía a la app para conciliarlo con el libro mayor. La app compara **en vivo** esa foto con lo que tiene **en mano** en ese keko (comprado y por revisar; lo publicado no cuenta) y le muestra al usuario solo las diferencias.
+
+```
+POST {SUPABASE_URL}/rest/v1/rpc/auditar_inventario
+apikey: <SUPABASE_ANON_KEY>
+Authorization: Bearer <SUPABASE_ANON_KEY>
+Content-Type: application/json
+
+{
+  "token_sniper": "hbi_…",
+  "keko": "NombreDelKeko",
+  "hotel": "es",
+  "inventario": [
+    { "sprite_id": 4623, "tipo": "suelo", "cantidad": 17 },
+    { "sprite_id": 4001, "tipo": "pared", "cantidad": 2 },
+    { "sprite_id": 8120, "tipo": "suelo", "cantidad": 2, "ltds": [45, 46] }
+  ]
+}
+```
+
+| Campo | Obligatorio | Qué es |
+|---|---|---|
+| `token_sniper` | Sí | El mismo token del sniper de ese VPS |
+| `keko` | Sí | Nombre del keko de Habbo cuyo inventario es (hasta 60 caracteres). El token **aprende** su keko: desde ese envío, las compras de ese sniper quedan en ese keko, publica primero lo que está en él y lo recuperado vuelve a él |
+| `hotel` | Sí | `es` (solo Habbo.es; otro hotel se rechaza) |
+| `inventario` | Sí | Lista (puede estar vacía, hasta 50.000 elementos). Un elemento por furni con su `cantidad`, o uno por unidad (sin `cantidad` vale 1): la base los agrupa |
+| `sprite_id` + `tipo` | Sí (o `nombre`) | La identidad del furni, igual que en los eventos (`tipo`: `suelo`/`pared`, también `floor`/`wall`). Sin `sprite_id` se acepta `nombre` si la app tiene un furni con ese nombre |
+| `ltds` / `numero_ltd` | Opcional | Números de serie de los LTD de ese furni (`[45, 46]`, o `"#45"` en un elemento por unidad). Con ellos la app detecta un LTD con otro número |
+
+**Cuándo enviarlo:** por la **misma cola** que los eventos y **después** de los que estén pendientes. Así una compra que aún no llegó a la app no aparece como sobrante falso. Cada envío **reemplaza** la foto anterior de ese keko (idempotente: reenviar no duplica nada).
+
+**Respuesta (200):**
+
+```json
+{ "keko": "NombreDelKeko", "recibidos": 3, "furnis": 3, "unidades": 21, "errores": [],
+  "resumen": { "coinciden": 2, "sobrantes": 1, "faltantes": 0, "ltd": 0, "no_registrados": 0, "sin_keko": 0, "excluidos": 0 } }
+```
+
+Los elementos inválidos (sin `sprite_id` ni `nombre` conocido, cantidad no válida) van a `errores` con su `indice` sin frenar el resto. El `resumen` sirve para el log del bot (p. ej. «3 diferencias»). Errores: 401 token inválido o revocado; 400 falta `keko`, hotel no admitido o `inventario` no es una lista; 404 (`PGRST202`) falta ejecutar la migración.
+

@@ -129,6 +129,14 @@ function crearServicioNegocio({ conexion, furnidata }) {
   }
 
   // ── Compras (vista INVENTARIO) ────────────────────────────────────────────
+  // Nombre de un keko de Habbo (donde estan las unidades). null si viene vacio.
+  function nombreKeko(v) {
+    const s = String(v ?? '').trim();
+    if (!s) return null;
+    if (s.length > 60) throw new ClientError('El nombre del keko admite hasta 60 caracteres.');
+    return s;
+  }
+
   // Numero de serie de un LTD: 45, "45" o "#45". null si viene vacio.
   function numeroLtd(v) {
     if (v === undefined || v === null || String(v).trim() === '') return null;
@@ -145,6 +153,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
       p_fecha: entrada.fecha_compra || hoyStr(),
       p_notas: entrada.notas || null,
       p_numero_ltd: numeroLtd(entrada.numero_ltd),
+      p_keko: nombreKeko(entrada.keko),
     };
     if (entrada.furni_id) {
       args.p_furni_id = Number(entrada.furni_id);
@@ -152,8 +161,10 @@ function crearServicioNegocio({ conexion, furnidata }) {
       const existente = await buscarFurni(entrada);
       if (existente) args.p_furni_id = existente.id;
       else {
+        // Con sprite y tipo del catalogo, la auditoria del inventario lo reconoce.
         const oficial = resolverNombre(entrada);
-        Object.assign(args, { p_nombre: oficial.nombre, p_classname: oficial.classname, p_revision: oficial.revision });
+        Object.assign(args, { p_nombre: oficial.nombre, p_classname: oficial.classname, p_revision: oficial.revision,
+          p_sprite_id: oficial.sprite_id ?? null, p_tipo: oficial.tipo || null });
       }
     }
     const r = await datos(db().rpc('crear_compra', args));
@@ -287,6 +298,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
       p_mercadillo: entrada.mercadillo === true,
       p_fecha: entrada.fecha || hoyStr(),
       p_lote_id: entrada.lote_id ? Number(entrada.lote_id) : null,
+      p_keko: nombreKeko(entrada.keko),
     }));
     return { cantidad: r.cantidad, precio_neto: r.precio_neto, comision: r.comision, moneda: r.moneda, ventas: r.ventas };
   }
@@ -428,6 +440,113 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { actualizados, vinculados, sprites, unidos };
   }
 
+  // ── Auditoria del inventario de Habbo (conciliacion por keko) ────────────
+  // Cada sniper envia el inventario de su keko (auditar_inventario); aqui se compara en
+  // vivo con lo que esta en mano en ese keko y se resuelven las diferencias. Sin la
+  // migracion 20261007000000 esas funciones no existen: el resumen responde vacio (el
+  // aviso de migraciones ya pide instalarla) y la vista explica que falta.
+  // db/respuestas.js marca con SIN_ESQUEMA una funcion o tabla que no existe.
+  function faltaMigracion(e) {
+    return Boolean(e && e.codigo === 'SIN_ESQUEMA');
+  }
+
+  // Nombre e icono del catalogo para los furnis que la app no tiene registrados.
+  function conCatalogo(fila) {
+    const it = furnidata && fila.sprite_id !== null ? furnidata.porSpriteId(fila.sprite_id, fila.tipo) : null;
+    return it ? { ...fila, catalogo: { nombre: it.nombre, classname: it.classname, revision: it.revision } } : fila;
+  }
+
+  async function auditoria(keko) {
+    let r;
+    try {
+      r = await datos(db().rpc('auditoria_inventario', { p_keko: nombreKeko(keko) }));
+    } catch (e) {
+      if (faltaMigracion(e)) {
+        throw new ClientError('Falta instalar la migracion 20261007000000_auditoria_inventario.sql en tu Supabase (usa el aviso de la app).', 428);
+      }
+      throw e;
+    }
+    return { ...r, filas: (r.filas || []).map(conCatalogo), excluidos: (r.excluidos || []).map(conCatalogo) };
+  }
+
+  async function resumenAuditoria() {
+    try {
+      return await datos(db().rpc('resumen_auditoria'));
+    } catch (e) {
+      if (faltaMigracion(e)) return { pendientes: 0, kekos: [], sin_migracion: true };
+      throw e;
+    }
+  }
+
+  function lotesDe(v) {
+    if (!Array.isArray(v) || !v.length) return null;
+    return v.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0);
+  }
+
+  function moverAKeko(entrada) {
+    return datos(db().rpc('mover_a_keko', {
+      p_furni_id: Number(entrada.furni_id),
+      p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad', minimo: 1, entero: true }),
+      p_desde: nombreKeko(entrada.desde),
+      p_hacia: nombreKeko(entrada.hacia),
+      p_lote_ids: lotesDe(entrada.lote_ids),
+    }));
+  }
+
+  function darDeBaja(entrada) {
+    return datos(db().rpc('dar_de_baja', {
+      p_furni_id: Number(entrada.furni_id),
+      p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad', minimo: 1, entero: true }),
+      p_keko: nombreKeko(entrada.keko),
+      p_lote_ids: lotesDe(entrada.lote_ids),
+    }));
+  }
+
+  // «Quitar de la auditoria» de uno o varios furnis (con 0 unidades vuelve a incluirlos).
+  async function excluirDeAuditoria(entrada) {
+    const keko = nombreKeko(entrada.keko);
+    const items = Array.isArray(entrada.items) ? entrada.items : [entrada];
+    for (const it of items) {
+      await datos(db().rpc('excluir_de_auditoria', {
+        p_keko: keko,
+        p_sprite_id: Number(it.sprite_id),
+        p_tipo: it.tipo === 'pared' ? 'pared' : 'suelo',
+        p_unidades: Number(it.unidades) || 0,
+        p_habbo: Number.isFinite(Number(it.habbo)) ? Number(it.habbo) : null,
+        p_app: Number.isFinite(Number(it.app)) ? Number(it.app) : null,
+      }));
+    }
+    return { excluidos: items.length };
+  }
+
+  // Entrada con costo: de un furni ya registrado, o de uno que la app no conocia (se
+  // crea con el nombre oficial y su sprite, para que la auditoria lo reconozca).
+  async function entradaAuditoria(entrada) {
+    const base = { cantidad: entrada.cantidad, precio_compra: entrada.precio, moneda_compra: entrada.moneda,
+                   keko: entrada.keko, numero_ltd: entrada.numero_ltd,
+                   notas: entrada.notas || 'Entrada por auditoria del inventario' };
+    if (entrada.furni_id) return crearCompra({ ...base, furni_id: entrada.furni_id });
+    const sprite = Number(entrada.sprite_id);
+    const tipo = entrada.tipo === 'pared' ? 'pared' : 'suelo';
+    if (!Number.isInteger(sprite) || sprite < 1) throw new ClientError('Falta el sprite del furni.');
+    const it = furnidata ? furnidata.porSpriteId(sprite, tipo) : null;
+    const r = await datos(db().rpc('crear_compra', {
+      p_nombre: it ? it.nombre : 'Sprite ' + sprite + ' (' + tipo + ')',
+      p_classname: it ? it.classname : null,
+      p_revision: it ? it.revision : null,
+      p_sprite_id: sprite,
+      p_tipo: tipo,
+      p_cantidad: numeroValido(base.cantidad ?? 1, { campo: 'La cantidad', minimo: 1, entero: true }),
+      p_moneda: monedaDesdeTexto(base.moneda_compra),
+      p_precio: numeroValido(base.precio_compra, { campo: 'El precio de compra' }),
+      p_fecha: hoyStr(),
+      p_notas: base.notas,
+      p_numero_ltd: numeroLtd(base.numero_ltd),
+      p_keko: nombreKeko(base.keko),
+    }));
+    return compraPorId(r.compra_id);
+  }
+
   return {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
@@ -435,6 +554,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     vender, revertirVenta, asignarLtd, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
     resolverNombre, sincronizarConCatalogo,
+    auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,
   };
 }
 

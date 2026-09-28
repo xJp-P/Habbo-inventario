@@ -112,6 +112,7 @@ export function AjustesView(props) {
   function simular(tipo) {
     API.post('/api/demo/simular-sniper', { tipo: tipo }).then(function (r) {
       if (r && r.errores && r.errores.length) props.onError(r.errores[0].error);
+      if (r && tipo === 'inventario') props.onCambio('Inventario de ' + r.keko + ' recibido: revisa Auditoría');
       cargar();
     });
   }
@@ -137,7 +138,8 @@ export function AjustesView(props) {
         h('span', { style: { flex: 1, minWidth: 200 } }, 'Modo demo: la base es local. Simula lo que envía el Sniper:'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('compra'); } }, h(Ico, { name: 'cart', size: 12 }), 'Compra'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('publicar'); } }, h(Ico, { name: 'lock', size: 12 }), 'Publicar'),
-        h('button', { className: 'btn btn-chico', onClick: function () { simular('recuperar'); } }, h(Ico, { name: 'undo', size: 12 }), 'Recuperar')) : null,
+        h('button', { className: 'btn btn-chico', onClick: function () { simular('recuperar'); } }, h(Ico, { name: 'undo', size: 12 }), 'Recuperar'),
+        h('button', { className: 'btn btn-chico', onClick: function () { simular('inventario'); } }, h(Ico, { name: 'audit', size: 12 }), 'Inventario')) : null,
       h(Campo, { l: 'Clave del proyecto' }, h('span', { className: 'suave', style: { fontSize: 13 } }, 'La misma Anon Key de tu .env (va en las cabeceras apikey y Authorization).')),
 
       nuevo ? h('div', { className: 'token-nuevo', style: { margin: '10px 0' } },

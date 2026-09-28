@@ -36,6 +36,7 @@ const MIGRACIONES = [
   { archivo: '20261004000000_venta_en_mano.sql', titulo: 'Ventas manuales (tradeos y otros kekos)', sonda: funcion('vender_en_mano', { p_furni_id: -1, p_cantidad: 1, p_precio: 1 }) },
   { archivo: '20261005000000_sin_precio_de_referencia.sql', titulo: 'Lo que está en mano solo tiene costo', sonda: columna('v_furnis', 'costo_publicado_cr') },
   { archivo: '20261006000000_numero_ltd.sql', titulo: 'Número de serie de los LTD', sonda: funcion('asignar_ltd', { p_id: -1, p_numero: 1 }) },
+  { archivo: '20261007000000_auditoria_inventario.sql', titulo: 'Auditoría del inventario de Habbo (por keko)', sonda: funcion('auditoria_inventario', { p_keko: 'sonda' }) },
 ];
 
 const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204', 'PGRST205', '42P01']);

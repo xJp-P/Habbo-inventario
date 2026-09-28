@@ -4,7 +4,8 @@
 //
 // Levanta el Postgres local (PGlite) con el MISMO esquema de supabase/migrations
 // (empieza vacio; `npm run demo` importa el unico .xlsx de la raiz, si hay) y permite
-// simular eventos de un SniperMercadillo (compra, publicar, recuperar) desde Ajustes. Los eventos pasan por
+// simular eventos de un SniperMercadillo (compra, publicar, recuperar y el envio del
+// inventario de su keko para la auditoria) desde Ajustes. Los eventos pasan por
 // la funcion SQL real registrar_eventos_sniper, con la clave "anon", un token de sniper
 // y SOLO el sprite_id del furni, igual que los envia el bot desde el VPS.
 //
@@ -76,7 +77,35 @@ async function crearDemo({ dirDatos }) {
     return { tipo_evento: 'recuperar', id_externo: id, sprite_id: f.sprite_id, tipo: f.tipo, cantidad: 1, hotel: 'es' };
   }
 
+  // Inventario del keko "KekoDemo" como lo enviaria el bot al iniciar sesion: lo que
+  // esta en mano en la app, con diferencias de ejemplo (2 unidades de mas que llegaron
+  // por un tradeo, 1 de menos que se vendio a mano) y un furni de decoracion que la
+  // app no tiene registrado.
+  async function simularInventario() {
+    const [furnis, compras] = await Promise.all([negocio.listarFurnis(), negocio.listarCompras()]);
+    const porId = new Map(furnis.filter((f) => f.sprite_id !== null).map((f) => [f.id, f]));
+    const grupos = new Map();
+    for (const c of compras) {
+      const f = porId.get(c.furni_id);
+      if (c.estado !== 'comprado' || !f) continue;
+      const clave = f.tipo + ':' + f.sprite_id;
+      const g = grupos.get(clave) || { sprite_id: f.sprite_id, tipo: f.tipo, cantidad: 0, ltds: [] };
+      g.cantidad += c.cantidad;
+      if (c.numero_ltd) g.ltds.push(c.numero_ltd);
+      grupos.set(clave, g);
+    }
+    const lista = [...grupos.values()];
+    if (lista[0]) lista[0].cantidad += 2;
+    if (lista[1]) lista[1].cantidad -= 1;
+    const deco = CANDIDATOS.map((c) => furnidata.porClase(c)).find((f) => f && !grupos.has(f.tipo + ':' + f.sprite_id));
+    if (deco) lista.push({ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 12 });
+    const r = await anon.rpc('auditar_inventario', { token_sniper: token, keko: 'KekoDemo', hotel: 'es', inventario: lista.filter((g) => g.cantidad > 0) });
+    if (r.error) throw new Error(r.error.message);
+    return r.data;
+  }
+
   async function simularEvento(tipo) {
+    if (tipo === 'inventario') return simularInventario();
     if (!['compra', 'publicar', 'recuperar'].includes(tipo)) throw new Error('Tipo de evento no valido.');
     const evento = await armarEvento(tipo);
     const r = await anon.rpc('registrar_eventos_sniper', { token_sniper: token, eventos: [evento] });

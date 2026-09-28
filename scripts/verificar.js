@@ -653,6 +653,79 @@ async function main() {
     assert.equal((await leerLote(trono.id)).numero_ltd, 45, 'publicar y retirar conserva el numero');
     ok('asignar numero LTD: separa una unidad de un lote en mano, cambia o quita; lo publicado de varias no; un lote numerado no se fusiona al revertir y conserva su numero');
 
+    // ── Auditoria del inventario de Habbo (por keko), con un usuario aparte ──
+    await clienteA.crearUsuario('caro@prueba.local', 'clave-caro');
+    const clienteC = clienteA.comoAnon();
+    await clienteC.auth.signInWithPassword({ email: 'caro@prueba.local', password: 'clave-caro' });
+    const conexC = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: clienteC });
+    await conexC.iniciar();
+    const negC = crearServicioNegocio({ conexion: conexC, furnidata });
+    const veloC = await negC.crearCompra({ nombre: 'Dragón Velo de Arena', cantidad: 3, precio_compra: 700 });
+    const caraC = await negC.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 2, precio_compra: 30, keko: 'KekoC' });
+    const tronoC = await negC.crearCompra({ nombre: 'Trono Dragón', cantidad: 1, precio_compra: 500, numero_ltd: 45, keko: 'KekoC' });
+    assert.deepEqual([veloC.keko, caraC.keko], [null, 'KekoC'], 'la compra manual guarda su keko (o queda sin asignar)');
+    const spr = async (lote) => { const f = await negC.furniPorId(lote.furni_id); assert.ok(f.sprite_id, 'crear_compra guarda el sprite del catalogo'); return { sprite_id: f.sprite_id, tipo: f.tipo }; };
+    const sV = await spr(veloC); const sCa = await spr(caraC); const sT = await spr(tronoC);
+    const deco = furnidata.porClase('val15_sakura');
+    const tkC = await negC.crearToken('VPS de prueba C');
+    const anonC = clienteA.comoAnon();
+    const enviarInv = (inventario) => anonC.rpc('auditar_inventario', { token_sniper: tkC.token, keko: 'KekoC', hotel: 'es', inventario });
+    r = await enviarInv([{ ...sV, cantidad: 5 }, { ...sCa }, { ...sT, numero_ltd: '#46' },
+      { sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 40 }, { nombre: 'No existe' }]);
+    assert.equal(r.error, null);
+    assert.deepEqual([r.data.furnis, r.data.unidades, r.data.errores.length], [4, 47, 1]);
+    let audC = await negC.auditoria();
+    const filaC = (sp) => audC.filas.find((x) => x.sprite_id === sp.sprite_id && x.tipo === sp.tipo);
+    assert.equal(audC.keko, 'KekoC');
+    assert.deepEqual([filaC(sV).categoria, filaC(sV).diferencia, filaC(sV).sin_asignar], ['sobrante', 5, 3]);
+    assert.deepEqual([filaC(sCa).categoria, filaC(sCa).diferencia], ['faltante', -1]);
+    assert.deepEqual([filaC(sT).categoria, filaC(sT).ltds_faltantes, filaC(sT).ltds_nuevos, filaC(sT).lotes_ltd_faltantes[0].lote_id], ['ltd', [45], [46], tronoC.id]);
+    const decoC = filaC({ sprite_id: deco.sprite_id, tipo: deco.tipo });
+    assert.deepEqual([decoC.categoria, decoC.diferencia, decoC.catalogo.nombre], ['no_registrado', 40, deco.nombre]);
+    ok('auditoria: el Sniper envia el inventario de su keko (por sprite o nombre; errores aparte) y la app ve sobrantes, faltantes, LTD con otro numero y furnis sin registrar');
+
+    await negC.moverAKeko({ furni_id: veloC.furni_id, cantidad: 3, desde: null, hacia: 'KekoC' });
+    await negC.entradaAuditoria({ furni_id: veloC.furni_id, cantidad: 2, precio: 650, moneda: 'creditos', keko: 'KekoC' });
+    await negC.venderEnMano(caraC.furni_id, { cantidad: 1, precio: 45, moneda: 'creditos', keko: 'KekoC' });
+    await negC.asignarLtd(tronoC.id, 46);
+    await negC.excluirDeAuditoria({ keko: 'KekoC', sprite_id: deco.sprite_id, tipo: deco.tipo, unidades: 40, habbo: 40, app: 0 });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([audC.filas.length, audC.resumen.coinciden, audC.resumen.excluidos], [0, 3, 1], 'todo resuelto');
+    assert.equal((await negC.resumenAuditoria()).pendientes, 0);
+    ok('auditoria: se resuelve asignando lo sin keko, con una entrada a costo, una venta desde ese keko, corrigiendo el LTD y quitando la decoracion');
+
+    await negC.moverAKeko({ furni_id: caraC.furni_id, cantidad: 1, desde: 'KekoC', hacia: 'KekoD' });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([filaC(sCa).diferencia, filaC(sCa).otros], [1, [{ keko: 'KekoD', unidades: 1 }]], 'lo movido a otro keko se ofrece como «volvieron de»');
+    await negC.moverAKeko({ furni_id: caraC.furni_id, cantidad: 1, desde: 'KekoD', hacia: 'KekoC' });
+    r = await enviarInv([{ ...sV, cantidad: 5 }, { ...sCa }, { ...sT, ltds: [46] }, { sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 41 }]);
+    audC = await negC.auditoria('KekoC');
+    const sak2 = filaC({ sprite_id: deco.sprite_id, tipo: deco.tipo });
+    assert.deepEqual([sak2.categoria, sak2.diferencia, sak2.exclusion_vencida], ['no_registrado', 41, true], 'si llega otra unidad, la exclusion se cae y se decide de nuevo');
+    await negC.entradaAuditoria({ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 41, precio: 0, keko: 'KekoC' });
+    await negC.excluirDeAuditoria({ keko: 'KekoC', sprite_id: deco.sprite_id, tipo: deco.tipo, unidades: 0 });
+    await negC.darDeBaja({ furni_id: veloC.furni_id, cantidad: 1, keko: 'KekoC' });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual(audC.filas.map((x) => [x.sprite_id, x.categoria, x.diferencia]), [[sV.sprite_id, 'sobrante', 1]], 'la baja borra unidades; el furni no registrado se agrego con su sprite y ya coincide');
+    await negC.entradaAuditoria({ furni_id: veloC.furni_id, cantidad: 1, precio: 700, keko: 'KekoC' });
+    r = await anonC.rpc('registrar_eventos_sniper', { token_sniper: tkC.token, eventos: [{ tipo_evento: 'compra', id_externo: 'aud_1', ...sV, cantidad: 1, precio: 600, hotel: 'es' }] });
+    assert.equal((await negC.compraPorId(r.data.eventos[0].compra_id)).keko, 'KekoC', 'lo que compra el sniper queda en su keko');
+    ok('auditoria: otro keko (mover y volver), la exclusion se cae si cambia la cantidad, alta de un furni no registrado, baja, y las compras del sniper heredan su keko');
+
+    assert.equal((await anonC.rpc('auditoria_inventario', { p_keko: 'KekoC' })).error.code, '42501');
+    assert.equal((await anonC.from('inventario_habbo').select('keko').limit(1)).error.code, '42501');
+    assert.equal((await anonC.rpc('auditar_inventario', { token_sniper: 'hbi_falso', keko: 'KekoC', hotel: 'es', inventario: [] })).error.code, 'PT401');
+    assert.match((await anonC.rpc('auditar_inventario', { token_sniper: tkC.token, keko: 'KekoC', hotel: 'origins', inventario: [] })).error.message, /Habbo\.es/);
+    await rechaza(negocio.auditoria('KekoC'), /No hay inventario del keko KekoC/);
+    ok('auditoria: la clave anon no la lee, token falso 401, solo Habbo.es, y cada usuario ve solo sus kekos');
+    await negC.crearCompra({ furni_id: caraC.furni_id, cantidad: 1, precio_compra: 30 });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([filaC(sCa).categoria, filaC(sCa).sin_asignar], ['sin_keko', 1], 'una unidad sin keko que aqui no hace falta se muestra aparte');
+    await negC.moverAKeko({ furni_id: caraC.furni_id, cantidad: 1, desde: null, hacia: 'KekoE' });
+    audC = await negC.auditoria('KekoC');
+    assert.equal(filaC(sCa), undefined);
+    ok('auditoria: las unidades sin keko que sobran aparecen aparte y se mueven al keko donde estan');
+
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);
     assert.equal(est.data.pendientes, 0);
