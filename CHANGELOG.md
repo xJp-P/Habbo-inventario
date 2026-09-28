@@ -15,6 +15,9 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 - Conectar con Supabase fallaba con «Invalid path specified in request URL» si la
   Project URL se pegaba con `/rest/v1/` (como la muestra el panel de Supabase). Ahora la
   app deja solo la dirección base del proyecto, también en una conexión ya guardada.
+- Con un proyecto de Supabase recién creado (sin tablas), el asistente se quedaba en
+  «Conectar» con el error «Could not find the table 'public.compras'». Ahora reconoce
+  la base vacía y pasa al paso de instalarla (0 de 10 migraciones).
 
 ## [1.0.0] - 2026-09-28
 

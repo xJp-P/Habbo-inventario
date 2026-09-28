@@ -54,10 +54,13 @@ const SQL_TIEMPO_REAL = `
       'table', tg_table_name, 'eventType', tg_op, 'new', row_to_json(new))::text);
     return new;
   end $$;
-  drop trigger if exists compras_tiempo_real_local on public.compras;
-  create trigger compras_tiempo_real_local after insert or update on public.compras
-    for each row execute function public._local_notificar();
   do $$ begin
+    -- Una base sin migraciones (el proyecto recien creado del asistente) no tiene tablas.
+    if to_regclass('public.compras') is not null then
+      drop trigger if exists compras_tiempo_real_local on public.compras;
+      create trigger compras_tiempo_real_local after insert or update on public.compras
+        for each row execute function public._local_notificar();
+    end if;
     if to_regclass('public.eventos_sniper') is not null then
       drop trigger if exists eventos_tiempo_real_local on public.eventos_sniper;
       create trigger eventos_tiempo_real_local after insert on public.eventos_sniper

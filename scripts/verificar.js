@@ -782,7 +782,7 @@ async function main() {
     let estMig = await instalacion.comprobar(clienteA.comoAnon());
     assert.deepEqual([estMig.instaladas, estMig.completa, estMig.siguiente, estMig.error], [archivosMig.length, true, null, null]);
     assert.equal(await filasBase(), filasAntes, 'las sondas no escriben nada');
-    for (const [desde, instaladas] of [['20260928000000', 1], ['20260930000000', 3], ['20261005000000', 8]]) {
+    for (const [desde, instaladas] of [['00000000000000', 0], ['20260928000000', 1], ['20260930000000', 3], ['20261005000000', 8]]) {
       const parcial = await crearClienteLocal({ omitir: archivosMig.filter((x) => x >= desde) });
       estMig = await instalacion.comprobar(parcial.comoAnon());
       assert.deepEqual([estMig.instaladas, estMig.siguiente, estMig.completa], [instaladas, archivosMig[instaladas], false], `base sin ${desde} y posteriores`);
@@ -796,7 +796,7 @@ async function main() {
     h = await pedir(s2.address().port, 'GET', '/api/instalacion/sql/' + encodeURIComponent('../../package.json'));
     assert.equal(h.status, 404);
     s2.close();
-    ok(`asistente: detecta que migraciones faltan con la clave publica (1, 3, 8 y ${archivosMig.length} de ${archivosMig.length}) sin escribir nada; copia el SQL sin sesion y solo de supabase/migrations`);
+    ok(`asistente: detecta que migraciones faltan con la clave publica (0 en un proyecto recien creado, 1, 3, 8 y ${archivosMig.length} de ${archivosMig.length}) sin escribir nada; copia el SQL sin sesion y solo de supabase/migrations`);
 
     h = await pedir(puerto, 'GET', '/api/icono/clothing_r26_scarface');
     if (h.status === 200) ok(`icono PNG servido desde cache (${h.bytes} bytes)`);
@@ -809,4 +809,6 @@ async function main() {
   console.log(`\n${pasos} verificaciones correctas.\n`);
 }
 
-main().catch((e) => { console.error('\nFALLO: ' + (e && e.stack || e)); process.exitCode = 1; });
+// Un fallo termina el proceso: si una prueba corta a mitad, algun servidor de prueba
+// queda escuchando y la suite parecia colgada en vez de avisar.
+main().catch((e) => { console.error('\nFALLO: ' + (e && e.stack || e)); process.exit(1); });

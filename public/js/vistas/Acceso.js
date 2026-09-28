@@ -122,7 +122,7 @@ function PasoConectar(props) {
   var alEnter = function (e) { if (e.key === 'Enter') conectar(); };
 
   return [
-    h(Titulo, { key: 't', icono: 'plug', titulo: 'Conecta la app con tu proyecto', sub: 'Copia estos dos datos del panel de tu proyecto en Supabase.' }),
+    h(Titulo, { key: 't', icono: 'plug', titulo: 'Conecta la app con tu proyecto', sub: 'Copia estos dos datos del panel de tu proyecto en Supabase. Si la base de datos aún no está instalada, el siguiente paso te guía para hacerlo.' }),
     h(Fld, { key: 'u', label: 'Project URL', ayuda: 'Project Settings → Data API (o el botón Connect).' },
       h('input', { className: 'inp', value: url, placeholder: 'https://abcd1234.supabase.co', autoFocus: true, onChange: function (e) { setUrl(e.target.value); setError(''); }, onKeyDown: alEnter })),
     h(Fld, { key: 'k', label: 'Clave pública', ayuda: 'Project Settings → API Keys: la Publishable key, o la anon public en Legacy API Keys. Nunca la clave secreta: la app la rechaza.' },

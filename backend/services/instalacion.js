@@ -5,7 +5,8 @@
 // DETECCION SIN CLAVE SECRETA: cada migracion deja algo propio (una funcion o una
 // columna) y se consulta con la clave publica y un cliente SIN sesion (rol anon):
 //   - no existe  -> PGRST202 (funcion, en Supabase) · 42883 (funcion, en Postgres)
-//                   42703 / PGRST204 (columna)                           => falta
+//                   42703 / PGRST204 (columna) · PGRST205 / 42P01 (tabla o vista:
+//                   un proyecto recien creado no tiene ninguna)          => falta
 //   - existe     -> 42501 permiso denegado (las funciones de la app estan cerradas a
 //                   anon) o un error propio de la funcion (PTxxx)       => instalada
 //   - otra cosa  -> clave o URL mal, proyecto pausado, sin internet     => no se sabe
@@ -37,7 +38,7 @@ const MIGRACIONES = [
   { archivo: '20261006000000_numero_ltd.sql', titulo: 'Número de serie de los LTD', sonda: funcion('asignar_ltd', { p_id: -1, p_numero: 1 }) },
 ];
 
-const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204']);
+const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204', 'PGRST205', '42P01']);
 
 // 'si' | 'no' | { error } para la respuesta de una sonda.
 function interpretar(r) {
