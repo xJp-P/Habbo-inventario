@@ -991,7 +991,7 @@ async function main() {
     ok('contrato del Sniper: el lote fundido lleva el aviso de promedio solo en su linea y los LTD que llegan juntos en el primer objeto se eligen en cada tramo');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -1010,7 +1010,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -1023,7 +1023,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -1040,7 +1040,7 @@ async function main() {
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
-    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
     await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
     await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
     const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });
@@ -1054,6 +1054,10 @@ async function main() {
     assert.equal(filaG.costos, undefined);
     await new Promise((listo) => setTimeout(listo, 50));
     assert.equal(conexG.auditoriaEnVivo(), false, 'sin la migracion 20261011000000 la app no escucha la foto en vivo (y no se suscribe)');
+    await negG.revocarToken(tkG.id);
+    assert.deepEqual(await negG.vistaLimpieza([tkG.id]), { disponible: false }, 'sin la migracion 20261012000000 no hay vista previa de la limpieza');
+    await rechaza(negG.borrarToken(tkG.id, { limpieza: true }), /20261012000000_limpieza_tokens/);
+    assert.deepEqual(await negG.borrarToken(tkG.id), { borrados: 1 }, 'el borrado simple sigue funcionando sin la migracion');
     assert.deepEqual((await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href)).tramosDelSniper(filaG),
       [{ costo: 15, unidades: 2, medio: true }], 'sin la migracion, un solo tramo: el promedio, marcado como tal');
     await sinTramos.cerrar();
@@ -1124,6 +1128,45 @@ async function main() {
     assert.deepEqual(await negocio.borrarTokensRevocados(), { borrados: 2 });
     assert.ok((await negocio.listarTokens()).every((t) => !t.revocado), 'solo quedan los activos');
     ok('tokens: uno revocado se elimina de la base (uno activo no), tambien todos los revocados a la vez, y lo que envio ese sniper se conserva');
+
+    // ── Limpieza profunda (migracion 20261012000000): el token Y los datos de su keko ──
+    const kL = 'KekoLimpio';
+    const tkL1 = await negocio.crearToken('VPS limpieza 1');
+    const tkL2 = await negocio.crearToken('VPS limpieza 2');
+    const fotoL = (token, keko, cantidad) => anon.rpc('auditar_inventario', { token_sniper: token, keko, hotel: 'es', inventario: [{ sprite_id: velo.sprite_id, tipo: velo.tipo, cantidad }] });
+    assert.equal((await fotoL(tkL1.token, kL, 4)).error, null);
+    assert.equal((await sniper([compraVelo('limp_1', 3, 40)], tkL1.token)).error, null);
+    const veloIdL = (await negocio.listarFurnis()).find((f) => f.sprite_id === velo.sprite_id && f.tipo === velo.tipo).id;
+    const ventaL = await negocio.crearCompra({ furni_id: veloIdL, cantidad: 1, precio_compra: 50, keko: 'kekolimpio' });
+    await negocio.venderEnMano(veloIdL, { cantidad: 1, precio: 80, keko: 'kekolimpio', lote_id: ventaL.id });
+    await negocio.excluirDeAuditoria({ keko: kL, sprite_id: velo.sprite_id, tipo: velo.tipo, unidades: 1, habbo: 4, app: 3 });
+    const otroL = await negocio.crearCompra({ furni_id: veloIdL, cantidad: 2, precio_compra: 45, keko: 'OtroKeko' });
+    assert.equal((await fotoL(tkL2.token, 'kekolimpio', 4)).error, null);
+    await negocio.revocarToken(tkL1.id);
+    let vistaL = await negocio.vistaLimpieza([tkL1.id]);
+    assert.deepEqual([vistaL.disponible, vistaL.bloqueada, vistaL.kekos.map((k) => [k.keko, k.activos])], [true, true, [[kL, ['VPS limpieza 2']]]],
+      'el keko tiene un token activo (el mismo keko de Habbo, sin distinguir mayusculas): la limpieza esta bloqueada');
+    await rechaza(negocio.borrarToken(tkL1.id, { limpieza: true }), /token activo «VPS limpieza 2»/);
+    assert.ok((await negocio.listarTokens()).some((t) => t.id === tkL1.id), 'bloqueada, no se borra nada: ni siquiera el token');
+    await negocio.revocarToken(tkL2.id);
+    vistaL = await negocio.vistaLimpieza([tkL1.id]);
+    const kVista = vistaL.kekos[0];
+    assert.deepEqual([vistaL.bloqueada, kVista.lotes_en_mano, kVista.en_mano, kVista.ventas, kVista.vendidas, !!kVista.foto, kVista.exclusiones, vistaL.eventos],
+      [false, 1, 3, 1, 1, true, 1, 1], 'sin tokens activos, la vista previa dice exactamente lo que se borra');
+    const limpio = await negocio.borrarToken(tkL1.id, { limpieza: true });
+    assert.deepEqual([limpio.borrados, limpio.kekos, limpio.lotes, limpio.eventos], [1, [kL], 2, 1]);
+    const quedaL = async (sql) => (await clienteA.pg.query(sql)).rows[0].n;
+    assert.equal(await quedaL("select count(*)::int as n from public.compras where lower(keko) = 'kekolimpio'"), 0, 'se borran sus lotes en mano, publicados y vendidos');
+    assert.equal(await quedaL("select count(*)::int as n from public.inventario_habbo where lower(keko) = 'kekolimpio'"), 0, 'y la foto de su inventario');
+    assert.equal(await quedaL("select count(*)::int as n from public.exclusiones_auditoria where lower(keko) = 'kekolimpio'"), 0, 'y sus exclusiones');
+    assert.equal((await negocio.compraPorId(otroL.id)).cantidad, 2, 'lo de otros kekos no se toca');
+    assert.equal((await negocio.listarTokens()).find((t) => t.id === tkL2.id).keko, null, 'el otro token revocado olvida ese keko');
+    assert.ok(!(await negocio.listarKekos()).kekos.some((k) => k.nombre.toLowerCase() === 'kekolimpio'), 'el keko desaparece de la app');
+    await negocio.borrarTokensRevocados({ limpieza: true });
+    assert.ok((await negocio.listarTokens()).every((t) => !t.revocado), 'tambien todos los revocados a la vez (sin keko no hay datos que borrar)');
+    const tkVivo = await negocio.crearToken('VPS vivo');
+    await rechaza(negocio.vistaLimpieza([tkVivo.id]), /revócalo primero/);
+    ok('limpieza profunda: borra el token y todos los datos de su keko (lotes, ventas, foto, exclusiones, historial) salvo que el keko tenga un token activo; se ve antes lo que se borra');
 
     // ── Aislamiento entre usuarios + importacion de Excel ──
     const clienteB = clienteA.comoAnon();
@@ -1237,6 +1280,13 @@ async function main() {
     assert.deepEqual([h.status, h.json.borrados], [200, 1]);
     h = await pedir(puerto, 'POST', '/api/sniper/tokens/borrar-revocados', { cuerpo: {} });
     assert.deepEqual([h.status, h.json.borrados], [200, 0]);
+    h = await pedir(puerto, 'POST', '/api/sniper/tokens', { cuerpo: { nombre: 'VPS de prueba 3' } });
+    const idTk3 = h.json.id;
+    await pedir(puerto, 'POST', `/api/sniper/tokens/${idTk3}/revocar`, { cuerpo: {} });
+    h = await pedir(puerto, 'GET', `/api/sniper/tokens/limpieza?ids=${idTk3}`);
+    assert.deepEqual([h.status, h.json.disponible, h.json.kekos, h.json.tokens.map((t) => t.nombre)], [200, true, [], ['VPS de prueba 3']]);
+    h = await pedir(puerto, 'DELETE', `/api/sniper/tokens/${idTk3}?limpieza=1`);
+    assert.deepEqual([h.status, h.json.borrados, h.json.limpieza], [200, 1, true]);
     ok('crear, revocar y eliminar tokens desde la API de la app');
     h = await pedir(puerto, 'POST', '/api/kekos', { cuerpo: { nombre: 'Bodega de Ana' } });
     assert.equal(h.status, 201);

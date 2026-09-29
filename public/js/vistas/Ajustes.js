@@ -20,6 +20,7 @@ import { Ico } from '../componentes/iconos.js';
 import { Confirmar } from '../componentes/base.js';
 import { SelectorKeko } from '../componentes/SelectorKeko.js';
 import { AsignarKekoModal } from '../modales/AsignarKekoModal.js';
+import { EliminarTokensModal } from '../modales/EliminarTokensModal.js';
 
 function copiar(texto, alListo) {
   var hecho = function () { if (alListo) alListo(); };
@@ -162,6 +163,7 @@ export function AjustesView(props) {
   var sKe = useState(null); var editando = sKe[0]; var setEditando = sKe[1];   // { id, nombre }
   var sKa = useState(''); var haciaSinKeko = sKa[0]; var setHaciaSinKeko = sKa[1];
   var sKm = useState(false); var asignando = sKm[0]; var setAsignando = sKm[1];
+  var sEt = useState(null); var eliminando = sEt[0]; var setEliminando = sEt[1];   // tokens a eliminar (modal)
   var electron = typeof window !== 'undefined' && window.electronAPI;
   var kekos = props.kekos || { disponible: false, kekos: [] };
   var kekosSniper = kekos.kekos.filter(function (k) { return k.origen === 'sniper'; });
@@ -202,17 +204,16 @@ export function AjustesView(props) {
       mensaje: h('span', null, '¿Revocar el token ', h('b', null, '«' + t.nombre + '»'), '? El sniper que lo use dejará de poder enviar eventos al instante.'),
       accion: function () { API.post('/api/sniper/tokens/' + t.id + '/revocar', {}).then(function (r) { if (r) { props.onAviso('Token revocado'); cargar(); } }); } });
   }
-  // Un token revocado ya no sirve: se puede borrar de la base para limpiar la tabla. Lo
-  // que envio ese sniper se conserva.
-  function eliminarToken(t) {
-    setConfirmacion({ titulo: 'Eliminar token', peligro: true, icono: 'trash', textoBoton: 'Eliminar',
-      mensaje: h('span', null, '¿Eliminar para siempre el token revocado ', h('b', null, '«' + t.nombre + '»'), '? Se borra de la base de datos; las compras y el inventario que envió ese sniper se conservan.'),
-      accion: function () { API.del('/api/sniper/tokens/' + t.id).then(function (r) { if (r) { props.onAviso('Token «' + t.nombre + '» eliminado'); cargar(); } }); } });
-  }
-  function eliminarRevocados(n) {
-    setConfirmacion({ titulo: 'Eliminar tokens revocados', peligro: true, icono: 'trash', textoBoton: 'Eliminar ' + n,
-      mensaje: h('span', null, '¿Eliminar para siempre los ', h('b', null, n + ' tokens revocados'), '? Se borran de la base de datos; los activos no se tocan y lo que enviaron esos snipers se conserva.'),
-      accion: function () { API.post('/api/sniper/tokens/borrar-revocados', {}).then(function (r) { if (r) { props.onAviso(r.borrados + (r.borrados === 1 ? ' token revocado eliminado' : ' tokens revocados eliminados')); cargar(); } }); } });
+  // Un token revocado ya no sirve: se puede borrar de la base para limpiar la tabla. El
+  // modal deja elegir entre conservar lo que envio su Sniper (borrado simple) o borrar
+  // tambien los datos de su keko (limpieza profunda, bloqueada si el keko tiene un token
+  // activo). Tras una limpieza se recargan todos los datos de la app.
+  function eliminarToken(t) { setEliminando([t]); }
+  function eliminarRevocados() { setEliminando(tokens.filter(function (t) { return t.revocado; })); }
+  function tokensEliminados(msg, limpieza) {
+    setEliminando(null);
+    if (limpieza) props.onCambio(msg); else props.onAviso(msg);
+    cargar();
   }
   function agregarKeko() {
     if (!kekoNuevo.trim()) { props.onError('Escribe el nombre del keko (p. ej. MiKekoBodega).'); return; }
@@ -314,7 +315,7 @@ export function AjustesView(props) {
       h('div', { style: { marginTop: 10 } },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('div', { className: 'fld-l', style: { flex: 1 } }, 'Tokens de tus snipers'),
-          revocados > 1 ? h('button', { className: 'btn btn-chico', onClick: function () { eliminarRevocados(revocados); } },
+          revocados > 1 ? h('button', { className: 'btn btn-chico', onClick: eliminarRevocados },
             h(Ico, { name: 'trash', size: 12, color: 'var(--red)' }), 'Eliminar los ' + revocados + ' revocados') : null),
         tokens.length === 0 ? h('div', { className: 'suave', style: { fontSize: 13, padding: '6px 0' } }, 'Aún no hay tokens. Crea uno por cada VPS.')
           : h('table', { className: 'tabla', style: { marginBottom: 10 } },
@@ -365,6 +366,7 @@ export function AjustesView(props) {
                 h('div', { style: { flex: 1, minWidth: 180 } }, h(SelectorKeko, { kekos: kekos.kekos, valor: haciaSinKeko, onChange: setHaciaSinKeko })),
                 h('button', { className: 'btn btn-chico', onClick: function () { setAsignando(true); } }, 'Revisar y asignar'))) : null,
           ]),
+    eliminando ? h(EliminarTokensModal, { tokens: eliminando, onClose: function () { setEliminando(null); }, onHecho: tokensEliminados }) : null,
     asignando ? h(AsignarKekoModal, { compras: props.compras, furnis: props.furnis, kekos: kekos.kekos, hacia: haciaSinKeko,
       onClose: function () { setAsignando(false); }, onAsignado: function (msg) { props.onCambio(msg); } }) : null,
 

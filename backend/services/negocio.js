@@ -418,10 +418,41 @@ function crearServicioNegocio({ conexion, furnidata }) {
   }
 
   // Eliminar de verdad (no solo marcar) un token YA revocado, o todos los revocados, para
-  // limpiar la tabla de Ajustes. Uno activo nunca: primero se revoca. Lo que envio ese
-  // sniper se conserva (sus eventos y la foto de su keko quedan sin token: la base los
-  // deja en null) y su keko sigue en la lista, porque sale de esa foto.
-  async function borrarToken(id) {
+  // limpiar la tabla de Ajustes. Uno activo nunca: primero se revoca.
+  //   - Borrado simple: lo que envio ese sniper se conserva (sus eventos y la foto de su
+  //     keko quedan sin token: la base los deja en null) y su keko sigue en la lista.
+  //   - Limpieza profunda (`limpieza: true`, migracion 20261012000000): ademas se borran
+  //     todos los datos de su keko (lotes en mano, publicados y vendidos, la foto, las
+  //     exclusiones) y el historial de eventos de esos tokens, en UNA transaccion que se
+  //     niega si el keko tiene un token activo (su Sniper sigue gestionando ese inventario).
+  const MIGRACION_LIMPIEZA = 'Para la limpieza profunda instala la migración 20261012000000_limpieza_tokens.sql en tu Supabase (aviso ámbar de arriba).';
+  function idsTokens(ids) {
+    const lista = [...new Set((Array.isArray(ids) ? ids : [ids]).map(Number))].filter((n) => Number.isInteger(n) && n > 0);
+    if (!lista.length) throw new ClientError('Indica al menos un token.');
+    return lista;
+  }
+
+  // Lo que borraria la limpieza profunda (para el modal), o { disponible: false } sin la migracion.
+  async function vistaLimpieza(ids) {
+    try {
+      return { disponible: true, ...(await datos(db().rpc('vista_limpieza_tokens', { p_ids: idsTokens(ids) }))) };
+    } catch (e) {
+      if (faltaMigracion(e)) return { disponible: false };
+      throw e;
+    }
+  }
+
+  async function limpiarTokens(ids) {
+    try {
+      return await datos(db().rpc('eliminar_tokens_sniper', { p_ids: idsTokens(ids), p_limpieza: true }));
+    } catch (e) {
+      if (faltaMigracion(e)) throw new ClientError(MIGRACION_LIMPIEZA, 428);
+      throw e;
+    }
+  }
+
+  async function borrarToken(id, { limpieza = false } = {}) {
+    if (limpieza) return limpiarTokens([id]);
     const r = await datos(db().from('tokens_sniper').delete().eq('id', Number(id)).eq('revocado', true).select('id'));
     if (r.length) return { borrados: 1 };
     const existe = await datos(db().from('tokens_sniper').select('id').eq('id', Number(id)));
@@ -429,7 +460,11 @@ function crearServicioNegocio({ conexion, furnidata }) {
     throw new ClientError('Ese token no existe.', 404);
   }
 
-  async function borrarTokensRevocados() {
+  async function borrarTokensRevocados({ limpieza = false } = {}) {
+    if (limpieza) {
+      const revocados = await datos(db().from('tokens_sniper').select('id').eq('revocado', true));
+      return revocados.length ? limpiarTokens(revocados.map((t) => t.id)) : { borrados: 0 };
+    }
     const r = await datos(db().from('tokens_sniper').delete().eq('revocado', true).select('id'));
     return { borrados: r.length };
   }
@@ -632,7 +667,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
     vender, revertirVenta, asignarLtd, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
-    importarExcel, listarTokens, crearToken, revocarToken, borrarToken, borrarTokensRevocados,
+    importarExcel, listarTokens, crearToken, revocarToken, borrarToken, borrarTokensRevocados, vistaLimpieza,
     listarKekos, crearKeko, renombrarKeko, borrarKeko, asignarSinKeko,
     resolverNombre, sincronizarConCatalogo,
     auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,

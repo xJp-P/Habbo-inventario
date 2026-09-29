@@ -95,6 +95,7 @@ Las migraciones son los archivos de [`supabase/migrations/`](supabase/migrations
 | 13 | `20261009000000_costos_auditoria.sql` | Costos del Sniper en la auditoría |
 | 14 | `20261010000000_costos_por_tramo.sql` | Costos por tramo en la auditoría (un costo por lote) |
 | 15 | `20261011000000_inventario_en_vivo.sql` | El inventario del Sniper llega al instante (avisos de la auditoría) |
+| 16 | `20261012000000_limpieza_tokens.sql` | Eliminar tokens con limpieza profunda de su keko |
 
 Para cada archivo, en orden:
 

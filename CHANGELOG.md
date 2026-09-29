@@ -10,6 +10,25 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Eliminar tokens con limpieza profunda**: al eliminar un token revocado (o todos), el
+  modal deja elegir entre el **borrado simple** (solo el token; se conserva lo que envió su
+  Sniper, como hasta ahora) y la **limpieza profunda**: el token y todos los datos de su
+  keko (lotes en mano, publicados y vendidos, la foto del inventario, las exclusiones de la
+  auditoría, su registro como keko manual) más el historial de eventos de ese token. Antes
+  de confirmar, el modal muestra cuánto se borra y pide marcar «Entiendo». Un keko es una
+  cuenta de Habbo: su nombre no distingue mayúsculas.
+- **Regla de seguridad**: la limpieza profunda se bloquea, y el modal explica por qué, si el
+  keko tiene algún token **activo** (su Sniper sigue gestionando ese inventario). La base lo
+  vuelve a comprobar en la misma transacción que borra, con los tokens bloqueados: si algo
+  cambió con el modal abierto, se niega sin borrar nada.
+
+### Migraciones de Supabase
+
+- `20261012000000_limpieza_tokens.sql` (requiere la `20261011000000`). Sin ella, el borrado
+  simple funciona igual y la limpieza profunda pide instalarla.
+
 ## [1.4.0] - 2026-09-29
 
 ### Agregado

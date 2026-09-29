@@ -81,8 +81,12 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.get('/api/sniper/tokens', async (_req, res) => res.json(await negocio.listarTokens()));
   r.post('/api/sniper/tokens', async (req, res) => res.status(201).json(await negocio.crearToken((req.body || {}).nombre)));
   r.post('/api/sniper/tokens/:id/revocar', async (req, res) => res.json(await negocio.revocarToken(id(req))));
-  r.post('/api/sniper/tokens/borrar-revocados', async (_req, res) => res.json(await negocio.borrarTokensRevocados()));
-  r.delete('/api/sniper/tokens/:id', async (req, res) => res.json(await negocio.borrarToken(id(req))));
+  // Eliminar tokens revocados: borrado simple, o con `limpieza` (profunda) tambien los datos
+  // de su keko. `limpieza?ids=1,2` es la vista previa del modal (lo que borraria y si un
+  // token activo lo bloquea).
+  r.get('/api/sniper/tokens/limpieza', async (req, res) => res.json(await negocio.vistaLimpieza(String(req.query.ids || '').split(','))));
+  r.post('/api/sniper/tokens/borrar-revocados', async (req, res) => res.json(await negocio.borrarTokensRevocados({ limpieza: (req.body || {}).limpieza === true })));
+  r.delete('/api/sniper/tokens/:id', async (req, res) => res.json(await negocio.borrarToken(id(req), { limpieza: req.query.limpieza === '1' })));
 
   // ── Kekos (de los snipers y manuales) ────────────────────────────────────
   r.get('/api/kekos', async (_req, res) => res.json(await negocio.listarKekos()));
