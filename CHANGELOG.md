@@ -10,6 +10,30 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Costos por tramo en la Auditoría**: el Sniper manda un elemento por cada precio de
+  compra del mismo furni (uno por lote de su cartera) y la bandeja muestra una línea por
+  tramo («2 unidades a 1.500 cr c/u»), cada una con su propia entrada a su costo exacto, más
+  una línea para lo que sobra sin costo conocido. Cada lote que la app ya tiene en ese keko
+  se descuenta del tramo con su mismo costo, y lo que explican las unidades sin keko
+  («Son de este keko») no se propone.
+
+### Cambiado
+
+- **«Comparar de nuevo»** en la Auditoría gira mientras trabaja, vuelve a pedir la
+  comparación a la base y recarga los datos de la app (nombres, lotes y el número del menú);
+  al terminar, un aviso dice cómo quedó. También aparece cuando aún no llegó ningún
+  inventario.
+- Modo demo: el inventario simulado manda un elemento por cada precio de compra y el
+  primer furni trae un sobrante con dos tramos y una unidad sin costo.
+
+### Migraciones de Supabase
+
+- `20261010000000_costos_por_tramo.sql` (requiere la `20261009000000`). Ejecútala **antes**
+  de publicar esta versión. Sin ella, los elementos por costo entran igual y la bandeja
+  propone su promedio como en la 1.3.0.
+
 ## [1.3.0] - 2026-09-29
 
 ### Agregado

@@ -834,16 +834,42 @@ async function main() {
       'un elemento por unidad: se suman las unidades con costo y el costo es el promedio (medio si no coinciden)');
     assert.deepEqual(costoDe({ sprite_id: deco.sprite_id, tipo: deco.tipo }).slice(2), [null, null, null], 'un costo invalido se ignora sin perder el furni');
     const costos = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href);
-    assert.deepEqual(costos.costoDelSniper(filaC(sV)), { costo: 25, unidades: 2, medio: true }, 'sobran 3 y el Sniper conoce 2: se proponen 2 a ese costo');
+    assert.deepEqual(costos.tramosDelSniper(filaC(sV)), [{ costo: 25, unidades: 2, medio: true }], 'sobran 3 y el Sniper conoce 2: se proponen 2 a ese costo');
     await negC.entradaAuditoria({ furni_id: veloC.furni_id, cantidad: 2, precio: 25, keko: 'KekoC' });
     audC = await negC.auditoria('KekoC');
-    assert.deepEqual([filaC(sV).diferencia, costos.costoDelSniper(filaC(sV))], [1, null], 'registradas esas 2, la que sigue sobrando ya no lleva costo');
-    assert.equal(costos.costoDelSniper({ diferencia: 2, app: 0, costo_unidad: null, unidades_con_costo: null }), null);
+    assert.deepEqual([filaC(sV).diferencia, costos.tramosDelSniper(filaC(sV))], [1, []], 'registradas esas 2, la que sigue sobrando ya no lleva costo');
+    assert.deepEqual(costos.tramosDelSniper({ diferencia: 2, app: 0, costo_unidad: null, unidades_con_costo: null }), []);
     assert.equal(costos.textoCosto(3.4), '3,4');
     ok('costos del Sniper: la foto guarda y devuelve el costo (promedio y medio si hay varios; lo invalido se ignora) y la entrada lo propone solo para las unidades que el Sniper conoce');
 
+    // ── Costos por tramo (migracion 20261010000000): un elemento por cada precio de compra ──
+    const sD2 = { sprite_id: deco2.sprite_id, tipo: deco2.tipo };
+    const d2 = filaC(sD2);
+    assert.deepEqual(d2.costos.map((t) => [t.costo_unidad, t.unidades, t.costo_medio]), [[10, 1, false], [20, 1, false]],
+      'la foto guarda cada costo como un tramo, en el orden en que llegaron');
+    assert.deepEqual(costos.tramosDelSniper(d2), [{ costo: 10, unidades: 1, medio: false }, { costo: 20, unidades: 1, medio: false }], 'una linea por tramo, cada una con su costo exacto');
+    await negC.entradaAuditoria({ sprite_id: deco2.sprite_id, tipo: deco2.tipo, cantidad: 1, precio: 20, keko: 'KekoC' });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([filaC(sD2).categoria, filaC(sD2).costos_app], ['sobrante', [{ costo_unidad: 20, unidades: 1 }]]);
+    assert.deepEqual(costos.tramosDelSniper(filaC(sD2)), [{ costo: 10, unidades: 1, medio: false }],
+      'registrado el tramo de 20 (el segundo), queda el de 10: cada lote de la app descuenta el tramo de su mismo costo');
+    const d2Id = filaC(sD2).furni_id;
+    await negC.crearCompra({ furni_id: d2Id, cantidad: 1, precio_compra: 10 });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([filaC(sD2).sin_asignar, filaC(sD2).costos_sin_keko, costos.porRegistrar(filaC(sD2)), costos.tramosDelSniper(filaC(sD2))],
+      [1, [{ costo_unidad: 10, unidades: 1 }], 0, []], 'lo que explican las unidades sin keko no se propone: eso es «Son de este keko»');
+    await negC.moverAKeko({ furni_id: d2Id, cantidad: 1, desde: null, hacia: 'KekoC' });
+    audC = await negC.auditoria('KekoC');
+    assert.equal(filaC(sD2), undefined, 'asignada, el furni cuadra');
+    const mezcla = { diferencia: 4, app: 2, sin_asignar: 0, costos_app: [{ costo_unidad: 90, unidades: 2 }],
+      costos: [{ costo_unidad: 100, unidades: 2, costo_medio: false }, { costo_unidad: 150, unidades: 3, costo_medio: false }] };
+    assert.deepEqual(costos.tramosDelSniper(mezcla), [{ costo: 150, unidades: 3, medio: false }],
+      'lo de la app a otro costo se descuenta del tramo mas antiguo; la unidad que sobra sin tramo va sin costo');
+    assert.ok(costos.mismoCosto(3.333333, 3.33) && !costos.mismoCosto(3.33, 3.34), 'los costos se comparan al centimo');
+    ok('costos por tramo: el Sniper manda un elemento por cada precio de compra, la bandeja muestra una linea por tramo y cada entrada usa su costo exacto');
+
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -862,7 +888,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -875,7 +901,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -887,9 +913,27 @@ async function main() {
     assert.equal(r.error, null);
     const filaF = (await negF.auditoria('KekoF')).filas[0];
     assert.deepEqual([filaF.categoria, filaF.costo_unidad], ['no_registrado', undefined]);
-    assert.equal((await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href)).costoDelSniper(filaF), null);
+    assert.deepEqual((await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href)).tramosDelSniper(filaF), []);
     await sinCostos.cerrar();
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
+
+    // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql'] });
+    await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
+    await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
+    const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });
+    await conexG.iniciar();
+    const negG = crearServicioNegocio({ conexion: conexG, furnidata });
+    const tkG = await negG.crearToken('VPS de gabi');
+    r = await sinTramos.comoAnon().rpc('auditar_inventario', { token_sniper: tkG.token, keko: 'KekoG', hotel: 'es',
+      inventario: [{ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 1, costo_unidad: 10 }, { sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 1, costo_unidad: 20 }] });
+    assert.equal(r.error, null);
+    const filaG = (await negG.auditoria('KekoG')).filas[0];
+    assert.equal(filaG.costos, undefined);
+    assert.deepEqual((await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href)).tramosDelSniper(filaG),
+      [{ costo: 15, unidades: 2, medio: true }], 'sin la migracion, un solo tramo: el promedio, marcado como tal');
+    await sinTramos.cerrar();
+    ok('base sin la migracion de tramos: los elementos por costo entran y la bandeja propone su promedio como en la 1.3.0');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);

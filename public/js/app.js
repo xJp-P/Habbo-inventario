@@ -218,8 +218,8 @@ function App() {
     onCambio: cambio,
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
-    furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio,
-    onError: function (m) { avisar(m, 'error'); },
+    furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio, onRecargar: recargar,
+    onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
   });
   else contenido = h(AjustesView, {
     cuenta: cuenta, tema: tema, onTema: setTema, onSalir: salir, onCambio: cambio,

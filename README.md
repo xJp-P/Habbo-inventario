@@ -93,6 +93,7 @@ Las migraciones son los archivos de [`supabase/migrations/`](supabase/migrations
 | 11 | `20261007000000_auditoria_inventario.sql` | Auditoría del inventario de Habbo (por keko) |
 | 12 | `20261008000000_kekos_manuales.sql` | Kekos manuales (bodegas y kekos sin Sniper) |
 | 13 | `20261009000000_costos_auditoria.sql` | Costos del Sniper en la auditoría |
+| 14 | `20261010000000_costos_por_tramo.sql` | Costos por tramo en la auditoría (un costo por lote) |
 
 Para cada archivo, en orden:
 

@@ -134,11 +134,23 @@ Content-Type: application/json
 | `inventario` | Sí | Lista (puede estar vacía, hasta 50.000 elementos). Un elemento por furni con su `cantidad`, o uno por unidad (sin `cantidad` vale 1): la base los agrupa |
 | `sprite_id` + `tipo` | Sí (o `nombre`) | La identidad del furni, igual que en los eventos (`tipo`: `suelo`/`pared`, también `floor`/`wall`). Sin `sprite_id` se acepta `nombre` si la app tiene un furni con ese nombre |
 | `ltds` / `numero_ltd` | Opcional | Números de serie de los LTD de ese furni (`[45, 46]`, o `"#45"` en un elemento por unidad). Con ellos la app detecta un LTD con otro número |
-| `costo_unidad` | Opcional (requiere `20261009000000_costos_auditoria.sql`) | Lo que costó cada unidad según la cartera del bot, en créditos (número o texto: `25`, `"25.5"`, `"25,5"`; ≥ 0). Si hay varios lotes, su promedio |
+| `costo_unidad` | Opcional (requiere `20261009000000_costos_auditoria.sql`) | Lo que costó cada unidad de ese elemento según la cartera del bot, en créditos (número o texto: `25`, `"25.5"`, `"25,5"`; ≥ 0) |
 | `unidades_con_costo` | Opcional | A cuántas unidades de `cantidad` corresponde ese costo (entero ≥ 1; sin él, a todas; nunca más que `cantidad`) |
 | `costo_medio` | Opcional | `true` si `costo_unidad` es un promedio de lotes a precios distintos (por defecto `false`) |
 
-**Costos:** el bot solo envía las tres claves de costo cuando lo conoce; un furni regalado o tradeado por fuera va sin ellas (nunca con `0` o `null` para decir «no sé»). Un costo mal formado se ignora sin rechazar el elemento: el furni entra igual, sin costo. Varios elementos del mismo furni se unen: se suman sus `unidades_con_costo` y el costo es el promedio ponderado (`costo_medio` si alguno lo era o si los costos no coinciden). La app propone ese costo al registrar la entrada de un sobrante o de un furni no registrado, y solo para las unidades que el bot conoce. Sin la migración, las claves de costo se ignoran.
+**Costos:** el bot solo envía las tres claves de costo cuando lo conoce; un furni regalado o tradeado por fuera va sin ellas (nunca con `0` o `null` para decir «no sé»). Un costo mal formado se ignora sin rechazar el elemento: el furni entra igual, sin costo. Sin la migración, las claves de costo se ignoran.
+
+**Un elemento por precio de compra (requiere `20261010000000_costos_por_tramo.sql`):** si el mismo furni se compró a precios distintos, el bot **no los promedia**: envía un elemento por cada lote de su cartera, con el mismo `sprite_id` y `tipo`, su propia `cantidad` y su `costo_unidad` exacto (`costo_medio: false`), **del lote más antiguo al más nuevo** (el mismo orden FIFO de la cartera). Las unidades que el bot no sabe cuánto costaron van en otro elemento sin claves de costo. Los `ltds` pueden ir en cualquiera de los elementos del furni (la base los une).
+
+```json
+[
+  { "sprite_id": 4623, "tipo": "suelo", "cantidad": 2, "costo_unidad": 1500, "unidades_con_costo": 2, "costo_medio": false },
+  { "sprite_id": 4623, "tipo": "suelo", "cantidad": 3, "costo_unidad": 1800, "unidades_con_costo": 3, "costo_medio": false },
+  { "sprite_id": 4623, "tipo": "suelo", "cantidad": 1 }
+]
+```
+
+La base suma la cantidad del furni (6) para la comparación y guarda cada costo distinto como un **tramo** (dos elementos con el mismo costo son un solo tramo). En la bandeja, cada tramo es una línea con su propia entrada a su costo exacto; cada lote que la app ya tiene en ese keko se descuenta del tramo con su mismo costo, y lo demás, de los tramos más antiguos. También guarda el resumen de la 1.3.0 (unidades con costo sumadas, promedio ponderado y `costo_medio` si los costos no coinciden). Una base sin esta migración guarda solo ese resumen: los elementos separados entran igual, pero la bandeja propone su promedio.
 
 **Cuándo enviarlo:** por la **misma cola** que los eventos y **después** de los que estén pendientes. Así una compra que aún no llegó a la app no aparece como sobrante falso. Cada envío **reemplaza** la foto anterior de ese keko (idempotente: reenviar no duplica nada).
 
