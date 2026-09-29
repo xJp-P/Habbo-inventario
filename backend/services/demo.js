@@ -31,6 +31,11 @@ async function crearDemo({ dirDatos }) {
 
   // Furnis que "compra" el sniper simulado: algunos ya estan en el Mercadillo (suman
   // stock) y otros son nuevos (aparecen sin precio).
+  // Decoracion para la foto simulada: un furni que la app NO tenga registrado sale como
+  // «no registrado». Lista propia (los CANDIDATOS los compra el Sniper simulado y con el uso
+  // acaban todos registrados).
+  const DECORACION = ['val15_sakura', 'plant_big_cactus', 'hc_lmp', 'party_floor', 'plant_pineapple', 'rare_fountain', 'plant_yukka', 'edice', 'exe_plant', 'bed_polyfon'];
+
   const CANDIDATOS = [
     'seaside_ltd26_sanddragon', 'statue_dragon', 'clothing_r26_spider', 'clothing_r26_glitterwings',
     'spyro', 'dragonlamp_shinobi', 'dng_throne', 'fireworks_13',
@@ -81,24 +86,36 @@ async function crearDemo({ dirDatos }) {
   // esta en mano en la app, con diferencias de ejemplo (2 unidades de mas que llegaron
   // por un tradeo, 1 de menos que se vendio a mano) y un furni de decoracion que la
   // app no tiene registrado.
+  // La mano de KekoDemo tal como la enviaria el Sniper: lo de ese keko y lo sin keko (lo
+  // de los kekos manuales esta en otra cuenta), con dos diferencias y un furni de
+  // decoracion. Como el Sniper real (migracion 20261009000000), manda lo que costo cada
+  // furni segun su cartera: el promedio de los lotes, y "medio" si tenian precios
+  // distintos. Del sobrante de 2 solo conoce el costo de 1, y de la decoracion, el de 5 de
+  // 12 (un promedio), para ver las dos reglas del formulario de entrada.
   async function simularInventario() {
     const [furnis, compras] = await Promise.all([negocio.listarFurnis(), negocio.listarCompras()]);
     const porId = new Map(furnis.filter((f) => f.sprite_id !== null).map((f) => [f.id, f]));
     const grupos = new Map();
     for (const c of compras) {
       const f = porId.get(c.furni_id);
-      if (c.estado !== 'comprado' || !f) continue;
+      if (c.estado !== 'comprado' || !f || (c.keko && c.keko !== 'KekoDemo')) continue;
       const clave = f.tipo + ':' + f.sprite_id;
-      const g = grupos.get(clave) || { sprite_id: f.sprite_id, tipo: f.tipo, cantidad: 0, ltds: [] };
+      const g = grupos.get(clave) || { sprite_id: f.sprite_id, tipo: f.tipo, cantidad: 0, ltds: [], costo: 0, precios: new Set() };
       g.cantidad += c.cantidad;
+      g.costo += Number(c.precio_compra_cr || 0) * c.cantidad;
+      g.precios.add(Number(c.precio_compra_cr || 0));
       if (c.numero_ltd) g.ltds.push(c.numero_ltd);
       grupos.set(clave, g);
     }
-    const lista = [...grupos.values()];
-    if (lista[0]) lista[0].cantidad += 2;
-    if (lista[1]) lista[1].cantidad -= 1;
-    const deco = CANDIDATOS.map((c) => furnidata.porClase(c)).find((f) => f && !grupos.has(f.tipo + ':' + f.sprite_id));
-    if (deco) lista.push({ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 12 });
+    const lista = [...grupos.values()].map((g) => ({
+      sprite_id: g.sprite_id, tipo: g.tipo, cantidad: g.cantidad, ltds: g.ltds,
+      costo_unidad: Math.round((g.costo / g.cantidad) * 100) / 100, unidades_con_costo: g.cantidad, costo_medio: g.precios.size > 1,
+    }));
+    if (lista[0]) { lista[0].cantidad += 2; lista[0].unidades_con_costo += 1; }
+    if (lista[1]) { lista[1].cantidad -= 1; lista[1].unidades_con_costo = Math.max(1, lista[1].unidades_con_costo - 1); }
+    const registrados = new Set(furnis.filter((f) => f.sprite_id !== null).map((f) => f.tipo + ':' + f.sprite_id));
+    const deco = DECORACION.map((c) => furnidata.porClase(c)).find((f) => f && !registrados.has(f.tipo + ':' + f.sprite_id));
+    if (deco) lista.push({ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 12, costo_unidad: 3.4, unidades_con_costo: 5, costo_medio: true });
     const r = await anon.rpc('auditar_inventario', { token_sniper: token, keko: 'KekoDemo', hotel: 'es', inventario: lista.filter((g) => g.cantidad > 0) });
     if (r.error) throw new Error(r.error.message);
     return r.data;

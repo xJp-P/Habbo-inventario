@@ -13,11 +13,16 @@
 //   no_registrado  furnis de Habbo que la app no tiene (decoracion, regalos, un tradeo sin
 //                  registrar): lista plegada con agregar o quitar de la auditoria
 // Una exclusion vale mientras las cantidades de ese furni no cambien.
+//
+// Costos del Sniper (v1.3.0, migracion 20261009000000): si el Sniper sabe lo que costo un
+// furni (su cartera, FIFO), la foto lo trae y la entrada de un sobrante o de un furni no
+// registrado lo propone: cantidad y costo ya puestos, y aviso si el costo es un promedio.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
 import { _submitGuard } from '../core/ui.js';
-import { fmtHace, leerNumero } from '../core/format.js';
+import { fmtHace, leerNumero, fmtLg } from '../core/format.js';
+import { costoDelSniper, textoCosto } from '../core/costos.js';
 import { NombreFurni, SelectorMoneda, Confirmar, EtiquetaLtd } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 
@@ -46,14 +51,21 @@ function Campo(props) {
 function FormEntrada(props) {
   var f = props.fila;
   var nuevos = f.ltds_nuevos || [];
-  var sC = useState(String(nuevos.length ? 1 : f.diferencia)); var cant = sC[0]; var setCant = sC[1];
-  var sP = useState(''); var precio = sP[0]; var setPrecio = sP[1];
+  var sniper = costoDelSniper(f);
+  var sC = useState(String(nuevos.length ? 1 : sniper ? sniper.unidades : f.diferencia)); var cant = sC[0]; var setCant = sC[1];
+  var sP = useState(sniper ? textoCosto(sniper.costo) : ''); var precio = sP[0]; var setPrecio = sP[1];
   var sM = useState('creditos'); var moneda = sM[0]; var setMoneda = sM[1];
   var sL = useState(nuevos.length ? String(nuevos[0]) : ''); var ltd = sL[0]; var setLtd = sL[1];
   function guardar() {
     var c = leerNumero(cant); var p = leerNumero(precio);
     if (!c || c < 1 || c > f.diferencia) { props.onError('La cantidad debe estar entre 1 y ' + f.diferencia + '.'); return; }
     if (p === null || isNaN(p) || p < 0) { props.onError('Escribe el costo por unidad (0 si fue un regalo).'); return; }
+    // El costo del Sniper vale para las unidades que conoce, no para mas.
+    if (sniper && moneda === 'creditos' && p === sniper.costo && (ltd ? 1 : c) > sniper.unidades) {
+      props.onError('El Sniper solo conoce el costo de ' + unidades(sniper.unidades) + ': registra ' + pl(sniper.unidades, 'esa', 'esas') +
+        ' con ese costo y las demás aparte, con el suyo.');
+      return;
+    }
     props.onEnviar('/api/auditoria/entrada', {
       furni_id: f.furni_id || null, sprite_id: f.sprite_id, tipo: f.tipo, keko: props.keko,
       cantidad: ltd ? 1 : c, precio: p, moneda: moneda, numero_ltd: ltd || null,
@@ -65,7 +77,13 @@ function FormEntrada(props) {
         nuevos.map(function (n) { return h('option', { key: n, value: String(n) }, '#' + n); }))) :
       h(Campo, { l: 'Cantidad' }, h('input', { className: 'inp inp-num', style: { width: 80 }, value: cant, inputMode: 'numeric', onChange: function (e) { setCant(e.target.value); } })),
     h(Campo, { l: 'Costo c/u' }, h('input', { className: 'inp inp-num', style: { width: 110 }, value: precio, autoFocus: true, placeholder: '0', inputMode: 'decimal', onChange: function (e) { setPrecio(e.target.value); } })),
-    h(Campo, { l: 'Moneda' }, h(SelectorMoneda, { valor: moneda, onChange: setMoneda })));
+    h(Campo, { l: 'Moneda' }, h(SelectorMoneda, { valor: moneda, onChange: setMoneda })),
+    sniper ? h('div', { className: 'aud-costo' },
+      h(Ico, { name: 'bolt', size: 13, color: 'var(--green)' }),
+      h('span', null, 'Costo según el Sniper: ', h('b', { className: 'mono' }, fmtLg(sniper.costo) + ' cr'), ' c/u',
+        sniper.unidades < f.diferencia ? ' · lo conoce para ' + sniper.unidades + ' de las ' + f.diferencia + ' que sobran' : ''),
+      sniper.medio ? h('span', { className: 'tag tag-ambar', title: 'Lotes comprados a precios distintos: el costo es su promedio, tomados en el orden en que se compraron' },
+        h(Ico, { name: 'alert', size: 11 }), 'El precio es un promedio calculado (FIFO)') : null) : null);
 }
 
 // «Las vendi…» de un faltante: venta manual que sale de los lotes de ESTE keko.

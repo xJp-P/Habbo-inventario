@@ -134,6 +134,11 @@ Content-Type: application/json
 | `inventario` | Sí | Lista (puede estar vacía, hasta 50.000 elementos). Un elemento por furni con su `cantidad`, o uno por unidad (sin `cantidad` vale 1): la base los agrupa |
 | `sprite_id` + `tipo` | Sí (o `nombre`) | La identidad del furni, igual que en los eventos (`tipo`: `suelo`/`pared`, también `floor`/`wall`). Sin `sprite_id` se acepta `nombre` si la app tiene un furni con ese nombre |
 | `ltds` / `numero_ltd` | Opcional | Números de serie de los LTD de ese furni (`[45, 46]`, o `"#45"` en un elemento por unidad). Con ellos la app detecta un LTD con otro número |
+| `costo_unidad` | Opcional (requiere `20261009000000_costos_auditoria.sql`) | Lo que costó cada unidad según la cartera del bot, en créditos (número o texto: `25`, `"25.5"`, `"25,5"`; ≥ 0). Si hay varios lotes, su promedio |
+| `unidades_con_costo` | Opcional | A cuántas unidades de `cantidad` corresponde ese costo (entero ≥ 1; sin él, a todas; nunca más que `cantidad`) |
+| `costo_medio` | Opcional | `true` si `costo_unidad` es un promedio de lotes a precios distintos (por defecto `false`) |
+
+**Costos:** el bot solo envía las tres claves de costo cuando lo conoce; un furni regalado o tradeado por fuera va sin ellas (nunca con `0` o `null` para decir «no sé»). Un costo mal formado se ignora sin rechazar el elemento: el furni entra igual, sin costo. Varios elementos del mismo furni se unen: se suman sus `unidades_con_costo` y el costo es el promedio ponderado (`costo_medio` si alguno lo era o si los costos no coinciden). La app propone ese costo al registrar la entrada de un sobrante o de un furni no registrado, y solo para las unidades que el bot conoce. Sin la migración, las claves de costo se ignoran.
 
 **Cuándo enviarlo:** por la **misma cola** que los eventos y **después** de los que estén pendientes. Así una compra que aún no llegó a la app no aparece como sobrante falso. Cada envío **reemplaza** la foto anterior de ese keko (idempotente: reenviar no duplica nada).
 
@@ -147,7 +152,7 @@ Nunca envíes una foto a medias (una carga de varios fragmentos sin terminar, o 
 **Respuesta (200):**
 
 ```json
-{ "keko": "NombreDelKeko", "recibidos": 3, "furnis": 3, "unidades": 21, "errores": [],
+{ "keko": "NombreDelKeko", "recibidos": 3, "furnis": 3, "unidades": 21, "con_costo": 2, "errores": [],
   "resumen": { "coinciden": 2, "sobrantes": 1, "faltantes": 0, "ltd": 0, "no_registrados": 0, "sin_keko": 0, "excluidos": 0 } }
 ```
 

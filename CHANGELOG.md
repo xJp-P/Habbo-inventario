@@ -10,6 +10,27 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Costos del Sniper en la Auditoría**: el Sniper envía lo que costó cada furni según su
+  cartera (FIFO) y la bandeja lo usa al registrar la entrada de un sobrante o de un furni
+  no registrado: cantidad y costo ya propuestos. El costo solo se propone para las
+  unidades que el Sniper conoce (si sobran 3 y conoce 2, propone 2; las demás van aparte)
+  y, si es un promedio de lotes a precios distintos, lo avisa: «El precio es un promedio
+  calculado (FIFO)».
+
+### Cambiado
+
+- Modo demo: el inventario simulado solo incluye lo del keko del Sniper y lo sin keko (lo
+  de los kekos manuales está en otra cuenta), trae costos y siempre muestra un furni sin
+  registrar.
+
+### Migraciones de Supabase
+
+- `20261009000000_costos_auditoria.sql` (requiere la `20261008000000`). Ejecútala **antes**
+  de publicar esta versión. Sin ella, el inventario del Sniper con costos entra igual (la
+  base los ignora) y la bandeja no propone costo.
+
 ## [1.2.0] - 2026-09-29
 
 ### Agregado

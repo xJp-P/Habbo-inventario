@@ -795,8 +795,35 @@ async function main() {
     assert.ok(!(await negC.listarKekos()).kekos.some((k) => k.nombre === 'bodega principal'));
     ok('kekos manuales: renombrar lleva sus lotes, borrar exige que no le queden unidades, lo sin keko se asigna por furni (todo o nada) y la venta sale solo del keko elegido');
 
+    // ── Costos del Sniper en la auditoria (migracion 20261009000000) ──
+    const veloK = await enKeko('KekoC', veloC.furni_id);
+    const deco2 = furnidata.porClase('statue_dragon');
+    r = await enviarInv([
+      { ...sV, cantidad: veloK + 3, costo_unidad: 25, unidades_con_costo: veloK + 2, costo_medio: true },
+      { sprite_id: deco2.sprite_id, tipo: deco2.tipo, cantidad: 1, costo_unidad: 10 },
+      { sprite_id: deco2.sprite_id, tipo: deco2.tipo, cantidad: 1, costo_unidad: '20' },
+      { sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 4, costo_unidad: -5, unidades_con_costo: 2 },
+      { ...sCa, cantidad: 1 }, { ...sT, numero_ltd: 46 },
+    ]);
+    assert.equal(r.error, null);
+    assert.equal(r.data.con_costo, 2, 'la respuesta cuenta los furnis que traen costo');
+    audC = await negC.auditoria('KekoC');
+    const costoDe = (sp) => { const x = filaC(sp); return x && [x.categoria, x.diferencia, x.costo_unidad, x.unidades_con_costo, x.costo_medio]; };
+    assert.deepEqual(costoDe(sV), ['sobrante', 3, 25, veloK + 2, true], 'el sobrante trae el costo que conoce el Sniper');
+    assert.deepEqual(costoDe({ sprite_id: deco2.sprite_id, tipo: deco2.tipo }), ['no_registrado', 2, 15, 2, true],
+      'un elemento por unidad: se suman las unidades con costo y el costo es el promedio (medio si no coinciden)');
+    assert.deepEqual(costoDe({ sprite_id: deco.sprite_id, tipo: deco.tipo }).slice(2), [null, null, null], 'un costo invalido se ignora sin perder el furni');
+    const costos = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href);
+    assert.deepEqual(costos.costoDelSniper(filaC(sV)), { costo: 25, unidades: 2, medio: true }, 'sobran 3 y el Sniper conoce 2: se proponen 2 a ese costo');
+    await negC.entradaAuditoria({ furni_id: veloC.furni_id, cantidad: 2, precio: 25, keko: 'KekoC' });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([filaC(sV).diferencia, costos.costoDelSniper(filaC(sV))], [1, null], 'registradas esas 2, la que sigue sobrando ya no lleva costo');
+    assert.equal(costos.costoDelSniper({ diferencia: 2, app: 0, costo_unidad: null, unidades_con_costo: null }), null);
+    assert.equal(costos.textoCosto(3.4), '3,4');
+    ok('costos del Sniper: la foto guarda y devuelve el costo (promedio y medio si hay varios; lo invalido se ignora) y la entrada lo propone solo para las unidades que el Sniper conoce');
+
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -815,7 +842,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -826,6 +853,23 @@ async function main() {
     await rechaza(negE.crearKeko('Bodega'), /Falta instalar el esquema/);
     await sinKekos.cerrar();
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
+
+    // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql'] });
+    await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
+    await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
+    const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
+    await conexF.iniciar();
+    const negF = crearServicioNegocio({ conexion: conexF, furnidata });
+    const tkF = await negF.crearToken('VPS de fede');
+    r = await sinCostos.comoAnon().rpc('auditar_inventario', { token_sniper: tkF.token, keko: 'KekoF', hotel: 'es',
+      inventario: [{ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 3, costo_unidad: 25, unidades_con_costo: 2, costo_medio: true }] });
+    assert.equal(r.error, null);
+    const filaF = (await negF.auditoria('KekoF')).filas[0];
+    assert.deepEqual([filaF.categoria, filaF.costo_unidad], ['no_registrado', undefined]);
+    assert.equal((await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href)).costoDelSniper(filaF), null);
+    await sinCostos.cerrar();
+    ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);

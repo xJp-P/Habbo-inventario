@@ -38,6 +38,7 @@ const MIGRACIONES = [
   { archivo: '20261006000000_numero_ltd.sql', titulo: 'Número de serie de los LTD', sonda: funcion('asignar_ltd', { p_id: -1, p_numero: 1 }) },
   { archivo: '20261007000000_auditoria_inventario.sql', titulo: 'Auditoría del inventario de Habbo (por keko)', sonda: funcion('auditoria_inventario', { p_keko: 'sonda' }) },
   { archivo: '20261008000000_kekos_manuales.sql', titulo: 'Kekos manuales (bodegas y kekos sin Sniper)', sonda: funcion('listar_kekos', {}) },
+  { archivo: '20261009000000_costos_auditoria.sql', titulo: 'Costos del Sniper en la auditoría', sonda: funcion('_costo_auditoria', { o: {}, p_cantidad: 1 }) },
 ];
 
 const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204', 'PGRST205', '42P01']);

@@ -24,7 +24,7 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 | **Resumen** | Lo **publicado** (inversión, lo que te entraría, ganancia esperada y margen), lo que tienes **en mano** (unidades y costo), ventas realizadas, compras del Sniper por revisar, alertas de lo publicado con pérdida y la tasa del Lingo |
 | **Mercadillo** | Solo lo que está publicado en el mercadillo de Habbo.es: precio de lista, unidades, costo promedio y ganancia neta esperada. En cada fila, **Vendido** y **Retirar** (de lo más antiguo a lo más nuevo, FIFO) |
 | **Inventario** | Cada lote en tres pestañas: **Comprado** (en mano, solo costo), **Publicado** y **Vendido**. Publicar, retirar, registrar ventas fuera del Sniper (tradeos sin comisión o ventas desde otro keko) y el número de serie de los **LTD** (#45). Arriba, las compras que llegaron del Sniper para revisarlas |
-| **Auditoría** | Compara el inventario de Habbo que envía cada sniper (uno por keko) con lo que la app tiene en mano y muestra **solo las diferencias**: sobrantes (entrada con costo, «son de este keko» o «volvieron de otro keko»), faltantes (las vendí, están en otro keko o borrar), LTD con otro número y furnis sin registrar (agregar o quitar de la auditoría) |
+| **Auditoría** | Compara el inventario de Habbo que envía cada sniper (uno por keko) con lo que la app tiene en mano y muestra **solo las diferencias**: sobrantes (entrada con costo, «son de este keko» o «volvieron de otro keko»), faltantes (las vendí, están en otro keko o borrar), LTD con otro número y furnis sin registrar (agregar o quitar de la auditoría). Si el Sniper sabe lo que costó un furni, la entrada propone ese costo |
 | **Ajustes** | Los datos para configurar cada sniper y sus tokens (uno por VPS), tus **kekos** (los de los snipers y los manuales), importar desde Excel, catálogo de Habbo.es, versión y actualizaciones, tema y cuenta |
 
 **Kekos:** cada lote sabe en qué cuenta de Habbo está. Los kekos de tus snipers se detectan solos; los **manuales** (una bodega, un keko de tradeos sin Sniper) se registran en Ajustes, nunca se auditan y no ensucian las auditorías de los snipers. «+ Compra» y «Venta» piden el keko, y lo que tenías en mano sin keko se ordena por furni desde Ajustes → Kekos.
@@ -92,6 +92,7 @@ Las migraciones son los archivos de [`supabase/migrations/`](supabase/migrations
 | 10 | `20261006000000_numero_ltd.sql` | Número de serie de los LTD |
 | 11 | `20261007000000_auditoria_inventario.sql` | Auditoría del inventario de Habbo (por keko) |
 | 12 | `20261008000000_kekos_manuales.sql` | Kekos manuales (bodegas y kekos sin Sniper) |
+| 13 | `20261009000000_costos_auditoria.sql` | Costos del Sniper en la auditoría |
 
 Para cada archivo, en orden:
 
