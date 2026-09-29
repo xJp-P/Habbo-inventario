@@ -10,6 +10,8 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+## [1.5.1] - 2026-09-29
+
 ### Cambiado
 
 - **Auditoría: «Quitar de la auditoría» donde se entiende**. Afecta a todo el furni, así
@@ -261,7 +263,8 @@ Primera versión pública. Funciona solo con el hotel **Habbo.es**.
 Instalación nueva: ejecutar en orden todos los archivos de `supabase/migrations/`, de
 `20260927000000_esquema_inicial.sql` a `20261006000000_numero_ltd.sql`.
 
-[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.0...HEAD
+[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.2.0...v1.3.0
