@@ -1,8 +1,12 @@
-// public/js/vistas/Ajustes.js — conexion con los SniperMercadillo, importar Excel,
+// public/js/vistas/Ajustes.js — conexion con los SniperMercadillo, kekos, importar Excel,
 // catalogo de Habbo.es, tema y cuenta.
 //
 // Cada sniper (cada VPS) usa su PROPIO token: si un VPS se compromete, se revoca solo
 // ese. El token se muestra una unica vez al crearlo; en Supabase queda solo su huella.
+//
+// Kekos (v1.2.0): los de los snipers se detectan solos; los manuales (una bodega, un keko
+// sin Sniper) se registran aqui y nunca se auditan. Desde aqui tambien se ordena lo que
+// quedo en mano sin keko, que ensuciaba las auditorias de los snipers.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -10,6 +14,8 @@ import { fmtHace, fmtD } from '../core/format.js';
 import { _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
 import { Confirmar } from '../componentes/base.js';
+import { SelectorKeko } from '../componentes/SelectorKeko.js';
+import { AsignarKekoModal } from '../modales/AsignarKekoModal.js';
 
 function copiar(texto, alListo) {
   var hecho = function () { if (alListo) alListo(); };
@@ -72,7 +78,15 @@ export function AjustesView(props) {
   var sRuta = useState(''); var rutaExcel = sRuta[0]; var setRutaExcel = sRuta[1];
   var sInf = useState(null); var informe = sInf[0]; var setInforme = sInf[1];
   var sConf = useState(null); var confirmacion = sConf[0]; var setConfirmacion = sConf[1];
+  var sKn = useState(''); var kekoNuevo = sKn[0]; var setKekoNuevo = sKn[1];
+  var sKe = useState(null); var editando = sKe[0]; var setEditando = sKe[1];   // { id, nombre }
+  var sKa = useState(''); var haciaSinKeko = sKa[0]; var setHaciaSinKeko = sKa[1];
+  var sKm = useState(false); var asignando = sKm[0]; var setAsignando = sKm[1];
   var electron = typeof window !== 'undefined' && window.electronAPI;
+  var kekos = props.kekos || { disponible: false, kekos: [] };
+  var kekosSniper = kekos.kekos.filter(function (k) { return k.origen === 'sniper'; });
+  var kekosManuales = kekos.kekos.filter(function (k) { return k.origen !== 'sniper'; });
+  var sinKeko = (props.compras || []).reduce(function (s, c) { return s + (c.estado === 'comprado' && !c.keko ? c.cantidad : 0); }, 0);
 
   function cargar() {
     API.get('/api/sniper/conexion').then(function (r) { if (r) setConexion(r); });
@@ -100,6 +114,47 @@ export function AjustesView(props) {
       mensaje: h('span', null, '¿Revocar el token ', h('b', null, '«' + t.nombre + '»'), '? El sniper que lo use dejará de poder enviar eventos al instante.'),
       accion: function () { API.post('/api/sniper/tokens/' + t.id + '/revocar', {}).then(function (r) { if (r) { props.onAviso('Token revocado'); cargar(); } }); } });
   }
+  function agregarKeko() {
+    if (!kekoNuevo.trim()) { props.onError('Escribe el nombre del keko (p. ej. MiKekoBodega).'); return; }
+    _submitGuard(enviando, setEnviando, function () {
+      return API.post('/api/kekos', { nombre: kekoNuevo }).then(function (r) {
+        if (r) { setKekoNuevo(''); props.onCambio('Keko «' + r.nombre + '» agregado'); }
+      });
+    });
+  }
+  function guardarNombreKeko() {
+    if (!editando.nombre.trim()) { props.onError('El nombre del keko no puede quedar vacío.'); return; }
+    _submitGuard(enviando, setEnviando, function () {
+      return API.put('/api/kekos/' + editando.id, { nombre: editando.nombre }).then(function (r) {
+        if (r) { setEditando(null); props.onCambio('Keko renombrado a «' + r.nombre + '»' + (r.lotes ? ' (' + r.lotes + (r.lotes === 1 ? ' lote)' : ' lotes)') : '')); }
+      });
+    });
+  }
+  function borrarKeko(k) {
+    setConfirmacion({ titulo: 'Borrar keko', peligro: true, icono: 'trash', textoBoton: 'Borrar',
+      mensaje: h('span', null, '¿Borrar el keko ', h('b', null, '«' + k.nombre + '»'), '? Solo se puede si no le quedan unidades; sus ventas conservan el nombre.'),
+      accion: function () { API.del('/api/kekos/' + k.id).then(function (r) { if (r) props.onCambio('Keko «' + k.nombre + '» borrado'); }); } });
+  }
+  function filaKeko(k) {
+    var cifras = k.en_mano + ' en mano' + (k.publicadas ? ' · ' + k.publicadas + ' publicadas' : '');
+    if (editando && editando.id === k.id) {
+      return h('div', { key: k.nombre, className: 'fila-keko' },
+        h('input', { className: 'inp', style: { flex: 1 }, autoFocus: true, maxLength: 60, value: editando.nombre,
+          onChange: function (e) { setEditando({ id: k.id, nombre: e.target.value }); },
+          onKeyDown: function (e) { if (e.key === 'Enter') guardarNombreKeko(); if (e.key === 'Escape') setEditando(null); } }),
+        h('button', { className: 'btn btn-chico btn-verde', onClick: guardarNombreKeko, disabled: enviando }, 'Guardar'),
+        h('button', { className: 'btn btn-chico', onClick: function () { setEditando(null); } }, 'Cancelar'));
+    }
+    return h('div', { key: k.nombre, className: 'fila-keko' },
+      h('span', { style: { flex: 1, minWidth: 0 } }, k.nombre,
+        k.origen === 'sniper' && k.snipers.length ? h('span', { className: 'tenue' }, ' · ' + k.snipers.join(', ')) : null),
+      h('span', { className: 'suave mono', style: { fontSize: 12 } }, cifras),
+      k.origen === 'sniper' ? null : h('button', { className: 'btn-icono', title: 'Renombrar', 'aria-label': 'Renombrar ' + k.nombre,
+        onClick: function () { setEditando({ id: k.id, nombre: k.nombre }); } }, h(Ico, { name: 'edit', size: 14 })),
+      k.origen === 'sniper' ? null : h('button', { className: 'btn-icono', title: 'Borrar', 'aria-label': 'Borrar ' + k.nombre,
+        onClick: function () { borrarKeko(k); } }, h(Ico, { name: 'trash', size: 14, color: 'var(--red)' })));
+  }
+
   function actualizarCatalogo() {
     _submitGuard(enviando, setEnviando, function () {
       return API.post('/api/furnidata/actualizar', {}).then(function (r) { if (r) { setCatalogo(r); props.onAviso('Catálogo de Habbo.es actualizado'); } });
@@ -177,6 +232,35 @@ export function AjustesView(props) {
       ejemplo ? h('details', { style: { marginTop: 12 } },
         h('summary', { className: 'suave', style: { cursor: 'pointer', fontSize: 13 } }, 'Ejemplo de envío (para configurar el sniper)'),
         h('div', { className: 'codigo', style: { marginTop: 8 } }, ejemplo)) : null),
+
+    h('div', { className: 'card' },
+      h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', marginBottom: 4 } },
+        h(Ico, { name: 'user', size: 20, color: 'var(--green)' }),
+        h('div', { className: 'card-titulo' }, 'Kekos')),
+      h('div', { className: 'card-sub', style: { marginBottom: 10 } }, 'Dónde están tus furnis. Los de tus snipers se detectan solos; los manuales (una bodega, un keko sin Sniper) nunca se auditan.'),
+      !kekos.disponible
+        ? h('div', { className: 'aviso aviso-ambar', style: { fontSize: 13 } }, 'Para registrar kekos manuales instala la migración 20261008000000_kekos_manuales.sql (aviso ámbar de arriba).')
+        : [
+            h('div', { key: 'ls', className: 'fld-l' }, 'De tus snipers'),
+            kekosSniper.length ? h('div', { key: 's' }, kekosSniper.map(filaKeko))
+              : h('div', { key: 's', className: 'suave', style: { fontSize: 13, padding: '4px 0 8px' } }, 'Aparecen cuando un sniper envía su primer inventario.'),
+            h('div', { key: 'lm', className: 'fld-l', style: { marginTop: 10 } }, 'Manuales'),
+            kekosManuales.length ? h('div', { key: 'm' }, kekosManuales.map(filaKeko))
+              : h('div', { key: 'm', className: 'suave', style: { fontSize: 13, padding: '4px 0 8px' } }, 'Aún no tienes kekos manuales.'),
+            h('div', { key: 'nuevo', style: { display: 'flex', gap: 8, marginTop: 10 } },
+              h('input', { className: 'inp', placeholder: 'Nombre del keko (p. ej. MiKekoBodega)', maxLength: 60, value: kekoNuevo,
+                onChange: function (e) { setKekoNuevo(e.target.value); }, onKeyDown: function (e) { if (e.key === 'Enter') agregarKeko(); } }),
+              h('button', { className: 'btn', onClick: agregarKeko, disabled: enviando }, h(Ico, { name: 'plus', size: 14 }), 'Agregar')),
+            sinKeko ? h('div', { key: 'sin', className: 'aviso aviso-ambar', style: { marginTop: 14, fontSize: 13 } },
+              h('div', { style: { marginBottom: 8 } }, sinKeko + (sinKeko === 1 ? ' unidad en mano sin keko' : ' unidades en mano sin keko') +
+                ' (compras manuales, Excel o del Sniper antes de su primer inventario). Salen en las auditorías de tus snipers.'),
+              h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+                h('span', null, 'Asignarlas a'),
+                h('div', { style: { flex: 1, minWidth: 180 } }, h(SelectorKeko, { kekos: kekos.kekos, valor: haciaSinKeko, onChange: setHaciaSinKeko })),
+                h('button', { className: 'btn btn-chico', onClick: function () { setAsignando(true); } }, 'Revisar y asignar'))) : null,
+          ]),
+    asignando ? h(AsignarKekoModal, { compras: props.compras, furnis: props.furnis, kekos: kekos.kekos, hacia: haciaSinKeko,
+      onClose: function () { setAsignando(false); }, onAsignado: function (msg) { props.onCambio(msg); } }) : null,
 
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 14 } },
       h('div', { className: 'card' },

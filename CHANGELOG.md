@@ -10,6 +10,20 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Kekos manuales**: registra en **Ajustes → Kekos** las cuentas de Habbo sin Sniper (una
+  bodega, un keko de tradeos). Nunca se auditan, así que sus furnis no aparecen en las
+  auditorías de tus snipers. Se pueden renombrar (sus lotes cambian con ellos) y borrar
+  cuando ya no les quedan unidades.
+- **«+ Compra» pide el keko** (obligatorio): los de tus snipers y los manuales, con
+  «Nuevo keko manual…» para crearlo ahí mismo. Queda elegido el último que usaste.
+- **«Venta» pide de qué keko salen** las unidades y solo ofrece lo de ese keko, para no
+  descontar unidades de un keko con Sniper. Desde «Vender» en un lote, el keko es el suyo.
+- **Asignar unidades sin keko**: lo que estaba en mano sin keko (compras manuales, Excel o
+  del Sniper antes de su primer inventario) se ordena por furni, con casillas y cantidad,
+  enviando cada tanda al keko que corresponda.
+
 ### Cambiado
 
 - **Ajustes → Conexión con SniperMercadillo** muestra los tres datos que pide el Sniper,
@@ -18,6 +32,14 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   del endpoint, y pegarla en «URL del proyecto» hacía que todo envío del bot respondiera
   404. La dirección completa sigue en «Ejemplo de envío».
 - La tabla de tokens muestra el **keko** que aprendió cada sniper.
+- El keko que se escribe en «¿En qué keko están?» de la Auditoría queda registrado como
+  keko manual.
+
+### Migraciones de Supabase
+
+- `20261008000000_kekos_manuales.sql` (requiere la `20261007000000`). Ejecútala **antes**
+  de publicar esta versión. Sin ella, la app sigue funcionando como la 1.1.0: «+ Compra»
+  y «Venta» no piden keko y Ajustes avisa que falta.
 
 ## [1.1.0] - 2026-09-28
 

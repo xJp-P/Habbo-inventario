@@ -80,6 +80,13 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.post('/api/sniper/tokens', async (req, res) => res.status(201).json(await negocio.crearToken((req.body || {}).nombre)));
   r.post('/api/sniper/tokens/:id/revocar', async (req, res) => res.json(await negocio.revocarToken(id(req))));
 
+  // ── Kekos (de los snipers y manuales) ────────────────────────────────────
+  r.get('/api/kekos', async (_req, res) => res.json(await negocio.listarKekos()));
+  r.post('/api/kekos', async (req, res) => res.status(201).json(await negocio.crearKeko((req.body || {}).nombre)));
+  r.post('/api/kekos/asignar', async (req, res) => res.json(await negocio.asignarSinKeko(req.body || {})));
+  r.put('/api/kekos/:id', async (req, res) => res.json(await negocio.renombrarKeko(id(req), (req.body || {}).nombre)));
+  r.delete('/api/kekos/:id', async (req, res) => res.json(await negocio.borrarKeko(id(req))));
+
   // ── Catalogo Habbo.es (furnidata, vive en tu equipo) ─────────────────────
   r.get('/api/furnidata/estado', (_req, res) => res.json(furnidata.estado()));
   r.get('/api/furnidata/buscar', (req, res) => {

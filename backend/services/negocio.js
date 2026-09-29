@@ -417,6 +417,42 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { ok: true };
   }
 
+  // ── Kekos: los de los snipers (se detectan solos) y los manuales ──────────
+  // Un keko manual es una cuenta sin Sniper (una bodega): nunca envia su inventario, asi
+  // que nunca se audita. Llega con la migracion 20261008000000; sin ella no hay lista y
+  // «+ Compra» y «Venta» funcionan como antes (sin keko).
+  async function listarKekos() {
+    try {
+      return { disponible: true, kekos: await datos(db().rpc('listar_kekos')) };
+    } catch (e) {
+      if (faltaMigracion(e)) return { disponible: false, kekos: [] };
+      throw e;
+    }
+  }
+
+  function crearKeko(nombre) {
+    return datos(db().rpc('crear_keko', { p_nombre: String(nombre || '').trim() }));
+  }
+
+  function renombrarKeko(id, nombre) {
+    return datos(db().rpc('renombrar_keko', { p_id: Number(id), p_nombre: String(nombre || '').trim() }));
+  }
+
+  function borrarKeko(id) {
+    return datos(db().rpc('borrar_keko', { p_id: Number(id) }));
+  }
+
+  // Pasa a un keko las unidades en mano SIN keko de los furnis elegidos (una transaccion).
+  async function asignarSinKeko({ hacia, items } = {}) {
+    const lista = Array.isArray(items) ? items : [];
+    const limpios = lista.map((x) => ({ furni_id: Number(x && x.furni_id), cantidad: Number(x && x.cantidad) }));
+    if (!limpios.length) throw new ClientError('Marca al menos un furni para asignar.');
+    if (limpios.some((x) => !Number.isInteger(x.furni_id) || !Number.isInteger(x.cantidad) || x.cantidad < 1)) {
+      throw new ClientError('Cada furni necesita una cantidad entera mayor que 0.');
+    }
+    return datos(db().rpc('asignar_sin_keko', { p_hacia: nombreKeko(hacia), p_items: limpios }));
+  }
+
   // Sincroniza tus furnis con el catalogo de Habbo.es (corre al iniciar sesion, al
   // refrescar el catalogo y cada vez que llegan eventos del Sniper):
   //  - completa sprite_id + tipo de los furnis con classname (el Sniper los identifica
@@ -580,6 +616,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
     vender, revertirVenta, asignarLtd, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
     importarExcel, listarTokens, crearToken, revocarToken,
+    listarKekos, crearKeko, renombrarKeko, borrarKeko, asignarSinKeko,
     resolverNombre, sincronizarConCatalogo,
     auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,
   };

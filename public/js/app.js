@@ -54,6 +54,7 @@ function App() {
   var sFilE = useState('comprado'); var filtroEstado = sFilE[0]; var setFiltroEstado = sFilE[1];
   var sMig = useState(null); var faltanMig = sMig[0]; var setFaltanMig = sMig[1];
   var sAud = useState(null); var resAuditoria = sAud[0]; var setResAuditoria = sAud[1];
+  var sKek = useState(null); var kekos = sKek[0]; var setKekos = sKek[1];
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -87,8 +88,9 @@ function App() {
     return Promise.all([API.get('/api/resumen'), API.get('/api/furnis'), API.get('/api/compras'), API.get('/api/pendientes')])
       .then(function (r) {
         if (r.every(function (x) { return x; })) setDatos({ resumen: r[0], furnis: r[1], compras: r[2], pendientes: r[3] });
-        // Diferencias de la auditoria (aparte: sin la migracion responde vacio).
+        // Diferencias de la auditoria y kekos (aparte: sin su migracion responden vacio).
         API.get('/api/auditoria/resumen').then(function (a) { if (a) setResAuditoria(a); });
+        API.get('/api/kekos').then(function (k) { if (k) setKekos(k); });
       });
   }, []);
 
@@ -203,6 +205,7 @@ function App() {
   });
   else contenido = h(AjustesView, {
     cuenta: cuenta, tema: tema, onTema: setTema, onSalir: salir, onCambio: cambio,
+    kekos: kekos, compras: datos.compras, furnis: datos.furnis,
     onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
   });
 
@@ -243,9 +246,9 @@ function App() {
           h(Ico, { name: tema === 'dark' ? 'sun' : 'moon', size: 14, color: 'var(--text3)' }))),
       h('div', { className: 'main-content' }, avisoMigraciones, contenido)),
 
-    modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
-    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis, compras: datos.compras, furni: modal.furni, lote: modal.lote, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis, compras: datos.compras, furni: modal.furni, lote: modal.lote, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender-furni' ? h(VenderFurniModal, { furni: modal.furni, lotes: modal.lotes, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'retirar-furni' ? h(RetirarFurniModal, { furni: modal.furni, lotes: modal.lotes, unidadesSniper: modal.unidadesSniper, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,

@@ -738,8 +738,65 @@ async function main() {
     ok('auditoria: las unidades sin keko que sobran aparecen aparte y se mueven al keko donde estan');
     assert.equal((await negC.listarTokens()).find((t) => t.id === tkC.id).keko, 'KekoC', 'la tabla de tokens muestra el keko que aprendio cada sniper');
 
+    // ── Kekos manuales (migracion 20261008000000) ──
+    let kk = await negC.listarKekos();
+    const nombresK = (origen) => kk.kekos.filter((k) => k.origen === origen).map((k) => k.nombre);
+    assert.equal(kk.disponible, true);
+    assert.deepEqual([nombresK('sniper'), nombresK('manual')], [['KekoC'], ['KekoD', 'KekoE']],
+      'el keko del sniper se detecta; lo escrito en «¿En que keko estan?» de la Auditoria queda como manual');
+    assert.deepEqual(kk.kekos.find((k) => k.nombre === 'KekoC').snipers, ['VPS de prueba C']);
+    const bodega = await negC.crearKeko('  MiBodega ');
+    assert.equal(bodega.nombre, 'MiBodega');
+    await rechaza(negC.crearKeko('mibodega'), /Ya tienes un keko llamado «MiBodega»/);
+    await rechaza(negC.crearKeko('kekoc'), /ya es el keko de uno de tus snipers/);
+    await rechaza(negC.crearKeko('x'.repeat(61)), /entre 1 y 60/);
+    // Antes, una compra manual sin keko salia como «Sin keko asignado» en la auditoria del sniper.
+    const enBodega = await negC.crearCompra({ furni_id: caraC.furni_id, cantidad: 2, precio_compra: 30, keko: 'MiBodega' });
+    audC = await negC.auditoria('KekoC');
+    assert.equal(filaC(sCa), undefined, 'lo de la bodega no ensucia la auditoria del sniper');
+    kk = await negC.listarKekos();
+    assert.equal(kk.kekos.find((k) => k.nombre === 'MiBodega').en_mano, 2);
+    ok('kekos manuales: se crean (sin repetir ni pisar el de un sniper) y una compra manual en la bodega no sale en la auditoria del sniper');
+
+    let ren = await negC.renombrarKeko(bodega.id, 'Bodega Principal');
+    assert.deepEqual([ren.antes, ren.nombre, ren.lotes], ['MiBodega', 'Bodega Principal', 1]);
+    assert.equal((await negC.compraPorId(enBodega.id)).keko, 'Bodega Principal', 'renombrar lleva sus lotes');
+    await rechaza(negC.renombrarKeko(bodega.id, 'kekod'), /Ya tienes un keko llamado «KekoD»/);
+    await rechaza(negC.renombrarKeko(bodega.id, 'KekoC'), /es el keko de uno de tus snipers/);
+    ren = await negC.renombrarKeko(bodega.id, 'bodega principal');
+    assert.equal(ren.nombre, 'bodega principal', 'cambiar solo las mayusculas se permite');
+    await rechaza(negC.borrarKeko(bodega.id), /todavía tiene 2 unidad/);
+
+    await negC.crearCompra({ furni_id: veloC.furni_id, cantidad: 3, precio_compra: 650 });
+    await negC.crearCompra({ furni_id: tronoC.furni_id, cantidad: 1, precio_compra: 480 });
+    const sueltos = async () => (await negC.listarCompras()).filter((c) => c.estado === 'comprado' && !c.keko)
+      .map((c) => [c.furni_id, c.cantidad]).sort((a, b) => a[0] - b[0]);
+    const enKeko = async (keko, furniId) => (await negC.listarCompras())
+      .filter((c) => c.estado === 'comprado' && c.keko === keko && c.furni_id === furniId).reduce((s, c) => s + c.cantidad, 0);
+    const sueltosAntes = await sueltos();
+    assert.deepEqual(sueltosAntes, [[veloC.furni_id, 3], [tronoC.furni_id, 1]].sort((a, b) => a[0] - b[0]));
+    const asg = await negC.asignarSinKeko({ hacia: 'KekoD', items: [{ furni_id: veloC.furni_id, cantidad: 2 }] });
+    assert.deepEqual([asg.hacia, asg.unidades, asg.furnis], ['KekoD', 2, 1]);
+    assert.equal(await enKeko('KekoD', veloC.furni_id), 2);
+    await rechaza(negC.asignarSinKeko({ hacia: 'bodega principal', items: [{ furni_id: tronoC.furni_id, cantidad: 1 }, { furni_id: veloC.furni_id, cantidad: 5 }] }), /Solo hay 1 unidad/);
+    assert.deepEqual((await sueltos()).find((x) => x[0] === tronoC.furni_id), [tronoC.furni_id, 1], 'todo o nada: si un furni no alcanza, no se mueve ninguno');
+    await rechaza(negC.asignarSinKeko({ hacia: 'KekoD', items: [] }), /Marca al menos un furni/);
+    await negC.asignarSinKeko({ hacia: 'Tradeos', items: [{ furni_id: veloC.furni_id, cantidad: 1 }, { furni_id: tronoC.furni_id, cantidad: 1 }] });
+    assert.deepEqual(await sueltos(), [], 'ya no queda nada sin keko');
+    kk = await negC.listarKekos();
+    assert.ok(kk.kekos.some((k) => k.nombre === 'Tradeos' && k.origen === 'manual' && k.en_mano === 2), 'un keko de destino nuevo queda registrado como manual');
+
+    const veloEnC = await enKeko('KekoC', veloC.furni_id);
+    await negC.venderEnMano(veloC.furni_id, { cantidad: 2, precio: 800, keko: 'KekoD' });
+    await rechaza(negC.venderEnMano(veloC.furni_id, { cantidad: 1, precio: 800, keko: 'KekoD' }), /en el keko KekoD/);
+    assert.equal(await enKeko('KekoC', veloC.furni_id), veloEnC, 'la venta desde un keko no toca las unidades de otro');
+    await negC.moverAKeko({ furni_id: caraC.furni_id, cantidad: 2, desde: 'bodega principal', hacia: 'KekoD' });
+    await negC.borrarKeko(bodega.id);
+    assert.ok(!(await negC.listarKekos()).kekos.some((k) => k.nombre === 'bodega principal'));
+    ok('kekos manuales: renombrar lleva sus lotes, borrar exige que no le queden unidades, lo sin keko se asigna por furni (todo o nada) y la venta sale solo del keko elegido');
+
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -752,9 +809,23 @@ async function main() {
     assert.deepEqual(await negD.resumenAuditoria(), { pendientes: 0, kekos: [], sin_migracion: true });
     await negD.crearToken('VPS de dani');
     assert.deepEqual((await negD.listarTokens()).map((t) => [t.nombre, t.keko]), [['VPS de dani', undefined]], 'sin la migracion, los tokens se listan sin keko');
+    assert.deepEqual(await negD.listarKekos(), { disponible: false, kekos: [] });
     await rechaza(negD.auditoria(), /Falta instalar la migracion 20261007000000/);
     await sinAuditoria.cerrar();
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
+
+    // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql'] });
+    await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
+    await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
+    const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
+    await conexE.iniciar();
+    const negE = crearServicioNegocio({ conexion: conexE, furnidata });
+    assert.deepEqual(await negE.listarKekos(), { disponible: false, kekos: [] });
+    assert.equal((await negE.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 1, precio_compra: 30, keko: 'Bodega' })).keko, 'Bodega');
+    await rechaza(negE.crearKeko('Bodega'), /Falta instalar el esquema/);
+    await sinKekos.cerrar();
+    ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);
@@ -771,6 +842,7 @@ async function main() {
     await conexB.iniciar();
     const negB = crearServicioNegocio({ conexion: conexB, furnidata });
     assert.equal((await negB.listarFurnis()).length, 0);
+    assert.deepEqual((await negB.listarKekos()).kekos, [], 'los kekos tambien son de cada usuario');
     ok('RLS: el segundo usuario no ve nada del primero');
     // Planilla de prueba con la misma estructura que la plantilla del usuario (hojas
     // Inventario, Mercadillo y Resumen), generada aqui: el repositorio no guarda Excels.
@@ -867,6 +939,20 @@ async function main() {
     assert.equal(h.status, 201);
     assert.match(h.json.token, /^hbi_/);
     ok('crear token desde la API de la app');
+    h = await pedir(puerto, 'POST', '/api/kekos', { cuerpo: { nombre: 'Bodega de Ana' } });
+    assert.equal(h.status, 201);
+    h = await pedir(puerto, 'GET', '/api/kekos');
+    const bodegaAna = h.json.kekos.find((k) => k.nombre === 'Bodega de Ana');
+    assert.ok(h.json.disponible && bodegaAna && bodegaAna.origen === 'manual');
+    h = await pedir(puerto, 'POST', '/api/kekos', { cuerpo: { nombre: 'bodega de ana' } });
+    assert.equal(h.status, 409);
+    h = await pedir(puerto, 'PUT', `/api/kekos/${bodegaAna.id}`, { cuerpo: { nombre: 'Bodega Ana' } });
+    assert.equal(h.json.nombre, 'Bodega Ana');
+    h = await pedir(puerto, 'POST', '/api/kekos/asignar', { cuerpo: { hacia: 'Bodega Ana', items: [{ furni_id: 1, cantidad: 0 }] } });
+    assert.equal(h.status, 400);
+    h = await pedir(puerto, 'DELETE', `/api/kekos/${bodegaAna.id}`);
+    assert.equal(h.status, 200);
+    ok('kekos desde la API de la app: crear, repetido 409, renombrar, validar lo que se asigna y borrar');
 
     const sinSesion = await crearApp({ dirDatos: dir, clienteFijo: clienteA.comoAnon(), iniciarCatalogo: false, log: () => {} });
     const s2 = http.createServer(sinSesion.app).listen(0, '127.0.0.1');
