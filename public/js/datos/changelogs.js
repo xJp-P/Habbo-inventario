@@ -13,6 +13,9 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.5.2': [
+    'Auditoría más honesta: ya no te sugiere que unos furnis «volvieron» de otro keko sin pruebas. Solo lo propone cuando la foto de ese otro keko confirma que allí faltan; para todo lo demás, incluidos tus kekos manuales, eliges tú de dónde vinieron.',
+  ],
   '1.5.1': [
     'Auditoría más ordenada: «Quitar de la auditoría» ya no ocupa una fila propia. Si el furni tiene un solo precio, va al lado de «Registrar entrada»; si tiene varios, sube junto al nombre del furni, porque quita el furni entero.',
     'La tasa del Lingo ahora se muestra fija en 50 créditos, como en Habbo.es: ya no hace falta tocarla. Si alguna vez guardaste otra, el Resumen te avisa y la deja en 50 con un clic.',

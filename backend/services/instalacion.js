@@ -42,6 +42,7 @@ const MIGRACIONES = [
   { archivo: '20261010000000_costos_por_tramo.sql', titulo: 'Costos por tramo en la auditoría (un costo por lote)', sonda: funcion('_tramos_foto', { x: {} }) },
   { archivo: '20261011000000_inventario_en_vivo.sql', titulo: 'El inventario del Sniper llega al instante (avisos de la auditoría)', sonda: funcion('auditoria_en_vivo', {}) },
   { archivo: '20261012000000_limpieza_tokens.sql', titulo: 'Eliminar tokens con limpieza profunda de su keko', sonda: funcion('vista_limpieza_tokens', { p_ids: [0] }) },
+  { archivo: '20261013000000_origen_con_evidencia.sql', titulo: 'Auditoría: «Vinieron de otro keko» solo con evidencia', sonda: funcion('_unidades_en_fotos', { p_propietario: '00000000-0000-0000-0000-000000000000', p_excepto: '' }) },
 ];
 
 const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204', 'PGRST205', '42P01']);

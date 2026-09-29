@@ -10,6 +10,23 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Corregido
+
+- **Auditoría: «Vinieron de otro keko» ya no se inventa un origen**. Con un sobrante, la
+  bandeja ofrecía «Volvieron de <keko> (N allá)» por **cada** otro keko que tuviera
+  unidades de ese furni en la app, incluidos los kekos manuales. Era una conjetura escrita
+  como un hecho (p. ej. «Volvieron de xJp (10 allá)» en un sobrante de -JDark, con xJp
+  como keko manual) y pulsarla por error descuadraba el stock de ese keko. Ahora solo se
+  sugiere con **evidencia**: el otro keko tiene Sniper y su propia foto dice que allí
+  faltan unidades de ese furni («Vinieron de KekoB (allá faltan 2)»). Para lo demás hay un
+  botón neutro, «Vinieron de otro keko…», que abre un formulario donde eliges el keko de
+  origen (los manuales, marcados como tales) y la cantidad.
+
+### Migraciones de Supabase
+
+- `20261013000000_origen_con_evidencia.sql` (requiere la `20261012000000`). Sin ella,
+  ningún keko llega con evidencia: todos los orígenes se eligen en el formulario.
+
 ## [1.5.1] - 2026-09-29
 
 ### Cambiado

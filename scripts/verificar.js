@@ -844,7 +844,8 @@ async function main() {
 
     await negC.moverAKeko({ furni_id: caraC.furni_id, cantidad: 1, desde: 'KekoC', hacia: 'KekoD' });
     audC = await negC.auditoria('KekoC');
-    assert.deepEqual([filaC(sCa).diferencia, filaC(sCa).otros], [1, [{ keko: 'KekoD', unidades: 1 }]], 'lo movido a otro keko se ofrece como «volvieron de»');
+    assert.deepEqual([filaC(sCa).diferencia, filaC(sCa).otros], [1, [{ keko: 'KekoD', unidades: 1, auditado: false, faltan: 0 }]],
+      'lo movido a otro keko sale en «otros», pero sin Sniper ni foto no hay evidencia (se elige a mano)');
     await negC.moverAKeko({ furni_id: caraC.furni_id, cantidad: 1, desde: 'KekoD', hacia: 'KekoC' });
     r = await enviarInv([{ ...sV, cantidad: 5 }, { ...sCa }, { ...sT, ltds: [46] }, { sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 41 }]);
     audC = await negC.auditoria('KekoC');
@@ -1005,8 +1006,35 @@ async function main() {
       ['sobrante', [11, 13], [[1100, false], [1250, false]]], 'registrado el fundido (con el costo al centimo), quedan los otros dos tramos y los otros dos numeros');
     ok('contrato del Sniper: el lote fundido lleva el aviso de promedio solo en su linea y los LTD que llegan juntos en el primer objeto se eligen en cada tramo');
 
+    // ── «Vinieron de otro keko» solo con evidencia (migracion 20261013000000) ──
+    // Caso real: 10 unidades en un keko MANUAL (xJp) hacian salir «Volvieron de xJp (10 alla)»
+    // en el sobrante de un keko de Sniper, sin ninguna prueba de que se movieran.
+    const evid = await crearClienteLocal();
+    await evid.crearUsuario('eli@prueba.local', 'clave-eli');
+    await evid.auth.signInWithPassword({ email: 'eli@prueba.local', password: 'clave-eli' });
+    const conexEv = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: evid });
+    await conexEv.iniciar();
+    const negEv = crearServicioNegocio({ conexion: conexEv, furnidata });
+    const hcB = await negEv.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 2, precio_compra: 30, keko: 'KekoB' });
+    await negEv.crearCompra({ furni_id: hcB.furni_id, cantidad: 10, precio_compra: 30, keko: 'xJp' });
+    const fEv = await negEv.furniPorId(hcB.furni_id);
+    const tkA = await negEv.crearToken('VPS A');
+    const tkB = await negEv.crearToken('VPS B');
+    const fotoEv = (tk, keko, cantidad) => evid.comoAnon().rpc('auditar_inventario', { token_sniper: tk.token, keko, hotel: 'es',
+      inventario: cantidad ? [{ sprite_id: fEv.sprite_id, tipo: fEv.tipo, cantidad }] : [] });
+    assert.equal((await fotoEv(tkB, 'KekoB', 0)).error, null);
+    assert.equal((await fotoEv(tkA, 'KekoA', 2)).error, null);
+    let otrosEv = (await negEv.auditoria('KekoA')).filas[0].otros;
+    assert.deepEqual(otrosEv, [{ keko: 'KekoB', unidades: 2, auditado: true, faltan: 2 }, { keko: 'xJp', unidades: 10, auditado: false, faltan: 0 }],
+      'KekoB tiene Sniper y en su foto faltan 2: evidencia; xJp es manual: sin evidencia, aunque tenga 10 en la app');
+    assert.equal((await fotoEv(tkB, 'KekoB', 2)).error, null);
+    otrosEv = (await negEv.auditoria('KekoA')).filas[0].otros;
+    assert.deepEqual(otrosEv.map((o) => [o.keko, o.faltan]), [['KekoB', 0], ['xJp', 0]], 'si la foto de KekoB tiene sus 2, ya no hay evidencia de que se movieran');
+    await evid.cerrar();
+    ok('auditoria: «vinieron de otro keko» solo se sugiere con evidencia (sobra aqui y falta en la foto de ese keko); un keko manual nunca, se elige a mano');
+
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -1025,7 +1053,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -1038,7 +1066,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -1055,7 +1083,7 @@ async function main() {
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
-    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql'] });
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
     await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
     await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
     const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });

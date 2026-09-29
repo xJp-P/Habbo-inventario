@@ -4,7 +4,7 @@
 //
 // La base calcula todo en vivo contra la ultima foto (funcion auditoria_inventario), asi
 // que al resolver una diferencia la fila desaparece sin esperar otro escaneo:
-//   sobrante       en Habbo hay mas: son de este keko (lotes sin asignar), volvieron de
+//   sobrante       en Habbo hay mas: son de este keko (lotes sin asignar), vinieron de
 //                  otro keko, entrada con costo o «Quitar de la auditoria» (no es mercancia)
 //   faltante       la app tiene de mas: las vendi, estan en otro keko o borrar
 //   ltd            misma cantidad pero otro numero de serie: corregir el numero
@@ -124,6 +124,38 @@ function FormVenta(props) {
     h('label', { className: 'check', style: { alignSelf: 'center' } },
       h('input', { type: 'checkbox', checked: mercadillo, onChange: function (e) { setMercadillo(e.target.checked); } }),
       h('span', null, 'En el mercadillo (se guarda el neto)')));
+}
+
+// «Vinieron de otro keko…»: trae a este keko unidades que la app tiene en otro. Tu eliges
+// de cual: para la mayoria (un keko manual nunca envia su inventario) la app no tiene
+// ninguna prueba de que se movieran, asi que no lo da por hecho (v1.5.2).
+function FormTraer(props) {
+  var f = props.fila;
+  var opciones = f.otros || [];
+  var sO = useState(opciones.length === 1 ? opciones[0].keko : ''); var origen = sO[0]; var setOrigen = sO[1];
+  var elegido = opciones.find(function (o) { return o.keko === origen; }) || null;
+  function tope(o) { return Math.min(f.diferencia, o ? o.unidades : f.diferencia); }
+  var sC = useState(String(tope(elegido))); var cant = sC[0]; var setCant = sC[1];
+  function elegir(keko) {
+    setOrigen(keko);
+    setCant(String(tope(opciones.find(function (o) { return o.keko === keko; }) || null)));
+  }
+  function guardar() {
+    if (!elegido) { props.onError('Elige de qué keko vinieron.'); return; }
+    var c = leerNumero(cant);
+    var maximo = tope(elegido);
+    if (!c || c < 1 || c > maximo) { props.onError('La cantidad debe estar entre 1 y ' + maximo + '.'); return; }
+    props.onEnviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: c, desde: elegido.keko, hacia: props.keko },
+      props.nombre + ': ' + unidades(c) + pl(c, ' vino de ', ' vinieron de ') + elegido.keko);
+  }
+  return h(Formulario, { onCancelar: props.onCerrar, onGuardar: guardar, enviando: props.enviando, textoGuardar: 'Traer a ' + props.keko },
+    h(Campo, { l: '¿De qué keko vinieron?' },
+      h('select', { className: 'inp', value: origen, autoFocus: true, onChange: function (e) { elegir(e.target.value); } },
+        opciones.length > 1 ? h('option', { value: '' }, 'Elige un keko…') : null,
+        opciones.map(function (o) {
+          return h('option', { key: o.keko, value: o.keko }, o.keko + ' · ' + unidades(o.unidades) + ' en la app' + (o.auditado === false ? ' (keko manual)' : ''));
+        }))),
+    h(Campo, { l: 'Cantidad' }, h('input', { className: 'inp inp-num', style: { width: 80 }, value: cant, inputMode: 'numeric', onChange: function (e) { setCant(e.target.value); } })));
 }
 
 // «Estan en otro keko»: mueve unidades de este keko (faltantes) o sin keko asignado a otro.
@@ -275,6 +307,7 @@ export function AuditoriaView(props) {
       return h(FormEntrada, Object.assign(comunes, { tramo: tramo, cantidad: tramo ? tramo.unidades : cual === 'sin' ? sinCosto : f.diferencia }));
     }
     if (accion === 'venta') return h(FormVenta, comunes);
+    if (accion === 'traer') return h(FormTraer, comunes);
     if (accion === 'mover') return h(FormMover, Object.assign(comunes, { maximo: -f.diferencia, desde: K }));
     if (accion === 'mover-sin') return h(FormMover, Object.assign(comunes, { maximo: f.sin_asignar, desde: null }));
     return null;
@@ -327,12 +360,25 @@ export function AuditoriaView(props) {
           enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: n, desde: null, hacia: K }, nombreDe(f) + ': ' + unidades(n) + pl(n, ' asignada a ', ' asignadas a ') + K);
         } }, 'Son de este keko (' + f.sin_asignar + ' sin asignar)'));
       }
-      (f.otros || []).forEach(function (o) {
-        var m = Math.min(f.diferencia, o.unidades);
-        acciones.push(h('button', { key: 'o' + o.keko, className: 'btn btn-chico', onClick: function () {
-          enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: m, desde: o.keko, hacia: K }, nombreDe(f) + ': ' + unidades(m) + pl(m, ' volvió de ', ' volvieron de ') + o.keko);
-        } }, 'Volvieron de ' + o.keko + ' (' + o.unidades + ' allá)'));
+      // Otros kekos con unidades de este furni en la app. Solo se SUGIEREN como origen con
+      // evidencia: ese keko tiene Sniper y su propia foto dice que alli faltan (sobran aqui y
+      // faltan alla: se movieron). Un keko manual nunca envia su inventario, asi que no hay
+      // prueba: se elige a mano en «Vinieron de otro keko…». Sin la migracion 20261013000000
+      // no llega la evidencia y todo va al formulario.
+      var otros = f.otros || [];
+      var conEvidencia = otros.filter(function (o) { return o.auditado && o.faltan > 0; });
+      conEvidencia.forEach(function (o) {
+        var m = Math.min(f.diferencia, o.faltan);
+        acciones.push(h('button', { key: 'o' + o.keko, className: 'btn btn-chico',
+          title: 'En la foto de ' + o.keko + ' faltan ' + unidades(o.faltan) + ' de este furni: lo más probable es que las pasaras de allá a este keko.',
+          onClick: function () {
+            enviar('/api/auditoria/mover', { furni_id: f.furni_id, cantidad: m, desde: o.keko, hacia: K }, nombreDe(f) + ': ' + unidades(m) + pl(m, ' vino de ', ' vinieron de ') + o.keko);
+          } }, 'Vinieron de ' + o.keko + ' (allá faltan ' + o.faltan + ')'));
       });
+      if (otros.length > conEvidencia.length) {
+        acciones.push(h('button', { key: 'ot', className: 'btn btn-chico' + (abiertoAqui === 'traer' ? ' activo' : ''), onClick: function () { abrir('traer'); } },
+          'Vinieron de otro keko…'));
+      }
       if (!lineas) {
         acciones.push(h('button', { key: 'e', className: 'btn btn-chico' + (abiertoAqui === 'entrada' ? ' activo' : ''), onClick: function () { abrir('entrada'); } },
           h(Ico, { name: 'plus', size: 12 }), textoEntrada));
