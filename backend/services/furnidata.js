@@ -6,10 +6,12 @@
 //
 // FLUJO:
 //  1. Al arrancar se lee la cache local (furnidata-es.json en la carpeta de datos).
-//  2. Si no hay cache, se descarga en primer plano. Si la cache tiene mas de 24 h, se
-//     refresca en segundo plano sin bloquear la app.
+//  2. Si no hay cache, se descarga en primer plano. Si la hay, CADA VEZ que se abre la app
+//     (y cada 6 h mientras siga abierta) se busca en segundo plano si Habbo.es publico un
+//     catalogo nuevo, sin bloquear la app ni avisar: el boton de Ajustes ya no hace falta.
 //  3. La URL oficial redirige a una URL versionada (.../furnidata_json/<hash>). Ese hash
-//     es la "version": si no cambio, no se vuelve a procesar nada.
+//     es la "version": basta leer la redireccion (unos bytes) para saber si cambio; solo
+//     entonces se descarga y se procesa el catalogo entero.
 //
 // ICONOS: https://images.habbo.com/dcr/hof_furni/<revision>/<classname>_icon.png, donde
 // el "*" de las variantes de color se escribe "_" (rare_fountain*7 -> rare_fountain_7).
@@ -24,7 +26,7 @@ const { normalizar, parecido } = require('../core/util');
 const URL_FURNIDATA = 'https://www.habbo.es/gamedata/furnidata_json/1';
 const HOST_PERMITIDO = 'www.habbo.es';
 const URL_ICONOS = 'https://images.habbo.com/dcr/hof_furni';
-const REFRESCO_MS = 24 * 60 * 60 * 1000;
+const REVISION_MS = 6 * 60 * 60 * 1000;
 const ARCHIVO_CACHE = 'furnidata-es.json';
 // v2 agrega el id numerico (sprite id) de cada furni, que es como lo identifican los
 // paquetes del juego que lee G-Earth. Una cache de formato viejo se refresca sola.
@@ -79,6 +81,26 @@ function descargar(url, { redirecciones = 5, timeoutMs = 60000 } = {}) {
   });
 }
 
+// La version publicada del catalogo SIN descargarlo: la URL oficial redirige a la
+// versionada y basta con leer esa redireccion. null si no redirige (se descarga entero).
+function versionRemota({ timeoutMs = 15000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(URL_FURNIDATA, { headers: CABECERAS }, (res) => {
+      const { statusCode, headers } = res;
+      if (statusCode >= 300 && statusCode < 400 && headers.location) {
+        res.resume();
+        const destino = new URL(headers.location, URL_FURNIDATA).href;
+        try { validarFuente(destino); } catch (e) { return reject(e); }
+        return resolve(destino.split('/').pop() || null);
+      }
+      res.destroy();
+      resolve(null);
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('Tiempo de espera agotado')));
+    req.on('error', reject);
+  });
+}
+
 function nombreArchivoIcono(classname) {
   return String(classname).replace(/\*/g, '_');
 }
@@ -120,6 +142,7 @@ function crearServicioFurnidata({ dirDatos, log = () => {}, alActualizar = null 
   let meta = { version: null, descargadoEn: null, total: 0, formato: null };
   let ultimoError = null;
   let enCurso = null;
+  let revision = null;
   const iconosEnCurso = new Map();
 
   function indexar(items, nuevaMeta) {
@@ -151,11 +174,19 @@ function crearServicioFurnidata({ dirDatos, log = () => {}, alActualizar = null 
     enCurso = (async () => {
       try {
         validarFuente(URL_FURNIDATA);
+        const ahora = new Date().toISOString();
+        // Revision silenciosa: si la version publicada es la que ya hay, no se descarga.
+        if (!forzar && lista.length && meta.formato === FORMATO_CACHE && meta.version &&
+            (await versionRemota()) === meta.version) {
+          meta.descargadoEn = ahora;
+          guardarCache(lista.map(({ nn, ...it }) => it));
+          ultimoError = null;
+          return estado();
+        }
         log('Descargando furnidata de Habbo.es...');
         const { buffer, urlFinal } = await descargar(URL_FURNIDATA);
         validarFuente(urlFinal);
         const version = urlFinal.split('/').pop();
-        const ahora = new Date().toISOString();
         if (!forzar && version && version === meta.version && meta.formato === FORMATO_CACHE && lista.length) {
           meta.descargadoEn = ahora;
           guardarCache(lista.map(({ nn, ...it }) => it));
@@ -189,18 +220,23 @@ function crearServicioFurnidata({ dirDatos, log = () => {}, alActualizar = null 
     fs.renameSync(tmp, rutaCache);
   }
 
-  // Deja el catalogo usable: cache si existe (y refresco en segundo plano si esta vieja),
-  // o descarga en primer plano si no hay nada.
+  // Deja el catalogo usable: con cache, al instante (y la revision en segundo plano); sin
+  // cache o con una de formato viejo, descargandolo en primer plano. Despues revisa cada
+  // 6 h (el temporizador no retiene el proceso; `detener` lo apaga).
   async function iniciar() {
     const hayCache = cargarCache();
-    if (!hayCache) {
-      await actualizar().catch(() => {});
-      return estado();
+    if (!hayCache || meta.formato !== FORMATO_CACHE) await actualizar().catch(() => {});
+    else actualizar().catch(() => {});
+    if (!revision) {
+      revision = setInterval(() => actualizar().catch(() => {}), REVISION_MS);
+      if (revision.unref) revision.unref();
     }
-    const edad = Date.now() - new Date(meta.descargadoEn || 0).getTime();
-    if (meta.formato !== FORMATO_CACHE) await actualizar().catch(() => {});
-    else if (edad > REFRESCO_MS) actualizar().catch(() => {});
     return estado();
+  }
+
+  function detener() {
+    if (revision) clearInterval(revision);
+    revision = null;
   }
 
   function estado() {
@@ -319,7 +355,7 @@ function crearServicioFurnidata({ dirDatos, log = () => {}, alActualizar = null 
     return p;
   }
 
-  const api = { iniciar, actualizar, estado, buscar, coincidencia, porClase, porSpriteId, variantesDe, icono, urlIcono, cargarCache };
+  const api = { iniciar, detener, actualizar, estado, buscar, coincidencia, porClase, porSpriteId, variantesDe, icono, urlIcono, cargarCache };
   return api;
 }
 

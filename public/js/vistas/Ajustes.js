@@ -95,6 +95,13 @@ export function AjustesView(props) {
     API.get('/api/furnidata/estado').then(function (r) { if (r) setCatalogo(r); });
   }
   useEffect(cargar, []);
+  // El catalogo se revisa solo al abrir la app: si esa revision sigue en curso, se vuelve a
+  // preguntar hasta que termine.
+  useEffect(function () {
+    if (!catalogo || !catalogo.actualizando) return;
+    var t = setTimeout(function () { API.get('/api/furnidata/estado').then(function (r) { if (r) setCatalogo(r); }); }, 1500);
+    return function () { clearTimeout(t); };
+  }, [catalogo]);
 
   // Un dato del Sniper con su boton de copiar (la clave es larga: se corta con … y se copia entera).
   function filaCopiable(etiqueta, valor, aviso) {
@@ -301,7 +308,9 @@ export function AjustesView(props) {
       h('div', { className: 'card' },
         h('div', { className: 'card-titulo', style: { marginBottom: 4 } }, h(Ico, { name: 'database', size: 16 }), 'Catálogo de Habbo.es'),
         h('div', { className: 'card-sub', style: { marginBottom: 10 } }, catalogo
-          ? (catalogo.disponible ? catalogo.total.toLocaleString('es-CO') + ' furnis · actualizado ' + fmtHace(catalogo.descargadoEn) : 'No disponible: ' + (catalogo.error || 'sin descargar'))
+          ? (catalogo.actualizando ? 'Buscando novedades en Habbo.es…'
+            : catalogo.disponible ? catalogo.total.toLocaleString('es-CO') + ' furnis · revisado ' + fmtHace(catalogo.descargadoEn) + '. Se actualiza solo cada vez que abres la app.'
+            : 'No disponible: ' + (catalogo.error || 'sin descargar'))
           : 'Cargando…'),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { className: 'btn', onClick: actualizarCatalogo, disabled: enviando }, h(Ico, { name: 'refresh', size: 14 }), 'Actualizar ahora'),

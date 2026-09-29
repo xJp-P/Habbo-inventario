@@ -23,6 +23,7 @@ const { crearApp } = require('../backend/server');
 const { crearClienteLocal } = require('../backend/db/clienteLocal');
 const { crearServicioConexion, datosParaSniper } = require('../backend/services/conexion');
 const { crearServicioNegocio } = require('../backend/services/negocio');
+const { crearServicioFurnidata } = require('../backend/services/furnidata');
 const ExcelJS = require('exceljs');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
 const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/instalacion');
@@ -193,6 +194,19 @@ async function main() {
   const { app, negocio, furnidata, cerrar } = await crearApp({ dirDatos: dir, clienteFijo: clienteA, log: () => {} });
   assert.ok(furnidata.estado().disponible, 'El catalogo de Habbo.es deberia estar disponible');
   ok(`catalogo Habbo.es cargado (${furnidata.estado().total} furnis)`);
+
+  // ── El catalogo se revisa solo cada vez que se abre la app ──
+  if (fs.existsSync(path.join(dir, 'furnidata-es.json'))) {
+    const dirCat = fs.mkdtempSync(path.join(os.tmpdir(), 'habbo-catalogo-'));
+    fs.copyFileSync(path.join(dir, 'furnidata-es.json'), path.join(dirCat, 'furnidata-es.json'));
+    const cat = crearServicioFurnidata({ dirDatos: dirCat });
+    const est0 = await cat.iniciar();
+    assert.ok(est0.disponible && est0.actualizando, 'con el catalogo guardado abre al instante y busca novedades en segundo plano');
+    await cat.actualizar().catch(() => {});
+    assert.equal(cat.estado().actualizando, false);
+    cat.detener();
+    ok('catalogo: al abrir la app se usa el guardado y se busca uno nuevo en segundo plano, sin pulsar nada');
+  }
 
   // ── Seguridad: la clave anon no ve nada ──
   for (const t of ['furnis', 'compras', 'config', 'tokens_sniper', 'v_furnis', 'v_compras']) {

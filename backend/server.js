@@ -34,10 +34,14 @@ async function crearApp({
   eventos.setMaxListeners(50);
 
   let negocio = null;
+  // Catalogo nuevo (se busca solo al abrir la app): tus furnis toman sus nombres, sprites
+  // e iconos y, si algo cambio, la interfaz recarga sus datos en silencio.
   const furnidata = crearServicioFurnidata({
     dirDatos,
     log,
-    alActualizar: () => negocio && negocio.sincronizarConCatalogo().catch(() => {}),
+    alActualizar: () => negocio && negocio.sincronizarConCatalogo().then((r) => {
+      if (r && (r.actualizados || r.vinculados || r.sprites || r.unidos)) eventos.emit('evento', { tipo: 'catalogo', ...r });
+    }).catch(() => {}),
   });
   const conexion = crearServicioConexion({
     raiz, dirDatos, eventos, log, cifrado,
@@ -92,6 +96,7 @@ async function crearApp({
   });
 
   async function cerrar() {
+    furnidata.detener();
     await conexion.detener();
     if (demo) await demo.cliente.cerrar();
     else if (clienteFijo && clienteFijo.cerrar) await clienteFijo.cerrar();

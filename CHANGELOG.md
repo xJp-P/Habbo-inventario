@@ -28,6 +28,11 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   comparación a la base y recarga los datos de la app (nombres, lotes y el número del menú);
   al terminar, un aviso dice cómo quedó. También aparece cuando aún no llegó ningún
   inventario.
+- **Catálogo de Habbo.es automático**: cada vez que se abre la app (y cada 6 h mientras
+  siga abierta) busca en segundo plano si Habbo.es publicó un catálogo nuevo, leyendo solo
+  su versión; lo descarga únicamente si cambió. Si eso cambia nombres o íconos de tus
+  furnis, la app recarga sus datos sin avisar. Antes solo se refrescaba si tenía más de
+  24 h o con el botón de Ajustes.
 - Modo demo: el inventario simulado manda un elemento por cada precio de compra y el
   primer furni trae un sobrante con dos tramos y una unidad sin costo.
 

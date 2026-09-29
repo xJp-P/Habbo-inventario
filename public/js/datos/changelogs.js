@@ -13,6 +13,13 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.4.0': [
+    'Precio exacto de cada compra: si compraste el mismo furni a precios distintos, Auditoría te muestra una línea por cada precio, cada una con su botón para registrarla. Ya no hace falta conformarse con un promedio.',
+    'Las unidades que ya tenías anotadas se descuentan de la línea con su mismo precio, así solo ves lo que de verdad falta registrar.',
+    'El botón «Comparar de nuevo» ahora gira mientras trabaja y al terminar te cuenta cómo quedó tu inventario.',
+    'Limpia tus tokens: en Ajustes, los tokens revocados tienen una papelera para eliminarlos para siempre. Lo que envió ese Sniper se conserva.',
+    'El catálogo de furnis de Habbo.es se pone al día solo cada vez que abres la app. Ya no tienes que ir a Ajustes a pulsar el botón.',
+  ],
   // La 1.2.0 salio antes de que existiera esta ventana: sus novedades se anuncian aqui,
   // junto con las de la 1.3.0, para que una sola actualizacion las cuente todas.
   '1.3.0': [

@@ -121,7 +121,7 @@ function App() {
   }, []);
   useEffect(function () { if (lista) revisarMigraciones(); else setFaltanMig(null); }, [lista]);
 
-  // Compras del Sniper en vivo.
+  // Compras del Sniper en vivo (y el catalogo, cuando se actualiza solo).
   useEffect(function () {
     if (!lista) return;
     var fuente = new EventSource('/api/eventos');
@@ -134,6 +134,9 @@ function App() {
       avisar('Sniper: ' + (partes.join(', ') || ev.total + ' evento(s)'), 'sniper');
       recargar();
     });
+    // El catalogo de Habbo.es se actualizo solo (al abrir la app) y cambio algun nombre o
+    // icono de tus furnis: se recargan los datos, sin aviso.
+    fuente.addEventListener('catalogo', function () { recargar(); });
     return function () { fuente.close(); };
   }, [lista]);
 
