@@ -96,6 +96,26 @@ async function main() {
   assert.ok(actualizador.includes('`' + paquete.build.mac.artifactName.replace('${ext}', 'zip') + '`'), 'el .zip de Mac tiene el nombre que genera electron-builder');
   ok(`empaquetado: el actualizador apunta a ${owner}/${repo} y al .zip de Mac que genera electron-builder`);
 
+  // ── Ventana de novedades (como Proyecto_Cartera) ──
+  const { CHANGELOGS } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'datos', 'changelogs.js')).href);
+  const nov = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'novedades.js')).href);
+  const mayorQue = (a, b) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
+  if (mayorQue(paquete.version, '1.2.0')) assert.ok(CHANGELOGS[paquete.version], `la version ${paquete.version} necesita sus novedades en public/js/datos/changelogs.js`);
+  for (const [version, items] of Object.entries(CHANGELOGS)) {
+    assert.ok(Array.isArray(items) && items.length && items.every((t) => typeof t === 'string' && t.trim()), `novedades ${version}: lista de textos`);
+    const tecnico = items.find((t) => /\b(SQL|JSON|endpoint|RPC|Supabase|API|payload|backend|frontend|FIFO)\b|migraci|servidor|base de datos/i.test(t));
+    assert.equal(tecnico, undefined, `novedades ${version}: sin tecnicismos («${tecnico}»)`);
+  }
+  assert.deepEqual(nov.novedadesAMostrar({ version: '1.3.0', vista: '1.2.0', changelogs: CHANGELOGS }), { version: '1.3.0', items: CHANGELOGS['1.3.0'] }, 'tras actualizar se muestran');
+  assert.ok(nov.novedadesAMostrar({ version: '1.3.0', vista: null, changelogs: CHANGELOGS }), 'sin ninguna vista (primer arranque) tambien, como en Cartera');
+  assert.equal(nov.novedadesAMostrar({ version: '1.3.0', vista: '1.3.0', changelogs: CHANGELOGS }), null, 'una sola vez por version');
+  assert.equal(nov.novedadesAMostrar({ version: '9.9.9', vista: '1.3.0', changelogs: CHANGELOGS }), null, 'sin entrada para esa version no hay ventana');
+  assert.deepEqual([nov.previsualizacionPedida('?novedades'), nov.previsualizacionPedida('?a=1&novedades=1.3.0'), nov.previsualizacionPedida('?novedadesx'), nov.previsualizacionPedida('')], [true, '1.3.0', null, null]);
+  assert.equal(nov.novedadesAMostrar({ version: '1.2.0', vista: '1.2.0', forzar: true, changelogs: CHANGELOGS }).version, nov.ultimaVersionConNovedades(CHANGELOGS),
+    'previsualizar sin entrada para la version que corre muestra la mas reciente');
+  assert.equal(nov.novedadesAMostrar({ version: '1.3.0', vista: '1.3.0', forzar: '1.3.0', changelogs: CHANGELOGS }).version, '1.3.0', 'o la que se pida');
+  ok('novedades: cada version publicada despues de la 1.2.0 trae las suyas, sin tecnicismos; salen una vez tras actualizar y ?novedades las previsualiza');
+
   // ── URL del proyecto: el panel de Supabase a veces la muestra con /rest/v1/ ──
   const claveEjemplo = 'sb_publishable_' + 'x'.repeat(24);
   for (const [entrada, esperada] of [
@@ -963,6 +983,7 @@ async function main() {
     // ── API local ──
     let h = await pedir(puerto, 'GET', '/api/cuenta');
     assert.equal(h.json.estado, 'lista');
+    assert.equal(h.json.version, paquete.version, 'la cuenta dice que version corre (ventana de novedades)');
     h = await pedir(puerto, 'GET', '/api/furnidata/buscar?q=' + encodeURIComponent('dragon velo'));
     assert.equal(h.json[0].nombre, 'Dragón Velo de Arena');
     h = await pedir(puerto, 'POST', '/api/furnis', { cuerpo: { nombre: 'Furni Inventado XYZ' } });

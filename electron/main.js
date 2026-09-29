@@ -34,6 +34,10 @@ const PUERTO_PREFERIDO = 3435;
 const RAIZ = path.join(__dirname, '..');
 const DEMO = process.argv.includes('--demo');
 const PRUEBA_ARRANQUE = process.argv.includes('--prueba-arranque');
+// --novedades[=x.y.z]: abre con la ventana de novedades aunque ya se haya visto (ver
+// public/js/core/novedades.js). Solo para revisar su texto antes de publicar.
+const ARG_NOVEDADES = process.argv.find((a) => /^--novedades(=\d+\.\d+\.\d+)?$/.test(a));
+const NOVEDADES = ARG_NOVEDADES ? '/?' + ARG_NOVEDADES.slice(2) : '';
 
 // Una sola instancia: abrir la app dos veces enfoca la ventana existente.
 const SEGUNDA_INSTANCIA = !PRUEBA_ARRANQUE && !app.requestSingleInstanceLock();
@@ -196,7 +200,7 @@ function crearVentana(pantalla) {
     if (pantalla) pantalla.cerrar();
   });
   ventana.on('closed', () => { ventana = null; });
-  ventana.loadURL(`http://127.0.0.1:${puerto}`);
+  ventana.loadURL(`http://127.0.0.1:${puerto}${NOVEDADES}`);
 }
 
 // ── IPC (lo que la interfaz puede pedirle al sistema) ────────────────────

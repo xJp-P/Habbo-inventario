@@ -29,6 +29,8 @@ import { PublicarModal } from './modales/PublicarModal.js';
 import { VenderFurniModal } from './modales/VenderFurniModal.js';
 import { RetirarFurniModal } from './modales/RetirarFurniModal.js';
 import { VentaManualModal } from './modales/VentaManualModal.js';
+import { NovedadesModal } from './componentes/NovedadesModal.js';
+import { novedadesAMostrar, previsualizacionPedida, CLAVE_VISTA } from './core/novedades.js';
 import { LtdModal } from './modales/LtdModal.js';
 
 var NAV = [
@@ -55,6 +57,7 @@ function App() {
   var sMig = useState(null); var faltanMig = sMig[0]; var setFaltanMig = sMig[1];
   var sAud = useState(null); var resAuditoria = sAud[0]; var setResAuditoria = sAud[1];
   var sKek = useState(null); var kekos = sKek[0]; var setKekos = sKek[1];
+  var sNov = useState(null); var novedades = sNov[0]; var setNovedades = sNov[1];
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -96,6 +99,21 @@ function App() {
 
   var lista = cuenta && cuenta.estado === 'lista';
   useEffect(function () { if (lista) recargar(); else setDatos(null); }, [lista]);
+
+  // ── Novedades post-actualizacion (como Proyecto_Cartera) ──────────────────
+  // Compara la version que corre con la ultima vista (localStorage.lastSeenVersion): si
+  // difieren (tambien si no hay ninguna) y hay novedades para esa version, se muestran una
+  // vez, y la version queda como vista. Espera a que la app este lista para no tapar el
+  // asistente ni el acceso. `?novedades` (o --novedades al arrancar) la fuerza: ver
+  // core/novedades.js.
+  useEffect(function () {
+    if (!lista || !cuenta.version) return;
+    var vista = null;
+    try { vista = localStorage.getItem(CLAVE_VISTA); } catch (_) { /* sin almacenamiento */ }
+    var mostrar = novedadesAMostrar({ version: cuenta.version, vista: vista, forzar: previsualizacionPedida(window.location.search) });
+    if (mostrar) setNovedades(mostrar);
+    try { localStorage.setItem(CLAVE_VISTA, cuenta.version); } catch (_) { /* sin almacenamiento */ }
+  }, [lista]);
 
   // Migraciones que faltan en la base (solo se avisa si se pudo comprobar).
   var revisarMigraciones = useCallback(function () {
@@ -246,6 +264,7 @@ function App() {
           h(Ico, { name: tema === 'dark' ? 'sun' : 'moon', size: 14, color: 'var(--text3)' }))),
       h('div', { className: 'main-content' }, avisoMigraciones, contenido)),
 
+    novedades ? h(NovedadesModal, { version: novedades.version, items: novedades.items, onClose: function () { setNovedades(null); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, propios: datos.furnis, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis, compras: datos.compras, furni: modal.furni, lote: modal.lote, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,

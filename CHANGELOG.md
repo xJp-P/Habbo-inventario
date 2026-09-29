@@ -18,6 +18,9 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   unidades que el Sniper conoce (si sobran 3 y conoce 2, propone 2; las demás van aparte)
   y, si es un promedio de lotes a precios distintos, lo avisa: «El precio es un promedio
   calculado (FIFO)».
+- **Ventana de novedades**: la primera vez que abres la app después de una actualización,
+  una ventana cuenta lo nuevo de esa versión, en palabras sencillas. Sale una sola vez por
+  versión. Esta primera trae también lo de la 1.2.0, que se publicó antes de que existiera.
 
 ### Cambiado
 

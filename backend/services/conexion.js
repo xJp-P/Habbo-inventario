@@ -16,6 +16,11 @@ const path = require('path');
 const { ClientError } = require('../core/util');
 const { leerConfiguracion, guardarConfiguracion, crearClienteSupabase } = require('../db/supabase');
 
+// La version que corre, para la ventana de novedades (va en cada estado de la cuenta:
+// al abrir, al iniciar sesion, al configurar y al salir). Del package.json solo se lee
+// `version`: electron-builder quita `build` al empaquetar.
+const VERSION = require('../../package.json').version;
+
 const ESPERA_AGRUPAR_MS = 700;
 
 // Lo que la tarjeta «Conexion con SniperMercadillo» muestra para configurar un sniper: los
@@ -113,6 +118,7 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
       configEditable: configEditable(),
       usuario: usuario ? { id: usuario.id, email: usuario.email } : null,
       demo,
+      version: VERSION,
     };
   }
 
