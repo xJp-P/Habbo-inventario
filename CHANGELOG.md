@@ -10,6 +10,15 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **Ajustes → Conexión con SniperMercadillo** muestra los tres datos que pide el Sniper,
+  con los mismos nombres que su ⚙️ Ajustes: **URL del proyecto** y **clave pública**, cada
+  una con su botón de copiar, y el token de cada VPS. Antes mostraba la dirección completa
+  del endpoint, y pegarla en «URL del proyecto» hacía que todo envío del bot respondiera
+  404. La dirección completa sigue en «Ejemplo de envío».
+- La tabla de tokens muestra el **keko** que aprendió cada sniper.
+
 ## [1.1.0] - 2026-09-28
 
 ### Agregado

@@ -75,16 +75,7 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.post('/api/pendientes/activar', async (req, res) => res.json(await negocio.activarPendientes(req.body || {})));
 
   // ── Tokens de los SniperMercadillo (uno por VPS) ─────────────────────────
-  r.get('/api/sniper/conexion', (_req, res) => {
-    const est = conexion.estado();
-    const base = est.url && est.url !== 'local' ? est.url : null;
-    res.json({
-      url_eventos: base ? `${base}/rest/v1/rpc/registrar_eventos_sniper` : null,
-      url_estado: base ? `${base}/rest/v1/rpc/estado_sniper` : null,
-      hotel: 'es',
-      demo: !!demo,
-    });
-  });
+  r.get('/api/sniper/conexion', (_req, res) => res.json({ ...conexion.datosSniper(), hotel: 'es', demo: !!demo }));
   r.get('/api/sniper/tokens', async (_req, res) => res.json(await negocio.listarTokens()));
   r.post('/api/sniper/tokens', async (req, res) => res.status(201).json(await negocio.crearToken((req.body || {}).nombre)));
   r.post('/api/sniper/tokens/:id/revocar', async (req, res) => res.json(await negocio.revocarToken(id(req))));

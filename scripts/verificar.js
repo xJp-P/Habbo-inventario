@@ -21,7 +21,7 @@ const { pathToFileURL } = require('url');
 const { EventEmitter } = require('events');
 const { crearApp } = require('../backend/server');
 const { crearClienteLocal } = require('../backend/db/clienteLocal');
-const { crearServicioConexion } = require('../backend/services/conexion');
+const { crearServicioConexion, datosParaSniper } = require('../backend/services/conexion');
 const { crearServicioNegocio } = require('../backend/services/negocio');
 const ExcelJS = require('exceljs');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
@@ -111,6 +111,17 @@ async function main() {
   if (!process.env.SUPABASE_URL) assert.equal(leerConfiguracion({ raiz: null, dirDatos: dirEnv }).url, 'https://abcd1234.supabase.co', 'un .env ya guardado con /rest/v1/ tambien se corrige');
   fs.rmSync(dirEnv, { recursive: true, force: true });
   ok('URL del proyecto: acepta la que muestra el panel con /rest/v1/ (u otra ruta de servicio) y deja solo la base');
+
+  // ── Ajustes → Conexion con SniperMercadillo: los mismos datos que pide el Sniper ──
+  assert.deepEqual(datosParaSniper({ url: 'https://abcd1234.supabase.co', anonKey: claveEjemplo }), {
+    url_proyecto: 'https://abcd1234.supabase.co',
+    clave_publica: claveEjemplo,
+    url_eventos: 'https://abcd1234.supabase.co/rest/v1/rpc/registrar_eventos_sniper',
+    url_estado: 'https://abcd1234.supabase.co/rest/v1/rpc/estado_sniper',
+  });
+  assert.deepEqual(datosParaSniper({ url: 'local', anonKey: 'local' }), { url_proyecto: null, clave_publica: null, url_eventos: null, url_estado: null });
+  assert.deepEqual(datosParaSniper(null).url_proyecto, null);
+  ok('conexion del Sniper: la tarjeta da la URL del proyecto y la clave publica tal como las pide su ⚙️ Ajustes (la ruta completa queda para el ejemplo)');
 
   // ── Base: Postgres local con el esquema de Supabase y dos usuarios ──
   const clienteA = await crearClienteLocal();
@@ -725,6 +736,7 @@ async function main() {
     audC = await negC.auditoria('KekoC');
     assert.equal(filaC(sCa), undefined);
     ok('auditoria: las unidades sin keko que sobran aparecen aparte y se mueven al keko donde estan');
+    assert.equal((await negC.listarTokens()).find((t) => t.id === tkC.id).keko, 'KekoC', 'la tabla de tokens muestra el keko que aprendio cada sniper');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
     const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql'] });
@@ -738,9 +750,11 @@ async function main() {
     const ventaD = await negD.venderEnMano(compraD.furni_id, { cantidad: 1, precio: 50 });
     assert.equal(ventaD.cantidad, 1);
     assert.deepEqual(await negD.resumenAuditoria(), { pendientes: 0, kekos: [], sin_migracion: true });
+    await negD.crearToken('VPS de dani');
+    assert.deepEqual((await negD.listarTokens()).map((t) => [t.nombre, t.keko]), [['VPS de dani', undefined]], 'sin la migracion, los tokens se listan sin keko');
     await rechaza(negD.auditoria(), /Falta instalar la migracion 20261007000000/);
     await sinAuditoria.cerrar();
-    ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra y la venta manual siguen funcionando; la auditoria pide instalarla');
+    ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);

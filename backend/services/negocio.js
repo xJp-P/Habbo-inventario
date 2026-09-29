@@ -386,8 +386,17 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // ── Tokens de los SniperMercadillo ────────────────────────────────────────
   // El token se genera aca y se muestra UNA vez; en Supabase solo queda su huella
   // SHA-256, que es contra lo que comparan registrar_eventos_sniper y estado_sniper.
-  function listarTokens() {
-    return datos(db().from('tokens_sniper').select('id,nombre,prefijo,creado_en,ultimo_uso,revocado').order('creado_en', { ascending: false }));
+  // `keko` (el que aprendio cada sniper al enviar su inventario) llega con la migracion
+  // 20261007000000; sin ella la columna no existe y se listan sin keko.
+  const COLUMNAS_TOKEN = 'id,nombre,prefijo,creado_en,ultimo_uso,revocado';
+  async function listarTokens() {
+    const leer = (columnas) => datos(db().from('tokens_sniper').select(columnas).order('creado_en', { ascending: false }));
+    try {
+      return await leer(COLUMNAS_TOKEN + ',keko');
+    } catch (e) {
+      if (!faltaMigracion(e)) throw e;
+      return leer(COLUMNAS_TOKEN);
+    }
   }
 
   async function crearToken(nombre) {
@@ -398,7 +407,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
       nombre: limpio,
       hash: crypto.createHash('sha256').update(token, 'utf8').digest('hex'),
       prefijo: token.slice(0, 12),
-    }).select('id,nombre,prefijo,creado_en,ultimo_uso,revocado').single());
+    }).select(COLUMNAS_TOKEN).single());
     return { ...fila, token };
   }
 

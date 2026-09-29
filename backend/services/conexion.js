@@ -18,6 +18,22 @@ const { leerConfiguracion, guardarConfiguracion, crearClienteSupabase } = requir
 
 const ESPERA_AGRUPAR_MS = 700;
 
+// Lo que la tarjeta «Conexion con SniperMercadillo» muestra para configurar un sniper: los
+// mismos datos, y con los mismos nombres, que pide su ⚙️ Ajustes (URL del proyecto y clave
+// publica; el token sale de la tabla de tokens). Antes solo se mostraba la direccion
+// completa de registrar_eventos_sniper, y pegarla en «URL del proyecto» mandaba cada envio
+// del bot a una ruta inexistente (404). La clave publica no es secreta: viaja en cada
+// peticion del bot y de la app. En modo demo (url 'local') no hay nada que mostrar.
+function datosParaSniper(config) {
+  const base = config && config.url && config.url !== 'local' ? config.url : null;
+  return {
+    url_proyecto: base,
+    clave_publica: base ? config.anonKey || null : null,
+    url_eventos: base ? `${base}/rest/v1/rpc/registrar_eventos_sniper` : null,
+    url_estado: base ? `${base}/rest/v1/rpc/estado_sniper` : null,
+  };
+}
+
 function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrado = null, clienteFijo = null, demo = false, alRecibirEventos = null }) {
   let config = clienteFijo ? { url: 'local', anonKey: 'local', origen: 'demo' } : leerConfiguracion({ raiz, dirDatos });
   let cliente = clienteFijo || (config ? crearClienteSupabase({ ...config, dirDatos, cifrado }) : null);
@@ -157,7 +173,10 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
     return anonimo;
   }
 
-  return { iniciar, estado, configurar, iniciarSesion, cerrarSesion, clienteListo, clienteAnonimo, cliente: () => cliente, detener: desuscribir };
+  return {
+    iniciar, estado, configurar, iniciarSesion, cerrarSesion, clienteListo, clienteAnonimo,
+    datosSniper: () => datosParaSniper(config), cliente: () => cliente, detener: desuscribir,
+  };
 }
 
-module.exports = { crearServicioConexion };
+module.exports = { crearServicioConexion, datosParaSniper };

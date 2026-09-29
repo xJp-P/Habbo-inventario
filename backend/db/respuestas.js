@@ -26,7 +26,9 @@ function traducirError(e) {
   if (code === 'PGRST301' || code === 'PGRST303' || /jwt expired/i.test(msg)) {
     return conCodigo(new ClientError('La sesion expiro. Vuelve a iniciar sesion.', 401), 'SIN_SESION');
   }
-  if (code === '42P01' || code === '42883' || code === 'PGRST202' || code === 'PGRST205' || /schema cache/i.test(msg)) {
+  // Tabla, funcion o columna que no existe: la base no tiene todavia la migracion que la trae.
+  if (code === '42P01' || code === '42883' || code === '42703' || code === 'PGRST202' || code === 'PGRST204' ||
+      code === 'PGRST205' || /schema cache/i.test(msg)) {
     return conCodigo(new ClientError('Falta instalar el esquema en Supabase: pega supabase/migrations/*.sql en el SQL Editor.', 424), 'SIN_ESQUEMA');
   }
   if (code === '42501') {

@@ -81,6 +81,14 @@ export function AjustesView(props) {
   }
   useEffect(cargar, []);
 
+  // Un dato del Sniper con su boton de copiar (la clave es larga: se corta con … y se copia entera).
+  function filaCopiable(etiqueta, valor, aviso) {
+    return h(Campo, { l: etiqueta },
+      h('div', { style: { display: 'flex', gap: 6 } },
+        h('span', { className: 'codigo', style: { flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, valor),
+        h('button', { className: 'btn', title: 'Copiar', onClick: function () { copiar(valor, function () { props.onAviso(aviso); }); } }, h(Ico, { name: 'copy', size: 14 }))));
+  }
+
   function crearToken() {
     if (!nombre.trim()) { props.onError('Ponle un nombre al token (p. ej. "VPS 1").'); return; }
     _submitGuard(enviando, setEnviando, function () {
@@ -128,19 +136,18 @@ export function AjustesView(props) {
         h(Ico, { name: 'plug', size: 20, color: 'var(--green)' }),
         h('div', { style: { flex: 1 } },
           h('div', { className: 'card-titulo' }, 'Conexión con SniperMercadillo'),
-          h('div', { className: 'card-sub' }, 'Tus snipers de los VPS envían sus compras, publicaciones y recuperaciones directo a Supabase. Solo Habbo.es; cada VPS con su propio token.')),
+          h('div', { className: 'card-sub' }, 'Copia estos tres datos en ⚙️ Ajustes del Sniper de cada VPS, en los campos del mismo nombre. Solo Habbo.es; cada VPS con su propio token.')),
         h('span', { className: 'tag tag-verde' }, 'Habbo.es')),
-      conexion && conexion.url_eventos ? h(Campo, { l: 'Dirección' },
-        h('div', { style: { display: 'flex', gap: 6 } },
-          h('span', { className: 'codigo', style: { flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, conexion.url_eventos),
-          h('button', { className: 'btn', onClick: function () { copiar(conexion.url_eventos, function () { props.onAviso('Dirección copiada'); }); } }, h(Ico, { name: 'copy', size: 14 })))) : null,
+      conexion && conexion.url_proyecto ? filaCopiable('URL del proyecto', conexion.url_proyecto, 'URL del proyecto copiada') : null,
+      conexion && conexion.clave_publica ? filaCopiable('Clave pública (anon o publishable)', conexion.clave_publica, 'Clave pública copiada') : null,
+      conexion && conexion.url_proyecto ? h(Campo, { l: 'Token de este VPS' },
+        h('span', { className: 'suave', style: { fontSize: 13 } }, 'Uno por VPS: créalo abajo y cópialo en ese momento (no se vuelve a mostrar).')) : null,
       conexion && conexion.demo ? h('div', { className: 'aviso aviso-ambar', style: { margin: '6px 0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
         h('span', { style: { flex: 1, minWidth: 200 } }, 'Modo demo: la base es local. Simula lo que envía el Sniper:'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('compra'); } }, h(Ico, { name: 'cart', size: 12 }), 'Compra'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('publicar'); } }, h(Ico, { name: 'lock', size: 12 }), 'Publicar'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('recuperar'); } }, h(Ico, { name: 'undo', size: 12 }), 'Recuperar'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('inventario'); } }, h(Ico, { name: 'audit', size: 12 }), 'Inventario')) : null,
-      h(Campo, { l: 'Clave del proyecto' }, h('span', { className: 'suave', style: { fontSize: 13 } }, 'La misma Anon Key de tu .env (va en las cabeceras apikey y Authorization).')),
 
       nuevo ? h('div', { className: 'token-nuevo', style: { margin: '10px 0' } },
         h('div', { style: { fontWeight: 700, color: 'var(--green)', marginBottom: 6 } }, 'Token de "' + nuevo.nombre + '" — cópialo ahora, no se vuelve a mostrar'),
@@ -153,10 +160,11 @@ export function AjustesView(props) {
         h('div', { className: 'fld-l' }, 'Tokens de tus snipers'),
         tokens.length === 0 ? h('div', { className: 'suave', style: { fontSize: 13, padding: '6px 0' } }, 'Aún no hay tokens. Crea uno por cada VPS.')
           : h('table', { className: 'tabla', style: { marginBottom: 10 } },
-              h('thead', null, h('tr', null, h('th', null, 'Nombre'), h('th', null, 'Token'), h('th', null, 'Creado'), h('th', null, 'Último uso'), h('th', null, 'Estado'), h('th', null))),
+              h('thead', null, h('tr', null, h('th', null, 'Nombre'), h('th', null, 'Keko'), h('th', null, 'Token'), h('th', null, 'Creado'), h('th', null, 'Último uso'), h('th', null, 'Estado'), h('th', null))),
               h('tbody', null, tokens.map(function (t) {
                 return h('tr', { key: t.id },
                   h('td', null, t.nombre),
+                  h('td', { className: t.keko ? null : 'tenue', title: t.keko ? null : 'Lo aprende al enviar su primer inventario' }, t.keko || '—'),
                   h('td', { className: 'mono tenue' }, t.prefijo + '…'),
                   h('td', { className: 'suave' }, fmtD(String(t.creado_en).slice(0, 10))),
                   h('td', { className: 'suave' }, t.ultimo_uso ? fmtHace(t.ultimo_uso) : 'nunca'),
