@@ -11,6 +11,13 @@
 // (~0,7 s); antes de avisar se corre `alRecibirEventos` (sincroniza con el catalogo los
 // furnis nuevos que llegaron solo con sprite_id) y luego se publica un evento
 // `eventos-sniper` en el bus que alimenta /api/eventos.
+//
+// AUDITORIA EN VIVO (migracion 20261011000000): la foto del inventario de cada sniper
+// (inventario_habbo) tambien llega por Realtime, en un canal APARTE: sin esa migracion la
+// tabla no esta publicada y Realtime rechazaria el canal, asi que primero se pregunta
+// `auditoria_en_vivo()` y, si no, no se escucha. Antes de escuchar se corre
+// `alEscucharInventario` (la base: lo que ya habia no se avisa); las fotos que llegan
+// juntas (~1,5 s) se entregan a `alRecibirInventario(kekos)`.
 
 const path = require('path');
 const { ClientError } = require('../core/util');
@@ -22,6 +29,7 @@ const { leerConfiguracion, guardarConfiguracion, crearClienteSupabase } = requir
 const VERSION = require('../../package.json').version;
 
 const ESPERA_AGRUPAR_MS = 700;
+const ESPERA_INVENTARIO_MS = 1500;
 
 // Lo que la tarjeta «Conexion con SniperMercadillo» muestra para configurar un sniper: los
 // mismos datos, y con los mismos nombres, que pide su ⚙️ Ajustes (URL del proyecto y clave
@@ -39,7 +47,10 @@ function datosParaSniper(config) {
   };
 }
 
-function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrado = null, clienteFijo = null, demo = false, alRecibirEventos = null }) {
+function crearServicioConexion({
+  raiz, dirDatos, eventos, log = () => {}, cifrado = null, clienteFijo = null, demo = false, alRecibirEventos = null,
+  alEscucharInventario = null, alRecibirInventario = null, esperaInventarioMs = ESPERA_INVENTARIO_MS,
+}) {
   let config = clienteFijo ? { url: 'local', anonKey: 'local', origen: 'demo' } : leerConfiguracion({ raiz, dirDatos });
   let cliente = clienteFijo || (config ? crearClienteSupabase({ ...config, dirDatos, cifrado }) : null);
   let anonimo = null;
@@ -47,6 +58,10 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
   let canal = null;
   let pendientesAviso = [];
   let temporizador = null;
+  let canalInventario = null;
+  let enVivo = false;
+  let kekosRecibidos = new Set();
+  let temporizadorInventario = null;
 
   async function avisarEventos() {
     const filas = pendientesAviso;
@@ -66,6 +81,40 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
     });
   }
 
+  async function avisarInventario() {
+    const kekos = [...kekosRecibidos];
+    kekosRecibidos = new Set();
+    temporizadorInventario = null;
+    if (!alRecibirInventario || !usuario) return;
+    try { await alRecibirInventario(kekos); } catch (e) { log('No se pudo revisar la auditoria en vivo: ' + e.message); }
+  }
+
+  async function escucharInventario() {
+    let publicada = false;
+    try {
+      const r = await cliente.rpc('auditoria_en_vivo');
+      publicada = !r.error && r.data === true;
+    } catch (_) { /* sin la migracion o sin conexion: no se escucha */ }
+    enVivo = publicada;
+    if (!publicada || canalInventario || !usuario) return;
+    if (alEscucharInventario) {
+      try { await alEscucharInventario(); } catch (e) { log('No se pudo leer la auditoria inicial: ' + e.message); }
+    }
+    if (canalInventario || !usuario) return;
+    canalInventario = cliente
+      .channel('habbo-inventario-fotos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventario_habbo' }, (carga) => {
+        const keko = carga.new && carga.new.keko;
+        if (!keko) return;
+        kekosRecibidos.add(keko);
+        if (!temporizadorInventario) temporizadorInventario = setTimeout(avisarInventario, esperaInventarioMs);
+      })
+      .subscribe((estado) => {
+        if (estado === 'SUBSCRIBED') log('Auditoria en vivo: escuchando el inventario de los snipers.');
+        else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') log('Auditoria en vivo: ' + estado + ' (se reintenta solo).');
+      });
+  }
+
   function suscribir() {
     if (!cliente || canal) return;
     canal = cliente
@@ -78,11 +127,19 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
         if (estado === 'SUBSCRIBED') log('Tiempo real activo: escuchando eventos del Sniper.');
         else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') log('Tiempo real: ' + estado + ' (se reintenta solo).');
       });
+    escucharInventario();
   }
 
   async function desuscribir() {
-    if (canal && cliente) { try { await cliente.removeChannel(canal); } catch (_) { /* ya cerrado */ } }
+    for (const c of [canal, canalInventario]) {
+      if (c && cliente) { try { await cliente.removeChannel(c); } catch (_) { /* ya cerrado */ } }
+    }
     canal = null;
+    canalInventario = null;
+    enVivo = false;
+    if (temporizadorInventario) clearTimeout(temporizadorInventario);
+    temporizadorInventario = null;
+    kekosRecibidos = new Set();
   }
 
   async function refrescarSesion() {
@@ -182,6 +239,7 @@ function crearServicioConexion({ raiz, dirDatos, eventos, log = () => {}, cifrad
   return {
     iniciar, estado, configurar, iniciarSesion, cerrarSesion, clienteListo, clienteAnonimo,
     datosSniper: () => datosParaSniper(config), cliente: () => cliente, detener: desuscribir,
+    auditoriaEnVivo: () => enVivo,
   };
 }
 

@@ -21,6 +21,12 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 - **Eliminar tokens revocados**: en Ajustes, cada token revocado tiene una papelera para
   borrarlo de la base de datos, y con dos o más, «Eliminar los N revocados». Un token activo
   no se puede eliminar (primero se revoca). Lo que envió ese sniper se conserva.
+- **Auditoría en vivo**: la foto del inventario que envía cada sniper llega al instante
+  (Supabase Realtime, migración `20261011000000`). El número del menú y la vista de
+  Auditoría se ponen al día solos, y si aparecen diferencias **nuevas** (un furni que
+  cuadraba y ya no, o una diferencia que creció), un aviso lo dice. La misma foto repetida
+  (el Sniper la reenvía tras cada tanda), resolver diferencias o lo que ya había al abrir la
+  app no avisan.
 
 ### Cambiado
 
@@ -33,14 +39,18 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   su versión; lo descarga únicamente si cambió. Si eso cambia nombres o íconos de tus
   furnis, la app recarga sus datos sin avisar. Antes solo se refrescaba si tenía más de
   24 h o con el botón de Ajustes.
-- Modo demo: el inventario simulado manda un elemento por cada precio de compra y el
-  primer furni trae un sobrante con dos tramos y una unidad sin costo.
+- Modo demo: el inventario simulado manda un elemento por cada precio de compra, como el
+  Sniper: el primer furni trae un sobrante con un lote fundido (`costo_medio`), otro tramo
+  y una unidad sin costo, y los números LTD de cada furni van en su primer elemento.
 
 ### Migraciones de Supabase
 
 - `20261010000000_costos_por_tramo.sql` (requiere la `20261009000000`). Ejecútala **antes**
   de publicar esta versión. Sin ella, los elementos por costo entran igual y la bandeja
   propone su promedio como en la 1.3.0.
+- `20261011000000_inventario_en_vivo.sql` (requiere la `20261010000000`). Publica
+  `inventario_habbo` en Realtime. Sin ella, la Auditoría no se pone al día sola ni avisa
+  (se ve al abrirla o con «Comparar de nuevo»).
 
 ## [1.3.0] - 2026-09-29
 

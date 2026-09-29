@@ -40,6 +40,7 @@ const MIGRACIONES = [
   { archivo: '20261008000000_kekos_manuales.sql', titulo: 'Kekos manuales (bodegas y kekos sin Sniper)', sonda: funcion('listar_kekos', {}) },
   { archivo: '20261009000000_costos_auditoria.sql', titulo: 'Costos del Sniper en la auditoría', sonda: funcion('_costo_auditoria', { o: {}, p_cantidad: 1 }) },
   { archivo: '20261010000000_costos_por_tramo.sql', titulo: 'Costos por tramo en la auditoría (un costo por lote)', sonda: funcion('_tramos_foto', { x: {} }) },
+  { archivo: '20261011000000_inventario_en_vivo.sql', titulo: 'El inventario del Sniper llega al instante (avisos de la auditoría)', sonda: funcion('auditoria_en_vivo', {}) },
 ];
 
 const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204', 'PGRST205', '42P01']);

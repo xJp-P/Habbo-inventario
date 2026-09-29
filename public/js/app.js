@@ -58,6 +58,10 @@ function App() {
   var sAud = useState(null); var resAuditoria = sAud[0]; var setResAuditoria = sAud[1];
   var sKek = useState(null); var kekos = sKek[0]; var setKekos = sKek[1];
   var sNov = useState(null); var novedades = sNov[0]; var setNovedades = sNov[1];
+  // Auditoria en vivo: cada foto nueva del Sniper sube `senalAuditoria` (la vista se
+  // recarga sola); el clic en una notificacion deja en `abrirAuditoria` el keko a abrir.
+  var sSen = useState(0); var senalAuditoria = sSen[0]; var setSenalAuditoria = sSen[1];
+  var sAbA = useState(null); var abrirAuditoria = sAbA[0]; var setAbrirAuditoria = sAbA[1];
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -137,8 +141,29 @@ function App() {
     // El catalogo de Habbo.es se actualizo solo (al abrir la app) y cambio algun nombre o
     // icono de tus furnis: se recargan los datos, sin aviso.
     fuente.addEventListener('catalogo', function () { recargar(); });
+    // Llego la foto del inventario de un sniper (migracion 20261011000000): el numero del
+    // menu y la Auditoria se ponen al dia solos. Si trae diferencias nuevas, tambien un
+    // aviso aqui (la notificacion del sistema la decide Electron, si no estas mirando).
+    fuente.addEventListener('auditoria', function (e) {
+      var ev = JSON.parse(e.data);
+      if (ev.resumen) setResAuditoria(ev.resumen);
+      setSenalAuditoria(function (n) { return n + 1; });
+      (ev.avisos || []).forEach(function (a) { avisar(a.breve, 'sniper'); });
+    });
     return function () { fuente.close(); };
   }, [lista]);
+
+  // Clic en una notificacion del sistema (solo en la app de escritorio): abre su destino.
+  useEffect(function () {
+    var api = window.electronAPI;
+    if (!api || !api.alAbrir) return;
+    return api.alAbrir(function (destino) {
+      if (!destino || destino.vista !== 'auditoria') return;
+      setModal(null);
+      setAbrirAuditoria({ keko: destino.keko || null, vez: Date.now() });
+      setVista('auditoria');
+    });
+  }, []);
 
   function cambio(msg) { setModal(null); if (msg) avisar(msg); recargar(); }
 
@@ -173,6 +198,7 @@ function App() {
     setVista(v);
     setEnfocar(v === 'mercadillo' && furniId ? furniId : null);
     if (v !== 'inventario') setFiltroFurni('');
+    if (v === 'auditoria') setAbrirAuditoria(null);
   }
 
   function salir() {
@@ -222,6 +248,7 @@ function App() {
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
     furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio, onRecargar: recargar,
+    senal: senalAuditoria, abrir: abrirAuditoria,
     onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
   });
   else contenido = h(AjustesView, {

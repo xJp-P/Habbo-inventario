@@ -194,12 +194,16 @@ function crearServicioFurnidata({ dirDatos, log = () => {}, alActualizar = null 
           return estado();
         }
         const items = compactar(JSON.parse(buffer.toString('utf8')));
+        // Para avisar de un catalogo nuevo: la version anterior y cuantos furnis no estaban.
+        const anterior = lista.length ? meta.version : null;
+        const conocidos = porClassname;
+        const nuevos = anterior ? items.filter((it) => !conocidos.has(it.c)).length : 0;
         indexar(items, { version, descargadoEn: ahora, formato: FORMATO_CACHE });
         guardarCache(items);
         ultimoError = null;
         log(`Furnidata listo: ${items.length} furnis (version ${version}).`);
         if (alActualizar) {
-          try { alActualizar(api); } catch (e) { log('Error al sincronizar revisiones: ' + e.message); }
+          try { alActualizar(api, { anterior, version, nuevos, total: items.length }); } catch (e) { log('Error al sincronizar revisiones: ' + e.message); }
         }
         return estado();
       } catch (e) {

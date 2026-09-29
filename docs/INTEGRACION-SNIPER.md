@@ -157,6 +157,8 @@ Content-Type: application/json
 
 La base suma la cantidad del furni (6) para la comparación y guarda cada costo distinto como un **tramo** (dos elementos con el mismo costo son un solo tramo). En la bandeja, cada tramo es una línea con su propia entrada a su costo exacto; cada lote que la app ya tiene en ese keko se descuenta del tramo con su mismo costo, y lo demás, de los tramos más antiguos. También guarda el resumen de la 1.3.0 (unidades con costo sumadas, promedio ponderado y `costo_medio` si los costos no coinciden). Una base sin esta migración guarda solo ese resumen: los elementos separados entran igual, pero la bandeja propone su promedio.
 
+**En vivo (requiere `20261011000000_inventario_en_vivo.sql`):** cada foto llega a la app al instante por Supabase Realtime; la app compara ese keko, pone al día su Auditoría y avisa solo de diferencias **nuevas**. Para el bot no cambia nada: la misma llamada, en los mismos momentos.
+
 **Cuándo enviarlo:** por la **misma cola** que los eventos y **después** de los que estén pendientes. Así una compra que aún no llegó a la app no aparece como sobrante falso. Cada envío **reemplaza** la foto anterior de ese keko (idempotente: reenviar no duplica nada).
 
 | Momento | Por qué |

@@ -158,7 +158,15 @@ export function AuditoriaView(props) {
   function cargar(keko) {
     return API.get('/api/auditoria' + (keko ? '?keko=' + encodeURIComponent(keko) : '')).then(function (r) { if (r) setAud(r); return r; });
   }
-  useEffect(function () { cargar(null); }, []);
+  // Al entrar, el primer keko (o el de la notificacion en la que hiciste clic).
+  useEffect(function () {
+    setAbierto(null);
+    cargar(props.abrir ? props.abrir.keko : null);
+  }, [props.abrir]);
+  // Llego una foto nueva del Sniper (auditoria en vivo): se compara de nuevo, en silencio.
+  useEffect(function () {
+    if (props.senal && aud) cargar(aud.keko);
+  }, [props.senal]);
 
   // «Comparar de nuevo»: vuelve a pedir la comparacion a la base (contra la ultima foto
   // del Sniper) y recarga los datos de la app (nombres, lotes y el numero del menu). El

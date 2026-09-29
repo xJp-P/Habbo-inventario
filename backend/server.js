@@ -21,6 +21,7 @@ const { crearServicioNegocio } = require('./services/negocio');
 const { crearServicioInstalacion } = require('./services/instalacion');
 const { importarExcel } = require('./services/importarExcel');
 const { protegerApiLocal } = require('./core/seguridad');
+const { crearDetectorAuditoria, avisoCatalogo } = require('./core/avisos');
 const crearRutasApi = require('./routes/api');
 const { ClientError } = require('./core/util');
 
@@ -28,21 +29,49 @@ const RAIZ = path.join(__dirname, '..');
 
 async function crearApp({
   dirDatos, raiz = null, log = console.log, iniciarCatalogo = true, cifrado = null,
-  clienteFijo = null, demo = null,
+  clienteFijo = null, demo = null, esperaInventarioMs = undefined,
 } = {}) {
   const eventos = new EventEmitter();
   eventos.setMaxListeners(50);
 
   let negocio = null;
   // Catalogo nuevo (se busca solo al abrir la app): tus furnis toman sus nombres, sprites
-  // e iconos y, si algo cambio, la interfaz recarga sus datos en silencio.
+  // e iconos y, si algo cambio, la interfaz recarga sus datos en silencio. Si trae furnis
+  // que antes no estaban, se avisa (`catalogo-nuevo`: notificacion del sistema en Electron).
   const furnidata = crearServicioFurnidata({
     dirDatos,
     log,
-    alActualizar: () => negocio && negocio.sincronizarConCatalogo().then((r) => {
-      if (r && (r.actualizados || r.vinculados || r.sprites || r.unidos)) eventos.emit('evento', { tipo: 'catalogo', ...r });
-    }).catch(() => {}),
+    alActualizar: (_api, info) => {
+      const aviso = info ? avisoCatalogo(info) : null;
+      if (aviso) eventos.emit('evento', { tipo: 'catalogo-nuevo', nuevos: info.nuevos, ...aviso });
+      if (negocio) {
+        negocio.sincronizarConCatalogo().then((r) => {
+          if (r && (r.actualizados || r.vinculados || r.sprites || r.unidos)) eventos.emit('evento', { tipo: 'catalogo', ...r });
+        }).catch(() => {});
+      }
+    },
   });
+
+  // Auditoria en vivo (migracion 20261011000000): al llegar la foto del inventario de un
+  // sniper se compara ese keko y se publica `auditoria` con el resumen (el numero del menu)
+  // y los avisos de diferencias NUEVAS (core/avisos.js), que Electron muestra como
+  // notificacion del sistema si no estas mirando la app.
+  const detector = crearDetectorAuditoria();
+  async function baseAuditoria() {
+    detector.reiniciar();
+    const resumen = await negocio.resumenAuditoria();
+    for (const k of resumen.kekos || []) detector.base(k.keko, (await negocio.auditoria(k.keko)).filas);
+  }
+  async function revisarAuditoria(kekos) {
+    const avisos = [];
+    for (const keko of kekos) {
+      let a;
+      try { a = await negocio.auditoria(keko); } catch (e) { log('Auditoria en vivo de ' + keko + ': ' + e.message); continue; }
+      const aviso = detector.revisar(a.keko, a.filas);
+      if (aviso) avisos.push(aviso);
+    }
+    eventos.emit('evento', { tipo: 'auditoria', resumen: await negocio.resumenAuditoria(), avisos });
+  }
   const conexion = crearServicioConexion({
     raiz, dirDatos, eventos, log, cifrado,
     clienteFijo: clienteFijo || (demo ? demo.cliente : null),
@@ -50,6 +79,9 @@ async function crearApp({
     // Los furnis que el Sniper crea solo con sprite_id reciben su nombre oficial antes
     // de que la interfaz los muestre.
     alRecibirEventos: () => negocio.sincronizarConCatalogo(),
+    alEscucharInventario: baseAuditoria,
+    alRecibirInventario: revisarAuditoria,
+    esperaInventarioMs,
   });
   negocio = crearServicioNegocio({ conexion, furnidata });
 

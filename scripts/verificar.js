@@ -97,6 +97,29 @@ async function main() {
   assert.ok(actualizador.includes('`' + paquete.build.mac.artifactName.replace('${ext}', 'zip') + '`'), 'el .zip de Mac tiene el nombre que genera electron-builder');
   ok(`empaquetado: el actualizador apunta a ${owner}/${repo} y al .zip de Mac que genera electron-builder`);
 
+  // ── Notificaciones: cuando avisar (backend/core/avisos.js) ──
+  const { crearDetectorAuditoria, avisoCatalogo } = require('../backend/core/avisos');
+  let reloj = 0;
+  const det = crearDetectorAuditoria({ ahora: () => reloj });
+  const filaA = (sprite, categoria, diferencia) => ({ sprite_id: sprite, tipo: 'suelo', categoria, diferencia });
+  det.base('K', [filaA(1, 'sobrante', 2)]);
+  assert.equal(det.revisar('K', [filaA(1, 'sobrante', 2)]), null, 'lo que ya habia al abrir la app no se avisa');
+  let avA = det.revisar('K', [filaA(1, 'sobrante', 2), filaA(2, 'faltante', -1), filaA(3, 'no_registrado', 5)]);
+  assert.deepEqual([avA.nuevas, avA.pendientes, avA.silencioso, avA.titulo], [1, 2, false, 'Auditoría de K']);
+  assert.equal(avA.cuerpo, '1 furni tiene una diferencia nueva en tu inventario de Habbo (1 con faltantes). Haz clic para revisarlas.');
+  assert.equal(det.revisar('K', [filaA(1, 'sobrante', 1), filaA(2, 'faltante', -1)]), null, 'resolver o achicar una diferencia no avisa');
+  reloj = 60 * 1000;
+  avA = det.revisar('K', [filaA(1, 'sobrante', 3), filaA(2, 'faltante', -1), filaA(4, 'ltd', 0)]);
+  assert.deepEqual([avA.nuevas, avA.silencioso], [2, true], 'crecio un sobrante y hay un LTD nuevo; al minuto del aviso anterior, sin sonido');
+  assert.match(avA.cuerpo, /^2 furnis tienen diferencias nuevas .*\(1 con sobrantes y 1 LTD con otro número\)/);
+  reloj = 10 * 60 * 1000;
+  assert.equal(det.revisar('K', [filaA(1, 'sobrante', 3)]), null);
+  assert.equal(det.revisar('K', [filaA(1, 'sobrante', 3), filaA(2, 'faltante', -2)]).silencioso, false);
+  assert.equal(avisoCatalogo({ anterior: null, version: 'b', nuevos: 5 }), null, 'la primera descarga del catalogo no avisa');
+  assert.equal(avisoCatalogo({ anterior: 'a', version: 'b', nuevos: 0 }), null, 'una version sin furnis nuevos no avisa');
+  assert.equal(avisoCatalogo({ anterior: 'a', version: 'b', nuevos: 3 }).cuerpo, '3 furnis nuevos llegaron al catálogo. Ya puedes buscarlos en la app.');
+  ok('avisos: solo diferencias nuevas de la Auditoria (no lo que ya habia, ni al resolver; seguidas, sin sonido) y catalogos con furnis nuevos');
+
   // ── Ventana de novedades (como Proyecto_Cartera) ──
   const { CHANGELOGS } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'datos', 'changelogs.js')).href);
   const nov = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'novedades.js')).href);
@@ -903,7 +926,7 @@ async function main() {
     ok('contrato del Sniper: el lote fundido lleva el aviso de promedio solo en su linea y los LTD que llegan juntos en el primer objeto se eligen en cada tramo');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -922,7 +945,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -935,7 +958,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -952,7 +975,7 @@ async function main() {
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
-    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql'] });
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql'] });
     await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
     await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
     const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });
@@ -964,10 +987,54 @@ async function main() {
     assert.equal(r.error, null);
     const filaG = (await negG.auditoria('KekoG')).filas[0];
     assert.equal(filaG.costos, undefined);
+    await new Promise((listo) => setTimeout(listo, 50));
+    assert.equal(conexG.auditoriaEnVivo(), false, 'sin la migracion 20261011000000 la app no escucha la foto en vivo (y no se suscribe)');
     assert.deepEqual((await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'costos.js')).href)).tramosDelSniper(filaG),
       [{ costo: 15, unidades: 2, medio: true }], 'sin la migracion, un solo tramo: el promedio, marcado como tal');
     await sinTramos.cerrar();
     ok('base sin la migracion de tramos: los elementos por costo entran y la bandeja propone su promedio como en la 1.3.0');
+
+    // ── Auditoria en vivo (migracion 20261011000000): la foto del Sniper llega por Realtime ──
+    const vivo = await crearClienteLocal();
+    await vivo.crearUsuario('vivi@prueba.local', 'clave-vivi');
+    await vivo.auth.signInWithPassword({ email: 'vivi@prueba.local', password: 'clave-vivi' });
+    const appVivo = await crearApp({ dirDatos: dir, clienteFijo: vivo, iniciarCatalogo: false, log: () => {}, esperaInventarioMs: 20 });
+    const finVivo = Date.now() + 3000;
+    while (!appVivo.conexion.auditoriaEnVivo()) {
+      assert.ok(Date.now() < finVivo, 'con la migracion 20261011000000 la app escucha la foto en vivo');
+      await new Promise((listo) => setTimeout(listo, 20));
+    }
+    const caraV = await appVivo.negocio.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 2, precio_compra: 30, keko: 'KekoV' });
+    const furniV = await appVivo.negocio.furniPorId(caraV.furni_id);
+    const tkV = await appVivo.negocio.crearToken('VPS en vivo');
+    const siguienteAuditoria = () => new Promise((resolve, reject) => {
+      const espera = setTimeout(() => { appVivo.eventos.off('evento', alLlegar); reject(new Error('no llego la auditoria en vivo')); }, 3000);
+      function alLlegar(e) {
+        if (e.tipo !== 'auditoria') return;
+        clearTimeout(espera);
+        appVivo.eventos.off('evento', alLlegar);
+        resolve(e);
+      }
+      appVivo.eventos.on('evento', alLlegar);
+    });
+    const fotoV = async (cantidad) => {
+      const llega = siguienteAuditoria();
+      const rr = await vivo.comoAnon().rpc('auditar_inventario', { token_sniper: tkV.token, keko: 'KekoV', hotel: 'es',
+        inventario: [{ sprite_id: furniV.sprite_id, tipo: furniV.tipo, cantidad }] });
+      assert.equal(rr.error, null);
+      return llega;
+    };
+    let evV = await fotoV(2);
+    assert.deepEqual([evV.avisos, evV.resumen.pendientes], [[], 0], 'la primera foto cuadra: sin aviso');
+    evV = await fotoV(3);
+    assert.deepEqual([evV.resumen.pendientes, evV.avisos.length, evV.avisos[0].keko, evV.avisos[0].silencioso], [1, 1, 'KekoV', false], 'una unidad de mas: aviso');
+    assert.equal(evV.avisos[0].breve, 'Auditoría de KekoV: 1 furni con una diferencia nueva');
+    evV = await fotoV(3);
+    assert.deepEqual(evV.avisos, [], 'la misma foto otra vez (el Sniper la reenvia tras cada tanda): sin aviso');
+    evV = await fotoV(2);
+    assert.deepEqual([evV.avisos, evV.resumen.pendientes], [[], 0], 'resuelto: sin aviso y el numero del menu vuelve a 0');
+    await appVivo.cerrar();
+    ok('auditoria en vivo: la foto del Sniper llega al instante, el numero del menu se pone al dia y solo se avisa de diferencias nuevas');
 
     const est = await anon.rpc('estado_sniper', { p_token: tk.token });
     assert.equal(est.data.ok, true);

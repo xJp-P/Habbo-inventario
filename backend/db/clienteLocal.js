@@ -14,7 +14,9 @@
 // Cada consulta corre en una transaccion con `SET LOCAL ROLE authenticated` (o anon) y
 // el id del usuario en `request.jwt.claim.sub`, que es lo que lee auth.uid(): las
 // politicas RLS se aplican igual que en Supabase. El "tiempo real" se simula con un
-// trigger que hace NOTIFY en cada insert/update de `compras`.
+// trigger que hace NOTIFY en cada insert/update de `compras` y de `eventos_sniper`, y en
+// `inventario_habbo` solo si esta en la publicacion supabase_realtime (migracion
+// 20261011000000), como en Supabase.
 //
 // NO es un reemplazo de Supabase en produccion: no hay red, ni PostgREST, ni JWT.
 
@@ -43,6 +45,10 @@ const SQL_BASE = `
   end $$;
   grant usage on schema public, auth to anon, authenticated;
   grant execute on function auth.uid() to anon, authenticated;
+  -- La publicacion de Realtime que trae todo proyecto de Supabase (vacia).
+  do $$ begin
+    if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then create publication supabase_realtime; end if;
+  end $$;
 `;
 
 // "Tiempo real" local: NOTIFY con la fila nueva, que el cliente reparte a los canales.
@@ -52,6 +58,16 @@ const SQL_TIEMPO_REAL = `
   begin
     perform pg_notify('${CANAL_NOTIFY}', json_build_object(
       'table', tg_table_name, 'eventType', tg_op, 'new', row_to_json(new))::text);
+    return new;
+  end $$;
+  -- La foto del inventario: solo el keko y la hora. Realtime deja fuera los campos grandes
+  -- (la lista de furnis), y NOTIFY no admite mas de 8000 bytes.
+  create or replace function public._local_notificar_inventario() returns trigger
+  language plpgsql security definer set search_path = '' as $$
+  begin
+    perform pg_notify('${CANAL_NOTIFY}', json_build_object(
+      'table', tg_table_name, 'eventType', tg_op, 'new', json_build_object(
+        'propietario', new.propietario, 'keko', new.keko, 'recibido_en', new.recibido_en))::text);
     return new;
   end $$;
   do $$ begin
@@ -65,6 +81,12 @@ const SQL_TIEMPO_REAL = `
       drop trigger if exists eventos_tiempo_real_local on public.eventos_sniper;
       create trigger eventos_tiempo_real_local after insert on public.eventos_sniper
         for each row execute function public._local_notificar();
+    end if;
+    if exists (select 1 from pg_publication_tables
+                where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'inventario_habbo') then
+      drop trigger if exists inventario_tiempo_real_local on public.inventario_habbo;
+      create trigger inventario_tiempo_real_local after insert or update on public.inventario_habbo
+        for each row execute function public._local_notificar_inventario();
     end if;
   end $$;
 `;
