@@ -218,6 +218,7 @@ Los reintentos del bot con el mismo `id_externo` se ignoran. El contrato complet
 | *«La clave pública no parece válida»* | Clave incompleta o de otro lugar | Cópiala de nuevo desde Project Settings → API Keys |
 | *«Invalid login credentials»* | Email o contraseña incorrectos, o usuario sin confirmar | Revisa el usuario en Authentication → Users (debe estar confirmado) |
 | La app no carga tus datos y el proyecto no responde | Supabase pausó el proyecto por inactividad | Reactívalo desde el panel de Supabase |
+| El Sniper dice *«HTTP 404»*, o sus compras no aparecen en la app | El Sniper apunta a **otro** proyecto de Supabase, o a ese proyecto le falta una migración | La URL de ⚙️ Ajustes del Sniper debe ser la misma que la de la app (**Ajustes → Cuenta y apariencia → Supabase**) y su token, uno creado en esta app. Si la app muestra el aviso ámbar, instala lo que falta |
 | *«Windows protegió tu PC»* | La app no tiene certificado de pago | **Más información → Ejecutar de todas formas** |
 | macOS dice que la app *«está dañada»* | La app no está notarizada | `xattr -cr "/Applications/Habbo Inventario.app"` |
 

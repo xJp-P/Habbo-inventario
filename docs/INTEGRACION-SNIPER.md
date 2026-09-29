@@ -84,7 +84,7 @@ HTTP 200:
 | 200 | Envío procesado | Quitar de su cola lo `procesado` y lo `duplicado`. Los `errores` traen `indice`, `id_externo` y el motivo. Cada `publicar` devuelve el `precio_lista` que quedó guardado (sirve para el log del bot) |
 | 401 | Token inválido o revocado | Dejar de enviar y avisar (reintentar no sirve) |
 | 400 | Envío mal formado (lista vacía o más de 200) | Error de programación: log |
-| 404 (`PGRST202`) | La función no existe | Falta ejecutar la migración en Supabase |
+| 404 (`PGRST202`) | La función no existe | Falta ejecutar la migración en **ese** proyecto de Supabase. Si la app no muestra el aviso ámbar de migraciones, el bot apunta a **otro** proyecto: su URL debe ser la misma que la de la app (Ajustes → Cuenta y apariencia → Supabase) y su token, uno creado en esta app |
 | 5xx / sin red / timeout | Supabase no disponible | Reintentar con espera creciente: la idempotencia lo hace seguro |
 
 ### Prueba de conexión
@@ -137,6 +137,13 @@ Content-Type: application/json
 
 **Cuándo enviarlo:** por la **misma cola** que los eventos y **después** de los que estén pendientes. Así una compra que aún no llegó a la app no aparece como sobrante falso. Cada envío **reemplaza** la foto anterior de ese keko (idempotente: reenviar no duplica nada).
 
+| Momento | Por qué |
+|---|---|
+| Al completar cada carga del inventario (último fragmento de `In.FurniList`) | Es la foto completa del keko |
+| **Tras cada tanda de eventos aceptada** (recomendado) | La app compara **en vivo** contra la **última** foto. Si solo se envía al cargar el inventario, cada compra, publicación o recuperación registrada después aparece como diferencia (faltante o sobrante) hasta la carga siguiente. Reenviarla, sacada del inventario que el bot mantiene al día, lo evita |
+
+Nunca envíes una foto a medias (una carga de varios fragmentos sin terminar, o lo que quedó en memoria de otra cuenta tras reconectar): la app leería lo que no viene como furnis que faltan. SniperMercadillo lo hace así desde su Fase 27.66.
+
 **Respuesta (200):**
 
 ```json
@@ -144,5 +151,5 @@ Content-Type: application/json
   "resumen": { "coinciden": 2, "sobrantes": 1, "faltantes": 0, "ltd": 0, "no_registrados": 0, "sin_keko": 0, "excluidos": 0 } }
 ```
 
-Los elementos inválidos (sin `sprite_id` ni `nombre` conocido, cantidad no válida) van a `errores` con su `indice` sin frenar el resto. El `resumen` sirve para el log del bot (p. ej. «3 diferencias»). Errores: 401 token inválido o revocado; 400 falta `keko`, hotel no admitido o `inventario` no es una lista; 404 (`PGRST202`) falta ejecutar la migración.
+Los elementos inválidos (sin `sprite_id` ni `nombre` conocido, cantidad no válida) van a `errores` con su `indice` sin frenar el resto. El `resumen` sirve para el log del bot (p. ej. «3 diferencias»). Errores: 401 token inválido o revocado; 400 falta `keko`, hotel no admitido o `inventario` no es una lista; 404 (`PGRST202`) falta ejecutar la migración **en el proyecto al que apunta el bot** (si la app no avisa en ámbar, el bot usa otro proyecto: ver la tabla de la sección 3).
 
