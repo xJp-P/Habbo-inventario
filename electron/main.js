@@ -71,10 +71,17 @@ let puerto = null;
 let backend = null;
 
 const preferencias = crearPreferencias(dirDatos);
+// Mac: sin firma de codigo no hay notificaciones del sistema; el aviso es el Dock (rebote y
+// globo con los avisos sin ver). Fuera de Mac, null.
+const dockMac = process.platform === 'darwin' && app.dock ? {
+  rebotar: () => app.dock.bounce('informational'),
+  globo: (n) => app.dock.setBadge(n > 0 ? String(n) : ''),
+} : null;
 const notificaciones = crearNotificaciones({
   Notification,
   ventana: () => ventana,
   preferencias,
+  dock: dockMac,
   // Clic en un aviso: la interfaz abre ese destino (p. ej. la Auditoria de un keko).
   alAbrir: (destino) => { if (ventana && !ventana.isDestroyed()) ventana.webContents.send('app:abrir', destino); },
   log: (m) => console.log('[notificaciones] ' + m),
@@ -221,6 +228,8 @@ function crearVentana(pantalla) {
     ventana.show();
     if (pantalla) pantalla.cerrar();
   });
+  // Volviste a la app: el globo del Dock (Mac) desaparece.
+  ventana.on('focus', () => notificaciones.alVolver());
   ventana.on('closed', () => { ventana = null; });
   ventana.loadURL(`http://127.0.0.1:${puerto}${NOVEDADES}`);
 }
@@ -237,7 +246,9 @@ ipcMain.handle('app:info', () => ({
 ipcMain.handle('app:abrir-carpeta-datos', () => shell.openPath(dirDatos));
 
 // Notificaciones: la interfaz solo lee o cambia que tipos quieres y pide una de prueba.
-ipcMain.handle('app:notificaciones', () => ({ ...preferencias.leer(), soportadas: Notification.isSupported(), plataforma: process.platform }));
+ipcMain.handle('app:notificaciones', () => ({
+  ...preferencias.leer(), soportadas: !!dockMac || Notification.isSupported(), plataforma: process.platform, dock: !!dockMac,
+}));
 ipcMain.handle('app:notificaciones-guardar', (_e, cambios) => preferencias.guardar(cambios));
 ipcMain.handle('app:notificaciones-probar', () => notificaciones.probar());
 
@@ -283,8 +294,11 @@ app.whenReady().then(async () => {
   if (pantalla && pantalla.cancelada) { app.quit(); return; }
   crearVentana(pantalla);
 
+  // Mac: clic en el icono del Dock. La ventana vuelve al frente (tambien si estaba
+  // minimizada) y el globo desaparece.
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) crearVentana();
+    if (ventana && !ventana.isDestroyed()) notificaciones.alActivar();
+    else if (BrowserWindow.getAllWindows().length === 0) crearVentana();
   });
 });
 

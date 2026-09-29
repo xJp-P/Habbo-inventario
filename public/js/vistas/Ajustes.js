@@ -7,6 +7,10 @@
 // Kekos (v1.2.0): los de los snipers se detectan solos; los manuales (una bodega, un keko
 // sin Sniper) se registran aqui y nunca se auditan. Desde aqui tambien se ordena lo que
 // quedo en mano sin keko, que ensuciaba las auditorias de los snipers.
+//
+// Notificaciones (v1.4.0): que avisos quieres cuando la app esta minimizada o en segundo
+// plano. Los decide el proceso principal (electron/notificaciones.js); aqui solo se leen y
+// cambian las preferencias y se pide uno de prueba. En Mac el aviso es el Dock.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -65,6 +69,82 @@ function Actualizaciones() {
       texto ? h('span', { className: clase, style: { fontSize: 12 } }, texto) : null,
       avance !== null ? h('div', { className: 'barra-avance' }, h('div', { style: { width: avance + '%' } })) : null,
       accion));
+}
+
+// Interruptor de encendido/apagado (accesible como switch).
+function Interruptor(props) {
+  return h('button', { type: 'button', role: 'switch', 'aria-checked': props.valor ? 'true' : 'false', 'aria-label': props.etiqueta,
+    className: 'interruptor' + (props.valor ? ' on' : ''), onClick: function () { props.onChange(!props.valor); } });
+}
+
+// Tarjeta «Notificaciones». `enVivo`: si la app escucha la foto del inventario del Sniper
+// (true), si falta la migracion 20261011000000 (false) o si aun no se sabe (null).
+function Notificaciones(props) {
+  var api = typeof window !== 'undefined' && window.electronAPI && window.electronAPI.notificaciones;
+  var sP = useState(null); var pref = sP[0]; var setPref = sP[1];
+  var sPr = useState(false); var probando = sPr[0]; var setProbando = sPr[1];
+  useEffect(function () { if (api) api.leer().then(setPref); }, []);
+  var mac = !!(pref && pref.dock);
+
+  function cambiar(tipo, valor) {
+    var cambio = {}; cambio[tipo] = valor;
+    setPref(Object.assign({}, pref, cambio));
+    api.guardar(cambio).then(function (r) { setPref(function (p) { return Object.assign({}, p, r); }); });
+  }
+  function probar() {
+    if (probando) return;
+    setProbando(true);
+    api.probar().then(function (r) {
+      setProbando(false);
+      if (r === 'dock') props.onAviso('Mira el Dock: el ícono de la app muestra un globo durante unos segundos');
+      else if (r === 'mostrada') props.onAviso('Aviso de prueba enviado: sale abajo a la derecha, con el nombre y el ícono de Habbo Inventario');
+      else props.onError('Este equipo no admite notificaciones del sistema');
+    }, function () { setProbando(false); });
+  }
+  function fila(tipo, titulo, detalle) {
+    return h('div', { key: tipo, className: 'fila-aviso' },
+      h('div', { style: { flex: 1, minWidth: 0 } },
+        h('div', { style: { fontSize: 14 } }, titulo),
+        h('div', { className: 'suave', style: { fontSize: 12, lineHeight: 1.5 } }, detalle)),
+      h(Interruptor, { valor: pref[tipo], etiqueta: titulo, onChange: function (v) { cambiar(tipo, v); } }));
+  }
+
+  var vivo = props.enVivo === true ? h('span', { className: 'estado-vivo' }, h('span', { className: 'punto' }), 'Auditoría en vivo: activa') : null;
+  var faltaMigracion = props.enVivo === false ? h('div', { className: 'aviso aviso-ambar', style: { fontSize: 12, marginTop: 10 } },
+    'Para recibir los avisos de la Auditoría instala la migración 20261011000000_inventario_en_vivo.sql (aviso ámbar de arriba).') : null;
+  var plataforma = pref ? (mac ? 'Mac' : pref.plataforma === 'win32' ? 'Windows' : 'Linux') : null;
+
+  var cuerpo;
+  if (!api) {
+    cuerpo = [
+      h('div', { key: 's', className: 'card-sub', style: { marginBottom: 8 } }, 'Solo en la app de escritorio. La Auditoría igual se actualiza sola.'),
+      vivo ? h('div', { key: 'v' }, vivo) : null, faltaMigracion ? h('div', { key: 'f' }, faltaMigracion) : null,
+    ];
+  } else if (!pref) {
+    cuerpo = h('div', { className: 'card-sub' }, 'Cargando…');
+  } else {
+    cuerpo = [
+      h('div', { key: 's', className: 'card-sub', style: { marginBottom: 8, lineHeight: 1.5 } }, mac
+        ? 'Cuando la app está en segundo plano, su ícono rebota en el Dock y muestra un globo con los avisos sin ver. Si la estás mirando, no te interrumpimos.'
+        : 'Te avisamos cuando la app está minimizada o en segundo plano. Si la estás mirando, no te interrumpimos.'),
+      fila('inventario', 'Diferencias nuevas en la Auditoría', mac
+        ? 'Cuando el inventario que envía tu Sniper deja de cuadrar. El globo desaparece al volver a la app.'
+        : 'Cuando el inventario que envía tu Sniper deja de cuadrar. Al hacer clic se abre la Auditoría de ese keko.'),
+      fila('catalogo', 'Furnis nuevos en el catálogo', 'Cuando Habbo.es agrega furnis nuevos al catálogo.'),
+      faltaMigracion ? h('div', { key: 'f' }, faltaMigracion) : null,
+      h('div', { key: 'p', className: 'fila-aviso', style: { alignItems: 'center', flexWrap: 'wrap' } },
+        vivo,
+        h('button', { className: 'btn btn-chico', style: { marginLeft: 'auto' }, onClick: probar, disabled: probando },
+          h(Ico, { name: 'bell', size: 12 }), probando ? 'Enviando…' : 'Enviar una de prueba')),
+    ];
+  }
+
+  return h('div', { className: 'card' },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
+      h(Ico, { name: 'bell', size: 16, color: 'var(--green)' }),
+      h('div', { className: 'card-titulo' }, 'Notificaciones'),
+      plataforma ? h('span', { className: 'tag tag-verde', style: { marginLeft: 'auto' } }, plataforma) : null),
+    cuerpo);
 }
 
 export function AjustesView(props) {
@@ -315,6 +395,8 @@ export function AjustesView(props) {
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           h('button', { className: 'btn', onClick: actualizarCatalogo, disabled: enviando }, h(Ico, { name: 'refresh', size: 14 }), 'Actualizar ahora'),
           electron ? h('button', { className: 'btn', onClick: function () { window.electronAPI.abrirCarpetaDatos(); } }, h(Ico, { name: 'folder', size: 14 }), 'Carpeta de datos') : null)),
+
+      h(Notificaciones, { enVivo: conexion ? conexion.auditoria_en_vivo : null, onAviso: props.onAviso, onError: props.onError }),
 
       h('div', { className: 'card' },
         h('div', { className: 'card-titulo', style: { marginBottom: 4 } }, h(Ico, { name: 'settings', size: 16 }), 'Cuenta y apariencia'),

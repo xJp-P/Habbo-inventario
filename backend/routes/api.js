@@ -75,7 +75,9 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.post('/api/pendientes/activar', async (req, res) => res.json(await negocio.activarPendientes(req.body || {})));
 
   // ── Tokens de los SniperMercadillo (uno por VPS) ─────────────────────────
-  r.get('/api/sniper/conexion', (_req, res) => res.json({ ...conexion.datosSniper(), hotel: 'es', demo: !!demo }));
+  // `auditoria_en_vivo`: si la app escucha la foto del inventario (migracion 20261011000000);
+  // la tarjeta de Notificaciones de Ajustes avisa si falta.
+  r.get('/api/sniper/conexion', (_req, res) => res.json({ ...conexion.datosSniper(), hotel: 'es', demo: !!demo, auditoria_en_vivo: conexion.auditoriaEnVivo() }));
   r.get('/api/sniper/tokens', async (_req, res) => res.json(await negocio.listarTokens()));
   r.post('/api/sniper/tokens', async (req, res) => res.status(201).json(await negocio.crearToken((req.body || {}).nombre)));
   r.post('/api/sniper/tokens/:id/revocar', async (req, res) => res.json(await negocio.revocarToken(id(req))));

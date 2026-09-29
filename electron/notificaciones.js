@@ -17,10 +17,14 @@
 // build.appId: electron-builder quita `build` del package.json empaquetado). Clic en un
 // aviso ya archivado en el Centro de actividades: no garantizado (NSIS no escribe el
 // ToastActivatorCLSID); son solo informativos.
-// MAC: sin firma de codigo, macOS no las muestra (el aviso emite `failed`); el plan B del
-// Dock queda para la fase siguiente.
+// MAC: desde Electron 42 las notificaciones usan UNNotification, que exige firma de codigo,
+// y la app no esta firmada (firmarla ad-hoc cambiaria la firma en cada version y el Llavero,
+// donde vive la sesion, volveria a pedir permiso). Plan B: el icono del Dock rebota una vez
+// y muestra un globo con los avisos sin ver. Al volver a la app (la ventana toma el foco o
+// haces clic en el Dock) el globo desaparece y la ventana vuelve al frente.
 //
-// `Notification` y la ventana se reciben por parametro: asi las pruebas usan unos falsos.
+// `Notification`, el Dock y la ventana se reciben por parametro: asi las pruebas usan unos
+// falsos. `dock` es null fuera de Mac.
 
 const fs = require('fs');
 const path = require('path');
@@ -73,14 +77,23 @@ function traerAlFrente(w) {
   w.focus();
 }
 
-function crearNotificaciones({ Notification, ventana, preferencias, alAbrir = () => {}, log = () => {} }) {
+function crearNotificaciones({ Notification, ventana, preferencias, dock = null, alAbrir = () => {}, log = () => {} }) {
   // Referencias vivas hasta que el aviso se cierra: si el recolector se lleva el objeto,
   // el clic ya no llega.
   const vivas = new Set();
+  // Mac: avisos sin ver (uno por id: el de un mismo keko cuenta una vez), el numero del globo.
+  const sinVer = new Set();
+  const ponerGlobo = () => { if (dock) dock.globo(sinVer.size); };
 
   function mostrar({ tipo, id, titulo, cuerpo, silencioso = false, destino = null, forzar = false }) {
     if (!forzar && !preferencias.leer()[tipo]) return 'apagada';
     if (!forzar && atendida(ventana())) return 'atendida';
+    if (dock) {
+      sinVer.add(id);
+      ponerGlobo();
+      if (!silencioso) dock.rebotar();
+      return 'dock';
+    }
     if (!Notification.isSupported()) return 'sin-soporte';
     const n = new Notification({ title: titulo, body: cuerpo, id, silent: !!silencioso });
     vivas.add(n);
@@ -109,13 +122,33 @@ function crearNotificaciones({ Notification, ventana, preferencias, alAbrir = ()
     }
   }
 
-  // Desde Ajustes: una de prueba, aunque estes mirando la app y aunque esten apagadas.
+  // Volviste a la app (la ventana tomo el foco): el globo del Dock desaparece.
+  function alVolver() {
+    if (!sinVer.size) return;
+    sinVer.clear();
+    ponerGlobo();
+  }
+
+  // Clic en el icono del Dock: la ventana vuelve al frente y el globo desaparece.
+  function alActivar() {
+    traerAlFrente(ventana());
+    alVolver();
+  }
+
+  // Desde Ajustes: una de prueba, aunque estes mirando la app y aunque esten apagadas. En
+  // Mac, el globo con un aviso mas durante 5 segundos (con la app activa, el Dock no rebota).
   function probar() {
+    if (dock) {
+      dock.rebotar();
+      dock.globo(sinVer.size + 1);
+      setTimeout(ponerGlobo, 5000);
+      return 'dock';
+    }
     return mostrar({ tipo: 'prueba', id: 'prueba', forzar: true, titulo: 'Habbo Inventario',
       cuerpo: 'Así se verán tus avisos. Haz clic aquí para volver a la app.' });
   }
 
-  return { mostrar, alEvento, probar, vivas: () => vivas.size };
+  return { mostrar, alEvento, probar, alVolver, alActivar, vivas: () => vivas.size, sinVer: () => sinVer.size };
 }
 
 module.exports = { APP_ID, crearPreferencias, crearNotificaciones, atendida, idAuditoria };

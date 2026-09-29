@@ -33,7 +33,17 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   ventana vuelve al frente y abre la Auditoría de ese keko. Si estás mirando la app, no
   sale ninguna. Dos avisos del mismo keko en menos de 2 minutos: el segundo reemplaza al
   primero, sin sonido. El proceso usa el mismo AUMID que el acceso directo del instalador
-  (el `appId`). En Mac aún no se muestran (hace falta firma de código).
+  (el `appId`).
+- **Avisos en el Dock (Mac)**: sin firma de código, macOS no muestra notificaciones de la
+  app, así que el aviso es el Dock: el ícono rebota una vez y muestra un globo con los
+  avisos sin ver (los de un mismo keko cuentan una vez). Al volver a la app, o al hacer clic
+  en el ícono del Dock, el globo desaparece y la ventana vuelve al frente (también si estaba
+  minimizada).
+- **Ajustes → Notificaciones**: interruptores para las diferencias de la Auditoría y los
+  furnis nuevos del catálogo (encendidos por defecto; se guardan en este equipo), el estado
+  de la auditoría en vivo (o el aviso de que falta la migración `20261011000000`) y
+  «Enviar una de prueba», que sale aunque estés mirando la app, para comprobar que Windows
+  muestra el nombre y el ícono de Habbo Inventario.
 
 ### Cambiado
 

@@ -160,6 +160,31 @@ async function main() {
   assert.equal(avisador.probar(), 'mostrada', 'la de prueba sale aunque estes mirando la app');
   ok('notificaciones: AUMID = appId, solo si no estas mirando la app, respetan tus preferencias y el clic abre la Auditoria del keko');
 
+  // ── Mac (plan B): el Dock rebota y muestra un globo con los avisos sin ver ──
+  const dockFalso = { rebotes: 0, globos: [], rebotar() { this.rebotes++; }, globo(n) { this.globos.push(n); } };
+  const ventanaMac = { ...ventanaFalsa, llamadas: [], min: false, foco: false };
+  pref.guardar({ catalogo: true });
+  const avisadorMac = notif.crearNotificaciones({ Notification: NotificacionFalsa, dock: dockFalso, ventana: () => ventanaMac, preferencias: pref });
+  const creadasAntes = NotificacionFalsa.creadas.length;
+  const avisoKeko = (keko, silencioso) => ({ tipo: 'auditoria', avisos: [{ keko, titulo: 'Auditoría de ' + keko, cuerpo: '…', silencioso }] });
+  avisadorMac.alEvento(avisoKeko('KekoA', false));
+  avisadorMac.alEvento(avisoKeko('KekoA', true));
+  avisadorMac.alEvento(avisoKeko('KekoB', false));
+  avisadorMac.alEvento({ tipo: 'catalogo-nuevo', titulo: 'Catálogo', cuerpo: 'Nuevo' });
+  assert.deepEqual([dockFalso.rebotes, dockFalso.globos, NotificacionFalsa.creadas.length], [3, [1, 1, 2, 3], creadasAntes],
+    'sin notificacion del sistema: rebota (el aviso repetido del mismo keko, sin rebote) y el globo cuenta los avisos sin ver');
+  avisadorMac.alActivar();
+  assert.deepEqual([ventanaMac.llamadas, dockFalso.globos[dockFalso.globos.length - 1], avisadorMac.sinVer()], [['show', 'focus'], 0, 0],
+    'clic en el Dock: la ventana vuelve al frente y el globo desaparece');
+  avisadorMac.alEvento(avisoKeko('KekoA', false));
+  avisadorMac.alVolver();
+  assert.equal(dockFalso.globos[dockFalso.globos.length - 1], 0, 'volver a la app (la ventana toma el foco) tambien lo borra');
+  ventanaMac.foco = true;
+  const globosAntes = dockFalso.globos.length;
+  avisadorMac.alEvento(avisoKeko('KekoC', false));
+  assert.equal(dockFalso.globos.length, globosAntes, 'si estas mirando la app, el Dock no hace nada');
+  ok('notificaciones en Mac (plan B): el Dock rebota y su globo cuenta los avisos sin ver; al volver a la app o hacer clic en el Dock, el globo desaparece');
+
   // ── Ventana de novedades (como Proyecto_Cartera) ──
   const { CHANGELOGS } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'datos', 'changelogs.js')).href);
   const nov = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'novedades.js')).href);
