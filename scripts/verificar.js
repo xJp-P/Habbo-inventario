@@ -120,6 +120,46 @@ async function main() {
   assert.equal(avisoCatalogo({ anterior: 'a', version: 'b', nuevos: 3 }).cuerpo, '3 furnis nuevos llegaron al catálogo. Ya puedes buscarlos en la app.');
   ok('avisos: solo diferencias nuevas de la Auditoria (no lo que ya habia, ni al resolver; seguidas, sin sonido) y catalogos con furnis nuevos');
 
+  // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
+  const notif = require('../electron/notificaciones');
+  assert.equal(notif.APP_ID, paquete.build.appId, 'el AUMID de Windows es el appId que el instalador pone en el acceso directo');
+  const dirPref = fs.mkdtempSync(path.join(os.tmpdir(), 'habbo-pref-'));
+  const pref = notif.crearPreferencias(dirPref);
+  assert.deepEqual(pref.leer(), { inventario: true, catalogo: true }, 'encendidas si nunca se tocaron');
+  assert.deepEqual(pref.guardar({ catalogo: false, inventario: 'si', raro: true }), { inventario: true, catalogo: false });
+  assert.deepEqual(notif.crearPreferencias(dirPref).leer(), { inventario: true, catalogo: false }, 'quedan guardadas en la carpeta de datos');
+  class NotificacionFalsa {
+    constructor(o) { this.o = o; this.manejadores = {}; NotificacionFalsa.creadas.push(this); }
+    static isSupported() { return true; }
+    on(evento, cb) { this.manejadores[evento] = cb; return this; }
+    show() { this.mostrada = true; }
+  }
+  NotificacionFalsa.creadas = [];
+  const ventanaFalsa = {
+    llamadas: [], min: false, foco: true,
+    isDestroyed() { return false; }, isVisible() { return true; }, isMinimized() { return this.min; }, isFocused() { return this.foco; },
+    restore() { this.llamadas.push('restore'); this.min = false; }, show() { this.llamadas.push('show'); }, focus() { this.llamadas.push('focus'); },
+  };
+  const abiertos = [];
+  const avisador = notif.crearNotificaciones({ Notification: NotificacionFalsa, ventana: () => ventanaFalsa, preferencias: pref, alAbrir: (d) => abiertos.push(d) });
+  const evAud = { tipo: 'auditoria', avisos: [{ keko: 'Un keko con un nombre muy largo', titulo: 'Auditoría de Un keko', cuerpo: 'Hay algo nuevo', silencioso: true }] };
+  avisador.alEvento(evAud);
+  assert.equal(NotificacionFalsa.creadas.length, 0, 'si estas mirando la app no sale la notificacion');
+  ventanaFalsa.foco = false; ventanaFalsa.min = true;
+  avisador.alEvento(evAud);
+  const toast = NotificacionFalsa.creadas[0];
+  assert.deepEqual([NotificacionFalsa.creadas.length, toast.o.title, toast.o.silent, toast.mostrada, avisador.vivas()], [1, 'Auditoría de Un keko', true, true, 1]);
+  assert.ok(toast.o.id.length <= 16 && toast.o.id === notif.idAuditoria('Un keko con un nombre muy largo'), 'un id corto y fijo por keko (el aviso nuevo reemplaza al anterior)');
+  toast.manejadores.click();
+  assert.deepEqual([ventanaFalsa.llamadas, abiertos, avisador.vivas()], [['restore', 'show', 'focus'], [{ vista: 'auditoria', keko: 'Un keko con un nombre muy largo' }], 0],
+    'el clic restaura la ventana, la trae al frente y abre la Auditoria de ese keko');
+  ventanaFalsa.min = true;
+  avisador.alEvento({ tipo: 'catalogo-nuevo', titulo: 'Catálogo', cuerpo: 'Nuevo' });
+  assert.equal(NotificacionFalsa.creadas.length, 1, 'el aviso del catalogo esta apagado en las preferencias');
+  ventanaFalsa.min = false; ventanaFalsa.foco = true;
+  assert.equal(avisador.probar(), 'mostrada', 'la de prueba sale aunque estes mirando la app');
+  ok('notificaciones: AUMID = appId, solo si no estas mirando la app, respetan tus preferencias y el clic abre la Auditoria del keko');
+
   // ── Ventana de novedades (como Proyecto_Cartera) ──
   const { CHANGELOGS } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'datos', 'changelogs.js')).href);
   const nov = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'novedades.js')).href);

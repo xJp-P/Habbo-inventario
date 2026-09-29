@@ -27,6 +27,13 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   cuadraba y ya no, o una diferencia que creció), un aviso lo dice. La misma foto repetida
   (el Sniper la reenvía tras cada tanda), resolver diferencias o lo que ya había al abrir la
   app no avisan.
+- **Notificaciones del sistema (Windows)**: si la app está minimizada o en segundo plano,
+  las diferencias nuevas de la Auditoría y un catálogo de Habbo.es con furnis nuevos llegan
+  como notificación de Windows, con el nombre y el ícono de la app. Al hacer clic, la
+  ventana vuelve al frente y abre la Auditoría de ese keko. Si estás mirando la app, no
+  sale ninguna. Dos avisos del mismo keko en menos de 2 minutos: el segundo reemplaza al
+  primero, sin sonido. El proceso usa el mismo AUMID que el acceso directo del instalador
+  (el `appId`). En Mac aún no se muestran (hace falta firma de código).
 
 ### Cambiado
 

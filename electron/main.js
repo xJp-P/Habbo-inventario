@@ -17,6 +17,10 @@
 // GitHub Releases (electron/actualizaciones.js) y, si hay una version nueva, la instala
 // antes de abrir la app. Despues arranca el servidor y abre la ventana principal.
 //
+// NOTIFICACIONES (electron/notificaciones.js): las decide este proceso con lo que publica
+// el bus del servidor (auditoria en vivo y catalogo nuevo), solo si no estas mirando la
+// app. En Windows el proceso lleva el mismo AUMID que el acceso directo del instalador.
+//
 // Opciones de linea de comandos:
 //   --demo            usa el Postgres local del modo demo (sin Supabase)
 //   --prueba-arranque abre la ventana, confirma que la interfaz cargo y se cierra
@@ -24,11 +28,12 @@
 //   --simular-actualizacion[=error]  recorre el flujo de actualizacion con una version
 //                     ficticia (solo con npm start; no descarga nada)
 
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification } = require('electron');
 const path = require('path');
 const http = require('http');
 const { crearApp } = require('../backend/server');
 const actualizaciones = require('./actualizaciones');
+const { APP_ID, crearPreferencias, crearNotificaciones } = require('./notificaciones');
 
 const PUERTO_PREFERIDO = 3435;
 const RAIZ = path.join(__dirname, '..');
@@ -38,6 +43,12 @@ const PRUEBA_ARRANQUE = process.argv.includes('--prueba-arranque');
 // public/js/core/novedades.js). Solo para revisar su texto antes de publicar.
 const ARG_NOVEDADES = process.argv.find((a) => /^--novedades(=\d+\.\d+\.\d+)?$/.test(a));
 const NOVEDADES = ARG_NOVEDADES ? '/?' + ARG_NOVEDADES.slice(2) : '';
+
+// Windows: el mismo AUMID que el instalador pone en el acceso directo del menu Inicio, para
+// que las notificaciones salgan con el nombre y el icono de la app (y la barra de tareas
+// agrupe bien). Antes de abrir cualquier ventana. En desarrollo no hay acceso directo con
+// ese id: se usa la ruta del ejecutable, como indica Electron.
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? APP_ID : process.execPath);
 
 // Una sola instancia: abrir la app dos veces enfoca la ventana existente.
 const SEGUNDA_INSTANCIA = !PRUEBA_ARRANQUE && !app.requestSingleInstanceLock();
@@ -58,6 +69,16 @@ let ventana = null;
 let servidor = null;
 let puerto = null;
 let backend = null;
+
+const preferencias = crearPreferencias(dirDatos);
+const notificaciones = crearNotificaciones({
+  Notification,
+  ventana: () => ventana,
+  preferencias,
+  // Clic en un aviso: la interfaz abre ese destino (p. ej. la Auditoria de un keko).
+  alAbrir: (destino) => { if (ventana && !ventana.isDestroyed()) ventana.webContents.send('app:abrir', destino); },
+  log: (m) => console.log('[notificaciones] ' + m),
+});
 
 // Escucha en el puerto preferido; si esta ocupado, prueba los siguientes. Un puerto
 // fijo mantiene el mismo origen entre sesiones (y con el, preferencias como el tema).
@@ -99,6 +120,7 @@ async function iniciarBackend() {
     log: (m) => console.log('[backend] ' + m),
   });
   ({ servidor, puerto } = await escuchar(backend.app, PUERTO_PREFERIDO));
+  backend.eventos.on('evento', notificaciones.alEvento);
 }
 
 // Empaquetada, cada ventana usa el icono del ejecutable; en desarrollo, el de recursos/.
@@ -213,6 +235,11 @@ ipcMain.handle('app:info', () => ({
 }));
 
 ipcMain.handle('app:abrir-carpeta-datos', () => shell.openPath(dirDatos));
+
+// Notificaciones: la interfaz solo lee o cambia que tipos quieres y pide una de prueba.
+ipcMain.handle('app:notificaciones', () => ({ ...preferencias.leer(), soportadas: Notification.isSupported(), plataforma: process.platform }));
+ipcMain.handle('app:notificaciones-guardar', (_e, cambios) => preferencias.guardar(cambios));
+ipcMain.handle('app:notificaciones-probar', () => notificaciones.probar());
 
 ipcMain.handle('app:elegir-excel', async () => {
   const r = await dialog.showOpenDialog(ventana, {

@@ -20,6 +20,7 @@ export const CHANGELOGS = {
     'Limpia tus tokens: en Ajustes, los tokens revocados tienen una papelera para eliminarlos para siempre. Lo que envió ese Sniper se conserva.',
     'El catálogo de furnis de Habbo.es se pone al día solo cada vez que abres la app. Ya no tienes que ir a Ajustes a pulsar el botón.',
     'Auditoría al instante: cuando tu Sniper envía el inventario de su keko, la Auditoría y el número del menú se actualizan solos, sin pulsar nada.',
+    'Avisos en Windows: si la app está minimizada y aparece una diferencia nueva en tu inventario, o llegan furnis nuevos al catálogo, te lo dice una notificación. Haz clic en ella y la app se abre justo en la Auditoría de ese keko. Si ya estás mirando la app, no te interrumpe.',
   ],
   // La 1.2.0 salio antes de que existiera esta ventana: sus novedades se anuncian aqui,
   // junto con las de la 1.3.0, para que una sola actualizacion las cuente todas.
