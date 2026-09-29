@@ -79,6 +79,8 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.get('/api/sniper/tokens', async (_req, res) => res.json(await negocio.listarTokens()));
   r.post('/api/sniper/tokens', async (req, res) => res.status(201).json(await negocio.crearToken((req.body || {}).nombre)));
   r.post('/api/sniper/tokens/:id/revocar', async (req, res) => res.json(await negocio.revocarToken(id(req))));
+  r.post('/api/sniper/tokens/borrar-revocados', async (_req, res) => res.json(await negocio.borrarTokensRevocados()));
+  r.delete('/api/sniper/tokens/:id', async (req, res) => res.json(await negocio.borrarToken(id(req))));
 
   // ── Kekos (de los snipers y manuales) ────────────────────────────────────
   r.get('/api/kekos', async (_req, res) => res.json(await negocio.listarKekos()));

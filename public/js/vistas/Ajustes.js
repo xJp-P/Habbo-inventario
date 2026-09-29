@@ -87,6 +87,7 @@ export function AjustesView(props) {
   var kekosSniper = kekos.kekos.filter(function (k) { return k.origen === 'sniper'; });
   var kekosManuales = kekos.kekos.filter(function (k) { return k.origen !== 'sniper'; });
   var sinKeko = (props.compras || []).reduce(function (s, c) { return s + (c.estado === 'comprado' && !c.keko ? c.cantidad : 0); }, 0);
+  var revocados = tokens.filter(function (t) { return t.revocado; }).length;
 
   function cargar() {
     API.get('/api/sniper/conexion').then(function (r) { if (r) setConexion(r); });
@@ -113,6 +114,18 @@ export function AjustesView(props) {
     setConfirmacion({ titulo: 'Revocar token', peligro: true, icono: 'key', textoBoton: 'Revocar',
       mensaje: h('span', null, '¿Revocar el token ', h('b', null, '«' + t.nombre + '»'), '? El sniper que lo use dejará de poder enviar eventos al instante.'),
       accion: function () { API.post('/api/sniper/tokens/' + t.id + '/revocar', {}).then(function (r) { if (r) { props.onAviso('Token revocado'); cargar(); } }); } });
+  }
+  // Un token revocado ya no sirve: se puede borrar de la base para limpiar la tabla. Lo
+  // que envio ese sniper se conserva.
+  function eliminarToken(t) {
+    setConfirmacion({ titulo: 'Eliminar token', peligro: true, icono: 'trash', textoBoton: 'Eliminar',
+      mensaje: h('span', null, '¿Eliminar para siempre el token revocado ', h('b', null, '«' + t.nombre + '»'), '? Se borra de la base de datos; las compras y el inventario que envió ese sniper se conservan.'),
+      accion: function () { API.del('/api/sniper/tokens/' + t.id).then(function (r) { if (r) { props.onAviso('Token «' + t.nombre + '» eliminado'); cargar(); } }); } });
+  }
+  function eliminarRevocados(n) {
+    setConfirmacion({ titulo: 'Eliminar tokens revocados', peligro: true, icono: 'trash', textoBoton: 'Eliminar ' + n,
+      mensaje: h('span', null, '¿Eliminar para siempre los ', h('b', null, n + ' tokens revocados'), '? Se borran de la base de datos; los activos no se tocan y lo que enviaron esos snipers se conserva.'),
+      accion: function () { API.post('/api/sniper/tokens/borrar-revocados', {}).then(function (r) { if (r) { props.onAviso(r.borrados + (r.borrados === 1 ? ' token revocado eliminado' : ' tokens revocados eliminados')); cargar(); } }); } });
   }
   function agregarKeko() {
     if (!kekoNuevo.trim()) { props.onError('Escribe el nombre del keko (p. ej. MiKekoBodega).'); return; }
@@ -212,7 +225,10 @@ export function AjustesView(props) {
         h('div', { className: 'suave', style: { fontSize: 12, marginTop: 6 } }, 'Pégalo en la configuración del sniper de ese VPS. Si lo pierdes, revoca este y crea otro.')) : null,
 
       h('div', { style: { marginTop: 10 } },
-        h('div', { className: 'fld-l' }, 'Tokens de tus snipers'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('div', { className: 'fld-l', style: { flex: 1 } }, 'Tokens de tus snipers'),
+          revocados > 1 ? h('button', { className: 'btn btn-chico', onClick: function () { eliminarRevocados(revocados); } },
+            h(Ico, { name: 'trash', size: 12, color: 'var(--red)' }), 'Eliminar los ' + revocados + ' revocados') : null),
         tokens.length === 0 ? h('div', { className: 'suave', style: { fontSize: 13, padding: '6px 0' } }, 'Aún no hay tokens. Crea uno por cada VPS.')
           : h('table', { className: 'tabla', style: { marginBottom: 10 } },
               h('thead', null, h('tr', null, h('th', null, 'Nombre'), h('th', null, 'Keko'), h('th', null, 'Token'), h('th', null, 'Creado'), h('th', null, 'Último uso'), h('th', null, 'Estado'), h('th', null))),
@@ -224,7 +240,10 @@ export function AjustesView(props) {
                   h('td', { className: 'suave' }, fmtD(String(t.creado_en).slice(0, 10))),
                   h('td', { className: 'suave' }, t.ultimo_uso ? fmtHace(t.ultimo_uso) : 'nunca'),
                   h('td', null, t.revocado ? h('span', { className: 'tag tag-gris' }, 'Revocado') : h('span', { className: 'tag tag-verde' }, 'Activo')),
-                  h('td', { className: 'r' }, t.revocado ? null : h('button', { className: 'btn btn-chico btn-peligro', onClick: function () { revocar(t); } }, 'Revocar')));
+                  h('td', { className: 'r' }, t.revocado
+                    ? h('button', { className: 'btn-icono', style: { marginLeft: 'auto' }, title: 'Eliminar de la base de datos', 'aria-label': 'Eliminar el token ' + t.nombre,
+                        onClick: function () { eliminarToken(t); } }, h(Ico, { name: 'trash', size: 14, color: 'var(--red)' }))
+                    : h('button', { className: 'btn btn-chico btn-peligro', onClick: function () { revocar(t); } }, 'Revocar')));
               }))),
         h('div', { style: { display: 'flex', gap: 8 } },
           h('input', { className: 'inp', placeholder: 'Nombre del VPS (p. ej. VPS 1)', value: nombre, onChange: function (e) { setNombre(e.target.value); }, onKeyDown: function (e) { if (e.key === 'Enter') crearToken(); } }),

@@ -18,6 +18,9 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   una línea para lo que sobra sin costo conocido. Cada lote que la app ya tiene en ese keko
   se descuenta del tramo con su mismo costo, y lo que explican las unidades sin keko
   («Son de este keko») no se propone.
+- **Eliminar tokens revocados**: en Ajustes, cada token revocado tiene una papelera para
+  borrarlo de la base de datos, y con dos o más, «Eliminar los N revocados». Un token activo
+  no se puede eliminar (primero se revoca). Lo que envió ese sniper se conserva.
 
 ### Cambiado
 

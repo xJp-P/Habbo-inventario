@@ -417,6 +417,23 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { ok: true };
   }
 
+  // Eliminar de verdad (no solo marcar) un token YA revocado, o todos los revocados, para
+  // limpiar la tabla de Ajustes. Uno activo nunca: primero se revoca. Lo que envio ese
+  // sniper se conserva (sus eventos y la foto de su keko quedan sin token: la base los
+  // deja en null) y su keko sigue en la lista, porque sale de esa foto.
+  async function borrarToken(id) {
+    const r = await datos(db().from('tokens_sniper').delete().eq('id', Number(id)).eq('revocado', true).select('id'));
+    if (r.length) return { borrados: 1 };
+    const existe = await datos(db().from('tokens_sniper').select('id').eq('id', Number(id)));
+    if (existe.length) throw new ClientError('Solo se eliminan los tokens revocados: revócalo primero.', 409);
+    throw new ClientError('Ese token no existe.', 404);
+  }
+
+  async function borrarTokensRevocados() {
+    const r = await datos(db().from('tokens_sniper').delete().eq('revocado', true).select('id'));
+    return { borrados: r.length };
+  }
+
   // ── Kekos: los de los snipers (se detectan solos) y los manuales ──────────
   // Un keko manual es una cuenta sin Sniper (una bodega): nunca envia su inventario, asi
   // que nunca se audita. Llega con la migracion 20261008000000; sin ella no hay lista y
@@ -615,7 +632,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
     listarCompras, compraPorId, crearCompra, actualizarCompra, eliminarCompra,
     vender, revertirVenta, asignarLtd, publicarLote, publicarFurni, venderFurni, venderEnMano, retirarFurni, retirarLote, pendientesPorFurni, activarPendientes,
-    importarExcel, listarTokens, crearToken, revocarToken,
+    importarExcel, listarTokens, crearToken, revocarToken, borrarToken, borrarTokensRevocados,
     listarKekos, crearKeko, renombrarKeko, borrarKeko, asignarSinKeko,
     resolverNombre, sincronizarConCatalogo,
     auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,

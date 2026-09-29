@@ -943,6 +943,22 @@ async function main() {
     assert.equal(r.error.code, 'PT401');
     ok('estado_sniper responde; un token revocado deja de funcionar al instante');
 
+    const eventosDe = async () => (await clienteA.pg.query('select count(*)::int as n from public.eventos_sniper where token_id is null or token_id = $1', [tk.id])).rows[0].n;
+    const eventosAntes = await eventosDe();
+    assert.ok(eventosAntes > 0);
+    const tkActivo = await negocio.crearToken('VPS activo');
+    await rechaza(negocio.borrarToken(tkActivo.id), /revócalo primero/);
+    assert.deepEqual(await negocio.borrarToken(tk.id), { borrados: 1 });
+    assert.ok(!(await negocio.listarTokens()).some((t) => t.id === tk.id), 'el token eliminado ya no esta en la tabla');
+    assert.equal(await eventosDe(), eventosAntes, 'los eventos que envio ese sniper se conservan (sin token)');
+    await rechaza(negocio.borrarToken(tk.id), /no existe/);
+    const tkViejo = await negocio.crearToken('VPS viejo');
+    await negocio.revocarToken(tkViejo.id);
+    await negocio.revocarToken(tkActivo.id);
+    assert.deepEqual(await negocio.borrarTokensRevocados(), { borrados: 2 });
+    assert.ok((await negocio.listarTokens()).every((t) => !t.revocado), 'solo quedan los activos');
+    ok('tokens: uno revocado se elimina de la base (uno activo no), tambien todos los revocados a la vez, y lo que envio ese sniper se conserva');
+
     // ── Aislamiento entre usuarios + importacion de Excel ──
     const clienteB = clienteA.comoAnon();
     await clienteB.auth.signInWithPassword({ email: 'beto@prueba.local', password: 'clave-beto' });
@@ -1047,7 +1063,15 @@ async function main() {
     h = await pedir(puerto, 'POST', '/api/sniper/tokens', { cuerpo: { nombre: 'VPS de prueba 2' } });
     assert.equal(h.status, 201);
     assert.match(h.json.token, /^hbi_/);
-    ok('crear token desde la API de la app');
+    const idTk2 = h.json.id;
+    h = await pedir(puerto, 'DELETE', `/api/sniper/tokens/${idTk2}`);
+    assert.equal(h.status, 409, 'un token activo no se elimina');
+    await pedir(puerto, 'POST', `/api/sniper/tokens/${idTk2}/revocar`, { cuerpo: {} });
+    h = await pedir(puerto, 'DELETE', `/api/sniper/tokens/${idTk2}`);
+    assert.deepEqual([h.status, h.json.borrados], [200, 1]);
+    h = await pedir(puerto, 'POST', '/api/sniper/tokens/borrar-revocados', { cuerpo: {} });
+    assert.deepEqual([h.status, h.json.borrados], [200, 0]);
+    ok('crear, revocar y eliminar tokens desde la API de la app');
     h = await pedir(puerto, 'POST', '/api/kekos', { cuerpo: { nombre: 'Bodega de Ana' } });
     assert.equal(h.status, 201);
     h = await pedir(puerto, 'GET', '/api/kekos');
