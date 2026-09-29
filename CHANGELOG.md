@@ -10,6 +10,8 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+## [1.4.0] - 2026-09-29
+
 ### Agregado
 
 - **Costos por tramo en la Auditoría**: el Sniper manda un elemento por cada precio de
@@ -212,7 +214,8 @@ Primera versión pública. Funciona solo con el hotel **Habbo.es**.
 Instalación nueva: ejecutar en orden todos los archivos de `supabase/migrations/`, de
 `20260927000000_esquema_inicial.sql` a `20261006000000_numero_ltd.sql`.
 
-[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.3.0...HEAD
+[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.0.0...v1.1.0
