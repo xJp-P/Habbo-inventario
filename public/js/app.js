@@ -289,7 +289,7 @@ function App() {
         h(Ico, { name: nav[1], size: 18, color: 'var(--green)' }),
         h('span', { style: { fontWeight: 700, fontSize: 16 } }, nav[2]),
         h('div', { style: { flex: 1 } }),
-        h('span', { className: 'tag tag-morado', title: 'Tasa del Lingo (cámbiala en Resumen)' }, h(Ico, { name: 'diamond', size: 12 }), '1 lingo = ' + fmtLg(tasa) + ' cr'),
+        h('span', { className: 'tag tag-morado', title: 'Tasa del Lingo en Habbo.es (valor fijo del juego)' }, h(Ico, { name: 'diamond', size: 12 }), '1 lingo = ' + fmtLg(tasa) + ' cr'),
         h('button', { className: 'btn-icono', onClick: function () { setTema(tema === 'dark' ? 'light' : 'dark'); }, title: tema === 'dark' ? 'Tema claro' : 'Tema oscuro' },
           h(Ico, { name: tema === 'dark' ? 'sun' : 'moon', size: 14, color: 'var(--text3)' }))),
       h('div', { className: 'main-content' }, avisoMigraciones, contenido)),

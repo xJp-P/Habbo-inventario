@@ -2,6 +2,12 @@
 // lo publicado en el mercadillo (la UNICA fuente de ganancia esperada), lo que tienes en
 // mano (solo lo que costo: aun no tiene precio), ventas realizadas, datos rapidos y
 // alerta de lo publicado que deja perdida.
+//
+// TASA DEL LINGO (v1.5.1): en Habbo.es un Lingo vale 50 cr fijos, asi que la tarjeta la
+// muestra como un dato fijo y ya no se edita. Todo lo de editarla SIGUE aqui (estado,
+// guardarTasa y la ruta PUT /api/config/tasa) para darle otro uso mas adelante: basta con
+// poner TASA_EDITABLE en true. Los calculos siempre usan la tasa guardada en tu base (50
+// por defecto); si alguna vez guardaste otra, la tarjeta lo avisa y deja volver a 50.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -19,6 +25,9 @@ function Kpi(props) {
 
 function signo(n) { return (n > 0 ? '+' : '') + fmtCr(n) + ' cr'; }
 
+var TASA_EDITABLE = false;
+var TASA_HABBO = 50;
+
 export function ResumenView(props) {
   var r = props.resumen;
   var sT = useState(String(r.tasa).replace('.', ',')); var tasa = sT[0]; var setTasa = sT[1];
@@ -30,18 +39,27 @@ export function ResumenView(props) {
     if (!n || isNaN(n) || n <= 0) { setTasa(String(r.tasa).replace('.', ',')); props.onError('La tasa debe ser mayor que 0.'); return; }
     API.put('/api/config/tasa', { tasa_lingo: n }).then(function (x) { if (x) props.onCambio('Tasa del Lingo actualizada'); });
   }
+  function volverATasaHabbo() {
+    API.put('/api/config/tasa', { tasa_lingo: TASA_HABBO }).then(function (x) { if (x) props.onCambio('Tasa del Lingo: ' + TASA_HABBO + ' cr, la de Habbo.es'); });
+  }
 
   var pb = r.publicado, mano = r.en_mano, vd = r.vendido, pr = r.por_revisar, d = r.datos;
+  var tasaDistinta = !TASA_EDITABLE && r.tasa !== TASA_HABBO;
   return h('div', { className: 'contenedor fade-in' },
-    h('div', { className: 'card', style: { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 } },
+    h('div', { className: 'card', style: { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, flexWrap: 'wrap' } },
       h(Ico, { name: 'diamond', size: 22, color: 'var(--purple)' }),
-      h('div', { style: { flex: 1 } },
+      h('div', { style: { flex: 1, minWidth: 220 } },
         h('div', { className: 'card-titulo' }, 'Tasa del Lingo'),
-        h('div', { className: 'card-sub' }, 'Créditos que vale 1 Lingo. Todo se recalcula al cambiarla.')),
-      h('input', { className: 'inp inp-num', style: { width: 110 }, value: tasa, inputMode: 'decimal',
+        h('div', { className: 'card-sub' }, TASA_EDITABLE ? 'Créditos que vale 1 Lingo. Todo se recalcula al cambiarla.'
+          : 'Créditos que vale 1 Lingo en Habbo.es. Es un valor fijo del juego.')),
+      TASA_EDITABLE ? h('input', { className: 'inp inp-num', style: { width: 110 }, value: tasa, inputMode: 'decimal',
         onChange: function (e) { setTasa(e.target.value); }, onBlur: guardarTasa,
-        onKeyDown: function (e) { if (e.key === 'Enter') e.target.blur(); } }),
-      h('span', { className: 'suave' }, 'cr')),
+        onKeyDown: function (e) { if (e.key === 'Enter') e.target.blur(); } })
+        : h('span', { className: 'tasa-fija', title: 'Valor fijo de Habbo.es' }, h(Ico, { name: 'lock', size: 13 }), h('b', { className: 'mono' }, fmtLg(r.tasa))),
+      h('span', { className: 'suave' }, 'cr'),
+      tasaDistinta ? h('div', { className: 'aviso aviso-ambar', style: { flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+        h('span', { style: { flex: 1, minWidth: 200 } }, 'Tienes guardada una tasa de ' + fmtLg(r.tasa) + ' cr y los cálculos la usan; en Habbo.es un Lingo vale ' + TASA_HABBO + ' cr.'),
+        h('button', { className: 'btn btn-chico', onClick: volverATasaHabbo }, 'Usar ' + TASA_HABBO + ' cr')) : null),
 
     pr.unidades > 0 ? h('div', { className: 'huerfanas', style: { display: 'flex', alignItems: 'center', gap: 12 } },
       h(Ico, { name: 'radar', size: 22, color: 'var(--yellow)' }),

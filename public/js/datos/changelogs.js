@@ -15,6 +15,7 @@
 export const CHANGELOGS = {
   '1.5.1': [
     'Auditoría más ordenada: «Quitar de la auditoría» ya no ocupa una fila propia. Si el furni tiene un solo precio, va al lado de «Registrar entrada»; si tiene varios, sube junto al nombre del furni, porque quita el furni entero.',
+    'La tasa del Lingo ahora se muestra fija en 50 créditos, como en Habbo.es: ya no hace falta tocarla. Si alguna vez guardaste otra, el Resumen te avisa y la deja en 50 con un clic.',
   ],
   '1.5.0': [
     'Al eliminar un token revocado ahora decides qué pasa con lo que envió su Sniper: conservarlo todo, o hacer una limpieza profunda que borra también los lotes, las ventas y el inventario de su keko.',

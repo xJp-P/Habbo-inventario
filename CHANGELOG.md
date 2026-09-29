@@ -18,6 +18,11 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   tramo, junto a su «+»; con varios tramos, en la cabecera del furni, junto al «+N» (al pie
   de la última línea parecía que quitaba solo ese tramo). Ya no ocupa una fila propia. Es
   un botón secundario (gris) con el ícono «−».
+- **Resumen: la tasa del Lingo es un dato fijo** («50 cr» con un candado): en Habbo.es un
+  Lingo vale 50 cr, así que ya no se edita. La lógica sigue intacta (estado, guardado y la
+  ruta de la tasa, para darle otro uso más adelante) y los cálculos usan la tasa guardada;
+  si alguna vez guardaste otra, la tarjeta lo avisa y ofrece «Usar 50 cr». La etiqueta de
+  la cabecera ya no dice que se cambia en el Resumen.
 
 ### Corregido
 
