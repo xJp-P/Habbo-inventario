@@ -13,6 +13,9 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.5.1': [
+    'Auditoría más ordenada: «Quitar de la auditoría» ya no ocupa una fila propia. Si el furni tiene un solo precio, va al lado de «Registrar entrada»; si tiene varios, sube junto al nombre del furni, porque quita el furni entero.',
+  ],
   '1.5.0': [
     'Al eliminar un token revocado ahora decides qué pasa con lo que envió su Sniper: conservarlo todo, o hacer una limpieza profunda que borra también los lotes, las ventas y el inventario de su keko.',
     'Antes de borrar ves exactamente cuánto se va, y tienes que confirmarlo. Si ese keko todavía tiene un token activo, la limpieza se bloquea y te dice por qué, para no tocar el inventario que tu Sniper está manejando.',

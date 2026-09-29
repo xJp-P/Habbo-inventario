@@ -163,6 +163,10 @@ input[type=number]{-moz-appearance:textfield}
 .aud-tramo-txt b.mono{color:var(--green)}
 .aud-tramo.sin-costo{background:none;border:1px dashed var(--border);color:var(--text2)}
 .aud-tramo .btn.activo{border-color:var(--green);color:var(--green)}
+/* «Quitar de la auditoria»: secundario (tenue) y siempre a nivel del furni entero */
+.btn.btn-quitar{color:var(--text2)}
+.btn.btn-quitar:hover{color:var(--text);border-color:var(--border2)}
+.btn.btn-quitar.a-la-derecha{margin-left:auto}
 .aud-tramos .aud-form{padding:10px 10px 4px;border-top:none}
 .btn.girando svg{animation:spin .8s linear infinite}
 .aud-campo{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text2)}

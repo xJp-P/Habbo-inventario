@@ -94,7 +94,8 @@ function LineaTramo(props) {
       t && t.medio ? h('span', { className: 'tag tag-ambar', title: 'Lotes comprados a precios distintos: el costo es su promedio, tomados en el orden en que se compraron' },
         h(Ico, { name: 'alert', size: 11 }), 'El precio es un promedio calculado (FIFO)') : null,
       h('button', { className: 'btn btn-chico' + (props.abierto ? ' activo' : ''), onClick: props.onAbrir },
-        h(Ico, { name: 'plus', size: 12 }), props.texto)),
+        h(Ico, { name: 'plus', size: 12 }), props.texto),
+      props.extra || null),
     props.abierto ? props.formulario : null);
 }
 
@@ -287,17 +288,32 @@ export function AuditoriaView(props) {
     var acciones = [];
     var notas = [];
     var lineas = null;
+    var quitarCabecera = null;
     if (f.exclusion_vencida) notas.push('Antes lo quitaste de la auditoría, pero su cantidad cambió: decide de nuevo.');
     if (f.categoria === 'sobrante' || f.categoria === 'no_registrado') {
       var textoEntrada = f.categoria === 'no_registrado' ? 'Agregar al inventario' : 'Registrar entrada';
       // Con costos del Sniper, una linea por tramo (cada una con su entrada a su costo
       // exacto) y otra para lo que sobra sin costo; sin costos, el boton de siempre.
       var tramos = tramosDelSniper(f);
+      var sinCosto = tramos.length ? porRegistrar(f) - tramos.reduce(function (s, t) { return s + t.unidades; }, 0) : 0;
+      var nLineas = tramos.length ? tramos.length + (sinCosto > 0 ? 1 : 0) : 0;
+      // «Quitar de la auditoria» afecta a TODO el furni, asi que va donde se lee asi:
+      //   sin lineas de costo  -> en la fila de acciones, a la derecha (una sola fila);
+      //   una sola linea       -> en esa misma linea, junto a su «+» (sin fila extra);
+      //   varias lineas        -> en la cabecera del furni, junto al +N: al pie de la
+      //                           ultima linea pareceria que quita solo ese tramo.
+      var botonQuitar = function (clase) {
+        return h('button', { key: 'x', className: 'btn btn-chico btn-quitar' + (clase ? ' ' + clase : ''),
+          title: 'Quita el furni entero de la auditoría: no es mercancía (decoración, regalos…). Si llega o compras otra unidad, vuelve a aparecer.',
+          onClick: function () { excluir(f, f.diferencia); } },
+          h(Ico, { name: 'minus', size: 12 }), 'Quitar de la auditoría');
+      };
+      if (nLineas > 1) quitarCabecera = botonQuitar('en-cabecera');
       if (tramos.length) {
-        var sinCosto = porRegistrar(f) - tramos.reduce(function (s, t) { return s + t.unidades; }, 0);
         var linea = function (accion, tramo, n) {
           return h(LineaTramo, { key: accion, tramo: tramo, unidades: n, texto: textoEntrada, abierto: abiertoAqui === accion,
-            onAbrir: function () { abrir(accion); }, formulario: abiertoAqui === accion ? formDe(f, accion) : null });
+            onAbrir: function () { abrir(accion); }, formulario: abiertoAqui === accion ? formDe(f, accion) : null,
+            extra: nLineas === 1 ? botonQuitar() : null });
         };
         lineas = h('div', { className: 'aud-tramos' },
           h('div', { className: 'aud-tramos-t' }, h(Ico, { name: 'bolt', size: 12, color: 'var(--green)' }),
@@ -321,7 +337,7 @@ export function AuditoriaView(props) {
         acciones.push(h('button', { key: 'e', className: 'btn btn-chico' + (abiertoAqui === 'entrada' ? ' activo' : ''), onClick: function () { abrir('entrada'); } },
           h(Ico, { name: 'plus', size: 12 }), textoEntrada));
       }
-      acciones.push(h('button', { key: 'x', className: 'btn btn-chico', title: 'No es mercancía (decoración, regalos…). Si llega o compras otra unidad, vuelve a aparecer.', onClick: function () { excluir(f, f.diferencia); } }, 'Quitar de la auditoría'));
+      if (!nLineas) acciones.push(botonQuitar('a-la-derecha'));
     } else if (f.categoria === 'faltante') {
       acciones.push(h('button', { key: 'v', className: 'btn btn-chico' + (abiertoAqui === 'venta' ? ' activo' : ''), onClick: function () { abrir('venta'); } }, falta === 1 ? 'La vendí…' : 'Las vendí…'));
       acciones.push(h('button', { key: 'm', className: 'btn btn-chico' + (abiertoAqui === 'mover' ? ' activo' : ''), onClick: function () { abrir('mover'); } }, falta === 1 ? 'Está en otro keko' : 'Están en otro keko'));
@@ -360,7 +376,8 @@ export function AuditoriaView(props) {
         h('span', { className: 'aud-cant' }, 'Habbo ', h('b', null, f.habbo), ' · App ', h('b', null, f.app),
           f.excluidas ? h('span', { className: 'tenue' }, ' · ' + f.excluidas + ' excluidas') : null,
           f.categoria === 'sin_keko' ? h('span', null, ' · Sin keko ', h('b', null, f.sin_asignar)) : null),
-        dif !== null ? h('span', { className: 'aud-dif ' + (dif > 0 ? 'mas' : 'menos') }, (dif > 0 ? '+' : '−') + Math.abs(dif)) : null),
+        dif !== null ? h('span', { className: 'aud-dif ' + (dif > 0 ? 'mas' : 'menos') }, (dif > 0 ? '+' : '−') + Math.abs(dif)) : null,
+        quitarCabecera),
       f.categoria === 'ltd' ? h('div', { className: 'aud-nota' }, 'En la app: ',
         (f.ltds_faltantes || []).map(function (n) { return h(EtiquetaLtd, { key: 'a' + n, numero: n }); }),
         ' · En Habbo: ', (f.ltds_nuevos || []).map(function (n) { return h(EtiquetaLtd, { key: 'h' + n, numero: n }); })) : null,

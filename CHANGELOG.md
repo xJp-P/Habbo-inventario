@@ -10,6 +10,15 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **Auditoría: «Quitar de la auditoría» donde se entiende**. Afecta a todo el furni, así
+  que su lugar depende de cuántas líneas de costo tenga: sin costos del Sniper, en la misma
+  fila que «+ Registrar entrada», a la derecha; con un solo tramo, en la misma línea del
+  tramo, junto a su «+»; con varios tramos, en la cabecera del furni, junto al «+N» (al pie
+  de la última línea parecía que quitaba solo ese tramo). Ya no ocupa una fila propia. Es
+  un botón secundario (gris) con el ícono «−».
+
 ### Corregido
 
 - **Workflow de GitHub (Instaladores)**: al publicar el borrador, GitHub crea la etiqueta
