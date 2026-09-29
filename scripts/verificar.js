@@ -882,6 +882,26 @@ async function main() {
     assert.ok(costos.mismoCosto(3.333333, 3.33) && !costos.mismoCosto(3.33, 3.34), 'los costos se comparan al centimo');
     ok('costos por tramo: el Sniper manda un elemento por cada precio de compra, la bandeja muestra una linea por tramo y cada entrada usa su costo exacto');
 
+    // ── Contrato del Sniper: lote fundido (costo_medio) y todos los LTD en el primer objeto ──
+    const ltdF = furnidata.porClase('spyro');
+    const sL = { sprite_id: ltdF.sprite_id, tipo: ltdF.tipo };
+    r = await enviarInv([
+      { ...sL, cantidad: 1, costo_unidad: 1033.3333, unidades_con_costo: 1, costo_medio: true, ltds: [11, '#12', 13] },
+      { ...sL, cantidad: 1, costo_unidad: 1100, unidades_con_costo: 1, costo_medio: false },
+      { ...sL, cantidad: 1, costo_unidad: 1250, unidades_con_costo: 1, costo_medio: false },
+    ]);
+    assert.equal(r.error, null);
+    audC = await negC.auditoria('KekoC');
+    const fL = filaC(sL);
+    assert.deepEqual([fL.categoria, fL.habbo, fL.ltds_nuevos], ['no_registrado', 3, [11, 12, 13]], 'los numeros LTD que llegan juntos en el primer objeto valen para todo el furni');
+    assert.deepEqual(fL.costos.map((t) => [t.costo_unidad, t.unidades, t.costo_medio]), [[1033.3333, 1, true], [1100, 1, false], [1250, 1, false]]);
+    assert.deepEqual(costos.tramosDelSniper(fL).map((t) => [t.unidades, t.medio]), [[1, true], [1, false], [1, false]], 'el aviso de promedio sale solo en el tramo fundido');
+    await negC.entradaAuditoria({ sprite_id: sL.sprite_id, tipo: sL.tipo, cantidad: 1, precio: 1033.33, numero_ltd: 12, keko: 'KekoC' });
+    audC = await negC.auditoria('KekoC');
+    assert.deepEqual([filaC(sL).categoria, filaC(sL).ltds_nuevos, costos.tramosDelSniper(filaC(sL)).map((t) => [t.costo, t.medio])],
+      ['sobrante', [11, 13], [[1100, false], [1250, false]]], 'registrado el fundido (con el costo al centimo), quedan los otros dos tramos y los otros dos numeros');
+    ok('contrato del Sniper: el lote fundido lleva el aviso de promedio solo en su linea y los LTD que llegan juntos en el primer objeto se eligen en cada tramo');
+
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
     const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');

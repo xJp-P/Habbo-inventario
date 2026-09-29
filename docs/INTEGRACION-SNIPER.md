@@ -140,7 +140,12 @@ Content-Type: application/json
 
 **Costos:** el bot solo envía las tres claves de costo cuando lo conoce; un furni regalado o tradeado por fuera va sin ellas (nunca con `0` o `null` para decir «no sé»). Un costo mal formado se ignora sin rechazar el elemento: el furni entra igual, sin costo. Sin la migración, las claves de costo se ignoran.
 
-**Un elemento por precio de compra (requiere `20261010000000_costos_por_tramo.sql`):** si el mismo furni se compró a precios distintos, el bot **no los promedia**: envía un elemento por cada lote de su cartera, con el mismo `sprite_id` y `tipo`, su propia `cantidad` y su `costo_unidad` exacto (`costo_medio: false`), **del lote más antiguo al más nuevo** (el mismo orden FIFO de la cartera). Las unidades que el bot no sabe cuánto costaron van en otro elemento sin claves de costo. Los `ltds` pueden ir en cualquiera de los elementos del furni (la base los une).
+**Un elemento por precio de compra (requiere `20261010000000_costos_por_tramo.sql`):** si el mismo furni se compró a precios distintos, el bot **no los promedia**: envía un elemento por cada lote de su cartera, con el mismo `sprite_id` y `tipo`, su propia `cantidad` y su `costo_unidad` exacto (`costo_medio: false`), **del lote más antiguo al más nuevo** (el mismo orden FIFO de la cartera). Las unidades que el bot no sabe cuánto costaron van en otro elemento sin claves de costo.
+
+| Caso | Cómo lo envía el bot | Qué hace la app |
+|---|---|---|
+| **Lote fundido** (el bot guarda hasta 8 precios por furni; al pasarse, junta sus dos lotes más antiguos) | Ese elemento lleva el costo promedio de ambos y `costo_medio: true`; los demás, `false` | Una línea por tramo: el aviso «El precio es un promedio calculado (FIFO)» sale **solo** en la línea del fundido. Registrado con el costo que propone la caja (al céntimo), se descuenta de ese tramo |
+| **LTD repartidos en varios precios** | Todos los números en el `ltds` del **primer** elemento; los demás, sin `ltds` | La base une los números de todos los elementos del furni. Como el bot no dice qué número es de qué lote, cada línea de tramo ofrece los números que faltan y el usuario elige cuál registra a ese precio |
 
 ```json
 [

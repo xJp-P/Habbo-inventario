@@ -86,9 +86,11 @@ async function crearDemo({ dirDatos }) {
   // de los kekos manuales esta en otra cuenta), con diferencias y un furni de decoracion.
   // Como el Sniper real, manda lo que costo cada furni segun su cartera y, desde la
   // migracion 20261010000000, un elemento por cada precio de compra (del lote mas antiguo
-  // al mas nuevo). El primer furni trae 4 de mas: 2 y 1 compradas a precios distintos y 1
-  // cuyo costo el Sniper no conoce (tres lineas en la bandeja); al segundo le falta 1; y de
-  // la decoracion conoce el costo promedio de 5 de 12, para ver el aviso de promedio.
+  // al mas nuevo), con todos los numeros LTD del furni en el primero. El primer furni trae
+  // 4 de mas: 2 de un lote fundido (el bot junta sus lotes mas antiguos cuando pasa de 8
+  // precios: costo_medio), 1 a otro precio y 1 cuyo costo el Sniper no conoce (tres lineas
+  // en la bandeja, solo la primera con el aviso de promedio); al segundo le falta 1; y de la
+  // decoracion conoce el costo promedio de 5 de 12.
   async function simularInventario() {
     const [furnis, compras] = await Promise.all([negocio.listarFurnis(), negocio.listarCompras()]);
     const porId = new Map(furnis.filter((f) => f.sprite_id !== null).map((f) => [f.id, f]));
@@ -110,8 +112,13 @@ async function crearDemo({ dirDatos }) {
     if (grupos[0]) {
       const { sprite_id, tipo, costo_unidad } = grupos[0][0];
       const base = Math.max(10, Math.round(costo_unidad));
-      grupos[0].push({ sprite_id, tipo, cantidad: 2, costo_unidad: base + 15 },
+      grupos[0].push({ sprite_id, tipo, cantidad: 2, costo_unidad: base + 15.5, costo_medio: true },
         { sprite_id, tipo, cantidad: 2, costo_unidad: base + 40, unidades_con_costo: 1 });
+    }
+    for (const g of grupos) {
+      const ltds = g.flatMap((t) => t.ltds || []);
+      g.forEach((t) => { delete t.ltds; });
+      if (ltds.length) g[0].ltds = ltds;
     }
     if (grupos[1]) {
       const ultimo = grupos[1][grupos[1].length - 1];
