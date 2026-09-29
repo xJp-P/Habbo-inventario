@@ -97,6 +97,21 @@ async function main() {
   assert.ok(actualizador.includes('`' + paquete.build.mac.artifactName.replace('${ext}', 'zip') + '`'), 'el .zip de Mac tiene el nombre que genera electron-builder');
   ok(`empaquetado: el actualizador apunta a ${owner}/${repo} y al .zip de Mac que genera electron-builder`);
 
+  // ── Workflow de GitHub: publicar el borrador no dispara una segunda compilacion fallida ──
+  // Al publicar el borrador, GitHub crea la etiqueta v<version> y el workflow corre otra vez:
+  // el trabajo `revisar` debe cortarlo en verde, antes de compilar Windows y Mac.
+  const flujo = require('js-yaml').load(fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'build.yml'), 'utf8'));
+  const revisarFlujo = flujo.jobs.revisar.steps.map((p) => p.run || '').join('\n');
+  for (const so of ['windows', 'mac']) {
+    assert.equal(flujo.jobs[so].needs, 'revisar', `${so} espera a revisar la version`);
+    assert.equal(flujo.jobs[so].if, "needs.revisar.outputs.compilar == 'true'", `${so} no compila si la version ya esta publicada`);
+  }
+  assert.deepEqual(flujo.jobs.publicar.needs, ['windows', 'mac']);
+  assert.ok(/releases\/tags\/\$TAG/.test(revisarFlujo) && /compilar=false/.test(revisarFlujo) && /compilar=true/.test(revisarFlujo),
+    'revisar pregunta por el Release publicado de esa etiqueta y decide si compilar');
+  assert.ok(/--paginate/.test(flujo.jobs.publicar.steps.map((p) => p.run || '').join('\n')), 'los borradores se buscan en todas las paginas');
+  ok('workflow: la etiqueta que crea GitHub al publicar el borrador ya no recompila ni falla; una version ya publicada se detecta antes de compilar');
+
   // ── Notificaciones: cuando avisar (backend/core/avisos.js) ──
   const { crearDetectorAuditoria, avisoCatalogo } = require('../backend/core/avisos');
   let reloj = 0;

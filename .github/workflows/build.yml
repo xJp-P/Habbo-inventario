@@ -11,6 +11,12 @@ name: Instaladores
 #
 # Nada llega a los equipos hasta que publicas el borrador en la pestaña Releases.
 # La version sale del package.json: la etiqueta debe coincidir (v + version).
+#
+# OJO: al publicar el borrador, GitHub crea la etiqueta v<version> y esa etiqueta vuelve a
+# disparar este workflow. Hasta la 1.5.0 esa segunda ejecucion compilaba todo otra vez y
+# fallaba al final («ya esta publicada»). Ahora el primer trabajo (revisar) lo detecta y
+# termina en verde sin compilar nada; si la version ya publicada se pide a mano (Run
+# workflow), falla ahi mismo, antes de gastar minutos en compilar.
 on:
   push:
     tags: ['v*']
@@ -20,7 +26,42 @@ permissions:
   contents: write
 
 jobs:
+  # Decide si hay algo que compilar: `compilar` = true salvo que la version del
+  # package.json ya este publicada.
+  revisar:
+    runs-on: ubuntu-latest
+    outputs:
+      compilar: ${{ steps.version.outputs.compilar }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        name: Revisar la version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENTO: ${{ github.event_name }}
+          ETIQUETA: ${{ github.ref_name }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if [ "$EVENTO" = "push" ] && [ "$ETIQUETA" != "$TAG" ]; then
+            echo "::error::La etiqueta $ETIQUETA no coincide con la version del package.json ($TAG)."
+            exit 1
+          fi
+          # Este endpoint solo devuelve Releases PUBLICADOS (los borradores dan 404).
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --silent 2>/dev/null; then
+            if [ "$EVENTO" = "push" ]; then
+              echo "::notice::$TAG ya esta publicada: esta ejecucion la disparo la etiqueta que GitHub crea al publicar el borrador. No hay nada que compilar."
+              echo "compilar=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::La version $TAG ya esta publicada: sube la version en package.json y en el CHANGELOG."
+            exit 1
+          fi
+          echo "compilar=true" >> "$GITHUB_OUTPUT"
+
   windows:
+    needs: revisar
+    if: needs.revisar.outputs.compilar == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +83,8 @@ jobs:
           retention-days: 7
 
   mac:
+    needs: revisar
+    if: needs.revisar.outputs.compilar == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +113,7 @@ jobs:
           retention-days: 7
 
   # Un solo Release para todo. Si ya hay BORRADORES de esta version, se reemplazan; si
-  # ya esta PUBLICADA, el paso falla sin tocarla (hay que subir la version).
+  # ya esta PUBLICADA (alguien la publico mientras se compilaba), el paso falla sin tocarla.
   publicar:
     needs: [windows, mac]
     runs-on: ubuntu-latest
@@ -92,12 +135,12 @@ jobs:
                    "Habbo-Inventario-Mac-$VERSION-arm64.zip" "Habbo-Inventario-Mac-$VERSION-x64.zip"; do
             test -f "instaladores/$f" || { echo "Falta $f"; exit 1; }
           done
-          publicada=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq "[.[] | select(.tag_name == \"$TAG\" and .draft == false)] | length")
-          if [ "$publicada" != "0" ]; then
-            echo "La version $TAG ya esta publicada: sube la version en package.json y en el CHANGELOG."
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --silent 2>/dev/null; then
+            echo "::error::La version $TAG se publico mientras se compilaba: no se toca."
             exit 1
           fi
-          for id in $(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id"); do
+          # --paginate: con mas de 30 Releases, la primera pagina no los trae todos.
+          for id in $(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id"); do
             echo "Reemplazo el borrador anterior $id"
             gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
           done

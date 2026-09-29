@@ -10,6 +10,18 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Corregido
+
+- **Workflow de GitHub (Instaladores)**: al publicar el borrador, GitHub crea la etiqueta
+  `v<versión>` y esa etiqueta volvía a disparar el workflow: compilaba Windows y Mac otra
+  vez y el trabajo `publicar` fallaba con «La version vX ya esta publicada». Pasaba en cada
+  versión desde la 1.0.0. Ahora un primer trabajo, `revisar`, pregunta a GitHub si esa
+  versión ya está publicada: si la ejecución la disparó la etiqueta, termina en verde sin
+  compilar nada; si se pidió a mano (Run workflow) una versión ya publicada, falla ahí
+  mismo, antes de gastar minutos en compilar. Una etiqueta que no coincide con el
+  `package.json` también se rechaza al inicio. Los borradores anteriores se buscan en todas
+  las páginas de Releases (antes, solo en las 30 primeras).
+
 ## [1.5.0] - 2026-09-29
 
 ### Agregado
