@@ -164,6 +164,7 @@ La base suma la cantidad del furni (6) para la comparación y guarda cada costo 
 | Momento | Por qué |
 |---|---|
 | Al completar cada carga del inventario (último fragmento de `In.FurniList`) | Es la foto completa del keko |
+| **Tras cambios sueltos del inventario** (un tradeo, un regalo: `FurniListAddOrUpdate` / `FurniListRemove`), con **30 s de calma** (cada cambio reinicia la espera) y **como máximo una foto cada 2 min** por keko | Sin esto, un tradeo en el juego no llegaba a la app hasta la siguiente carga completa. La espera junta varios cambios seguidos (un tradeo de varios furnis, colocar furnis en una sala) en un solo envío. SniperMercadillo lo hace desde el parche posterior a la 1.5.1 |
 | **Tras cada tanda de eventos aceptada** (recomendado) | La app compara **en vivo** contra la **última** foto. Si solo se envía al cargar el inventario, cada compra, publicación o recuperación registrada después aparece como diferencia (faltante o sobrante) hasta la carga siguiente. Reenviarla, sacada del inventario que el bot mantiene al día, lo evita |
 
 Nunca envíes una foto a medias (una carga de varios fragmentos sin terminar, o lo que quedó en memoria de otra cuenta tras reconectar): la app leería lo que no viene como furnis que faltan. SniperMercadillo lo hace así desde su Fase 27.66.
