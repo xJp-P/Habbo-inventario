@@ -1033,8 +1033,92 @@ async function main() {
     await evid.cerrar();
     ok('auditoria: «vinieron de otro keko» solo se sugiere con evidencia (sobra aqui y falta en la foto de ese keko); un keko manual nunca, se elige a mano');
 
+    // ── Inventario y Mercadillo por keko (migracion 20261014000000) ──
+    const pk = await crearClienteLocal();
+    await pk.crearUsuario('pk@prueba.local', 'clave-pk');
+    await pk.auth.signInWithPassword({ email: 'pk@prueba.local', password: 'clave-pk' });
+    const conexPk = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: pk });
+    await conexPk.iniciar();
+    const negPk = crearServicioNegocio({ conexion: conexPk, furnidata });
+    await negPk.crearKeko('xJp');
+    await negPk.crearKeko('KekoB');
+    const kA = await negPk.crearCompra({ nombre: 'Trono HC', cantidad: 5, precio_compra: 100, keko: 'xJp', fecha_compra: '2026-09-01' });
+    const kB = await negPk.crearCompra({ furni_id: kA.furni_id, cantidad: 5, precio_compra: 90, keko: 'KekoB', fecha_compra: '2026-09-10' });
+    const kS = await negPk.crearCompra({ furni_id: kA.furni_id, cantidad: 2, precio_compra: 80, fecha_compra: '2026-08-01' });
+    const lotePk = async (id) => (await pk.from('compras').select('id,estado,cantidad,keko,origen_id').eq('id', id)).data[0];
+    const lotesPk = async (estado) => (await pk.from('compras').select('id,estado,cantidad,keko,origen_id').eq('estado', estado).order('id')).data;
+    // «Publicar» desde el bloque de KekoB: FIFO solo entre sus lotes (los de xJp y lo sin keko son mas antiguos).
+    let rPk = await negPk.publicarFurni(kA.furni_id, { cantidad: 3, precio_lista: 150, keko: 'kekob' });
+    assert.deepEqual([rPk.cantidad, rPk.en_mano, (await lotePk(kB.id)).cantidad, (await lotePk(kA.id)).cantidad, (await lotePk(kS.id)).cantidad], [3, 2, 2, 5, 2],
+      'publicar desde un keko solo toma sus lotes (sin distinguir mayusculas)');
+    const pubB = (await lotesPk('publicado'))[0];
+    assert.deepEqual([pubB.cantidad, pubB.keko, pubB.origen_id], [3, 'KekoB', kB.id], 'la parte publicada conserva el keko de su lote');
+    await rechaza(negPk.venderFurni(kA.furni_id, { cantidad: 1, keko: 'xJp' }), /en el keko xJp/);
+    rPk = await negPk.venderFurni(kA.furni_id, { cantidad: 1, keko: 'KekoB' });
+    const vendB = await lotePk(rPk.ventas[0].venta_id);
+    assert.deepEqual([vendB.estado, vendB.keko], ['vendido', 'KekoB'], 'lo vendido de una parte conserva el keko');
+    await negPk.publicarFurni(kA.furni_id, { cantidad: 1, precio_lista: 150, sin_keko: true });
+    const pubS = (await lotesPk('publicado')).find((l) => l.origen_id === kS.id);
+    assert.deepEqual([pubS.cantidad, pubS.keko, (await lotePk(kS.id)).cantidad], [1, null, 1], '«sin keko» solo toma los lotes sin keko');
+    await rechaza(negPk.retirarFurni(kA.furni_id, { cantidad: 1, keko: 'xJp' }), /en el keko xJp/);
+    await negPk.retirarFurni(kA.furni_id, { cantidad: 1, keko: 'KekoB' });
+    assert.deepEqual([(await lotePk(kB.id)).cantidad, (await lotePk(pubB.id)).cantidad], [3, 1], 'retirar desde KekoB vuelve a su lote de KekoB');
+    const ambos = await pk.rpc('publicar_furni', { p_furni_id: kA.furni_id, p_cantidad: 1, p_precio_lista: 1, p_keko: 'xJp', p_sin_keko: true });
+    assert.match(ambos.error.message, /no los dos/);
+    // Separar un LTD de un lote de varias unidades: la unidad nueva sigue en su keko.
+    const ltdPk = await negPk.asignarLtd(kA.id, 12);
+    assert.deepEqual([ltdPk.separado, ltdPk.lote.keko], [true, 'xJp'], 'la unidad LTD separada conserva el keko');
+    // Al volver a Comprado, solo se fusiona con su lote de origen si sigue en el mismo keko.
+    await pk.pg.query('update public.compras set keko = $1 where id = $2', ['KekoB', kA.id]);
+    const pubA = (await negPk.publicarFurni(kA.furni_id, { cantidad: 1, precio_lista: 150, keko: 'KekoB' })).lotes[0];
+    await pk.pg.query('update public.compras set keko = $1 where id = $2', ['xJp', pubA.origen_id]);
+    const retA = await negPk.retirarLote(pubA.lote_id);
+    assert.equal(retA.fusionada, false, 'no se fusiona con un lote que ya esta en otro keko');
+    assert.equal((await lotePk(pubA.lote_id)).keko, 'KekoB');
+    // El orden de los bloques: listar_kekos trae `desde`.
+    const tkPk = await negPk.crearToken('VPS Norte');
+    assert.equal((await pk.comoAnon().rpc('auditar_inventario', { token_sniper: tkPk.token, keko: 'SniperNorte', hotel: 'es', inventario: [] })).error, null);
+    const listaPk = (await negPk.listarKekos()).kekos;
+    assert.ok(listaPk.every((k) => k.desde), 'cada keko trae desde cuando existe');
+    const kekosJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'kekos.js')).href);
+    assert.deepEqual(kekosJs.ordenarKekos(listaPk).map((k) => k.nombre), ['xJp', 'KekoB', 'SniperNorte'], 'manuales por antiguedad y luego los de Sniper');
+    await pk.cerrar();
+
+    // Sin la migracion 18: si el furni solo esta en ese keko, se hace igual; si hay lotes de otro, 428.
+    const pk17 = await crearClienteLocal({ omitir: ['20261014000000_inventario_por_keko.sql'] });
+    await pk17.crearUsuario('pk17@prueba.local', 'clave-pk17');
+    await pk17.auth.signInWithPassword({ email: 'pk17@prueba.local', password: 'clave-pk17' });
+    const conex17 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: pk17 });
+    await conex17.iniciar();
+    const neg17 = crearServicioNegocio({ conexion: conex17, furnidata });
+    const s17 = await neg17.crearCompra({ nombre: 'Trono HC', cantidad: 4, precio_compra: 100, keko: 'xJp' });
+    assert.equal((await neg17.publicarFurni(s17.furni_id, { cantidad: 2, precio_lista: 150, keko: 'xJp' })).cantidad, 2, 'sin la migracion, un furni que solo esta en ese keko se publica igual');
+    const perdio = (await pk17.from('compras').select('id,keko,origen_id').eq('estado', 'publicado')).data[0];
+    assert.equal(perdio.keko, null, 'antes de la migracion, la parte publicada perdia el keko');
+    await neg17.crearCompra({ furni_id: s17.furni_id, cantidad: 1, precio_compra: 90, keko: 'KekoB' });
+    await rechaza(neg17.publicarFurni(s17.furni_id, { cantidad: 1, precio_lista: 150, keko: 'xJp' }), /20261014000000_inventario_por_keko/);
+    // Una fila en mano sin keko que salio de un lote: la migracion no la toca (se asigna en la Auditoria).
+    await pk17.pg.query("insert into public.compras (propietario, furni_id, estado, cantidad, moneda_compra, precio_compra, origen_id, fuente) select propietario, furni_id, 'comprado', 1, moneda_compra, precio_compra, id, fuente from public.compras where id = $1", [s17.id]);
+    await pk17.pg.exec(fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261014000000_inventario_por_keko.sql'), 'utf8'));
+    const tras = (await pk17.from('compras').select('id,estado,keko').order('id')).data;
+    assert.equal(tras.find((l) => l.id === perdio.id).keko, 'xJp', 'la migracion devuelve el keko a lo publicado que lo perdio');
+    assert.equal(tras.filter((l) => l.estado === 'comprado' && l.keko === null).length, 1, 'lo en mano sin keko se sigue asignando en la Auditoria');
+    await pk17.cerrar();
+
+    // Los bloques: un keko de los lotes que la lista no conoce va con los manuales; «sin keko» al final.
+    const agr = kekosJs.agruparPorKeko(
+      [{ id: 1, keko: 'kekob' }, { id: 2, keko: null }, { id: 3, keko: 'Bodega' }, { id: 4, keko: 'SniperNorte' }, { id: 5, keko: 'XJP' }],
+      [{ nombre: 'SniperNorte', origen: 'sniper', desde: '2026-08-30T10:00:00Z' }, { nombre: 'KekoB', origen: 'manual', id: 2, desde: '2026-09-12T10:00:00Z' },
+       { nombre: 'xJp', origen: 'manual', id: 1, desde: '2026-09-02T10:00:00Z' }, { nombre: 'Vacio', origen: 'manual', id: 3, desde: '2026-09-20T10:00:00Z' }],
+      (x) => x.keko);
+    assert.deepEqual(agr.bloques.map((b) => [b.keko.nombre, b.keko.origen, b.items.map((x) => x.id)]),
+      [['xJp', 'manual', [5]], ['KekoB', 'manual', [1]], ['Bodega', 'manual', [3]], ['SniperNorte', 'sniper', [4]], [null, 'sin', [2]]]);
+    assert.deepEqual(agr.vacios, ['Vacio']);
+    assert.deepEqual([kekosJs.ambitoDe(agr.bloques[0].keko), kekosJs.ambitoDe(agr.bloques[4].keko)], [{ keko: 'xJp' }, { sin_keko: true }]);
+    ok('inventario por keko: publicar, vender y retirar desde un bloque solo tocan ese keko (o lo sin keko); las partes de un lote conservan su keko; la migracion devuelve el keko a lo publicado y vendido; bloques en el orden del dueno');
+
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -1053,7 +1137,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -1066,7 +1150,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -1083,7 +1167,7 @@ async function main() {
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
-    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql'] });
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql'] });
     await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
     await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
     const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });

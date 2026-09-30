@@ -266,41 +266,73 @@ function crearServicioNegocio({ conexion, furnidata }) {
     };
   }
 
-  // Publicar a mano un furni completo: toma sus unidades en mano de todos sus lotes, del
-  // mas antiguo al mas nuevo (funcion publicar_furni). Sin cantidad, publica todas.
+  // Publicar, vender y retirar un furni desde UN keko (el bloque del Inventario o del
+  // Mercadillo donde se pulso): { keko } = solo los lotes de ese keko, { sin_keko: true } =
+  // solo los que no tienen. Sin nada, todos los lotes del furni, como antes.
+  function ambitoKeko(entrada) {
+    if (entrada.sin_keko === true) return { p_sin_keko: true };
+    const keko = nombreKeko(entrada.keko);
+    return keko ? { p_keko: keko } : {};
+  }
+  const MIGRACION_POR_KEKO = 'Para actuar solo sobre un keko instala la migración 20261014000000_inventario_por_keko.sql en tu Supabase (aviso ámbar de arriba).';
+
+  // Sin la migracion 20261014000000 la base no conoce p_keko ni p_sin_keko. Si ese furni no
+  // tiene lotes de otros kekos en ese estado, da lo mismo y se llama sin el ambito; si los
+  // tiene, se niega: sin el ambito tocaria unidades de otro keko.
+  async function rpcConAmbito(nombre, args, ambito, { furniId, estado, soloManual }) {
+    if (!Object.keys(ambito).length) return datos(db().rpc(nombre, args));
+    try {
+      return await datos(db().rpc(nombre, { ...args, ...ambito }));
+    } catch (e) {
+      if (!faltaMigracion(e)) throw e;
+      let consulta = db().from('compras').select('keko').eq('furni_id', furniId).eq('estado', estado);
+      if (estado === 'comprado') consulta = consulta.eq('pendiente', false);
+      if (soloManual) consulta = consulta.eq('publicado_por', 'manual');
+      const ajenos = (await datos(consulta)).filter((l) => (ambito.p_sin_keko
+        ? l.keko !== null && l.keko !== undefined
+        : String(l.keko || '').toLowerCase() !== ambito.p_keko.toLowerCase()));
+      if (ajenos.length) throw new ClientError(MIGRACION_POR_KEKO, 428);
+      return datos(db().rpc(nombre, args));
+    }
+  }
+
+  // Publicar a mano un furni completo: toma sus unidades en mano (de todos sus lotes o de
+  // los de un keko), del mas antiguo al mas nuevo (funcion publicar_furni). Sin cantidad,
+  // publica todas.
   async function publicarFurni(id, entrada = {}) {
-    const r = await datos(db().rpc('publicar_furni', {
+    const r = await rpcConAmbito('publicar_furni', {
       p_furni_id: Number(id),
       p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
         ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a publicar', minimo: 1, entero: true }),
       p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
-    }));
+    }, ambitoKeko(entrada), { furniId: Number(id), estado: 'comprado' });
     return { cantidad: r.cantidad, en_mano: r.en_mano, precio_lista: r.precio_lista, lotes: r.lotes };
   }
 
-  // Desde el Mercadillo (por furni). Venta de N unidades publicadas, FIFO; con
-  // precio_lista, solo de los lotes publicados a ese precio (funcion vender_furni). Lo
-  // que se guarda es el neto: vender_lote descuenta la comision.
+  // Desde el Mercadillo (por furni, dentro del bloque de un keko). Venta de N unidades
+  // publicadas, FIFO; con precio_lista, solo de los lotes publicados a ese precio (funcion
+  // vender_furni). Lo que se guarda es el neto: vender_lote descuenta la comision.
   async function venderFurni(id, entrada = {}) {
-    const r = await datos(db().rpc('vender_furni', {
+    const r = await rpcConAmbito('vender_furni', {
       p_furni_id: Number(id),
       p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad vendida', minimo: 1, entero: true }),
       p_precio: numeroValido(entrada.precio_venta, { campo: 'El precio de venta', opcional: true }),
       p_fecha: entrada.fecha_venta || hoyStr(),
       p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
-    }));
+    }, ambitoKeko(entrada), { furniId: Number(id), estado: 'publicado' });
     return { cantidad: r.cantidad, ventas: r.ventas };
   }
 
-  // Retira N unidades que publicaste tu de un furni (todas si no se indica), FIFO;
-  // con precio_lista, solo las de ese precio (funcion retirar_furni).
+  // Retira N unidades que publicaste tu de un furni (todas si no se indica; de todos sus
+  // lotes o de los de un keko), FIFO; con precio_lista, solo las de ese precio (funcion
+  // retirar_furni).
   async function retirarFurni(id, entrada = {}) {
-    const r = await datos(db().rpc('retirar_furni', {
+    const r = await rpcConAmbito('retirar_furni', {
       p_furni_id: Number(id),
       p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
         ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a retirar', minimo: 1, entero: true }),
       p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
-    }));
+    }, ambitoKeko(entrada), { furniId: Number(id), estado: 'publicado', soloManual: true });
     return { cantidad: r.cantidad, lotes: r.lotes };
   }
 

@@ -10,6 +10,27 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Corregido
+
+- **Las partes de un lote ya no pierden su keko**. Desde la 1.1.0, al publicar, vender o
+  retirar **una parte** de un lote, o al separar una unidad LTD, la fila nueva nacía sin
+  keko (lo publicado o vendido de una parte aparecía como «sin keko» y la unidad LTD
+  separada contaba como «sin keko» en la Auditoría). Ahora conservan el keko de su lote, y
+  al volver a Comprado solo se juntan con su lote de origen si sigue en el mismo keko. La
+  migración devuelve su keko a lo publicado y vendido que lo había perdido; lo que está en
+  mano sin keko se sigue asignando en la Auditoría, como hasta ahora.
+- **«Publicar», «Vendido» y «Retirar» de un furni solo tocan un keko**. Antes tomaban
+  unidades de cualquier keko (las más antiguas primero), aunque estuvieran en otra cuenta
+  de Habbo. Ahora actúan sobre el keko desde donde se pulsan (ver *Inventario y Mercadillo
+  por keko*).
+
+### Migraciones de Supabase
+
+- `20261014000000_inventario_por_keko.sql` (requiere la `20261013000000`). Sin ella, la
+  app muestra igual los bloques por keko; publicar, vender o retirar desde un keko
+  funciona si ese furni no tiene lotes en otro keko, y si los tiene pide instalarla (sin
+  ella la base tomaría unidades de otro keko).
+
 ## [1.5.2] - 2026-09-29
 
 ### Corregido
