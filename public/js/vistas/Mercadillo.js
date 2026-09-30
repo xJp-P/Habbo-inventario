@@ -18,7 +18,8 @@ import { fmtCr, fmtLg } from '../core/format.js';
 import { normalizar } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
 import { NombreFurni } from '../componentes/base.js';
-import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado } from '../componentes/BloquesKeko.js';
+import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado, nombreBloque } from '../componentes/BloquesKeko.js';
+import { Barrera, Dibujar } from '../componentes/Barrera.js';
 import { agruparPorKeko, ambitoDe, claveKeko } from '../core/kekos.js';
 import { resumenPublicado, precioMinimoSinPerder } from '../core/comision.js';
 
@@ -123,6 +124,23 @@ export function MercadilloView(props) {
     return trs;
   }
 
+  // La tarjeta de un keko y, dentro, una barrera por furni: si uno trae un dato raro, solo
+  // su fila lo dice; si falla la tarjeta, los demas kekos siguen.
+  function bloqueDe(b) {
+    return h(BloqueKeko, { key: b.keko.clave, keko: b.keko, datos: datosBloque(b.items) },
+      h('table', { className: 'tabla' },
+        h(Columnas, { anchos: ANCHOS }),
+        h('thead', null, h('tr', null,
+          h('th', null, 'Furni'), h('th', { className: 'r' }, 'Precio de lista'), h('th', { className: 'r' }, 'Publicadas'),
+          h('th', { className: 'r' }, 'Costo prom.'), h('th', { className: 'r' }, 'Ganancia esp.'), h('th', null, 'Publicado por'), h('th', null))),
+        h('tbody', null, b.items.map(function (x) {
+          var nombre = x.f && typeof x.f.nombre === 'string' ? x.f.nombre : 'este furni';
+          return h(Barrera, { key: x.clave, tipo: 'fila', columnas: 7, etiqueta: '«' + nombre + '»',
+              donde: 'Mercadillo › ' + nombreBloque(b.keko) + ' › ' + nombre, onVerErrores: props.onVerErrores },
+            h(Dibujar, { dibujar: function () { return filasDe(x, b.keko); } }));
+        }))));
+  }
+
   return h('div', { className: 'contenedor fade-in' },
     h('div', { className: 'barra' },
       h('div', { style: { position: 'relative', flex: 1, minWidth: 200 } },
@@ -137,13 +155,9 @@ export function MercadilloView(props) {
       : h('div', null,
           h(IndiceKekos, { bloques: agrupado.bloques, cuenta: function (b) { return fmtCr(b.items.reduce(function (s, x) { return s + x.r.unidades; }, 0)); } }),
           h('div', { className: 'bk-lista' + (alineado.alineado ? ' alineado' : ''), ref: alineado.ref }, agrupado.bloques.map(function (b) {
-            return h(BloqueKeko, { key: b.keko.clave, keko: b.keko, datos: datosBloque(b.items) },
-              h('table', { className: 'tabla' },
-                h(Columnas, { anchos: ANCHOS }),
-                h('thead', null, h('tr', null,
-                  h('th', null, 'Furni'), h('th', { className: 'r' }, 'Precio de lista'), h('th', { className: 'r' }, 'Publicadas'),
-                  h('th', { className: 'r' }, 'Costo prom.'), h('th', { className: 'r' }, 'Ganancia esp.'), h('th', null, 'Publicado por'), h('th', null))),
-                h('tbody', null, b.items.map(function (x) { return filasDe(x, b.keko); }))));
+            return h(Barrera, { key: b.keko.clave, tipo: 'bloque', etiqueta: 'El bloque de ' + nombreBloque(b.keko),
+                donde: 'Mercadillo › ' + nombreBloque(b.keko), onVerErrores: props.onVerErrores },
+              h(Dibujar, { dibujar: function () { return bloqueDe(b); } }));
           })),
           q ? null : h(KekosVacios, { nombres: agrupado.vacios, texto: 'Sin nada publicado: ' })),
     h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, 'Aquí solo está lo publicado en el mercadillo de Habbo.es. Lo que tienes en mano, lo «por revisar» del Sniper y lo vendido están en el Inventario. La ganancia esperada ya descuenta la comisión.'));

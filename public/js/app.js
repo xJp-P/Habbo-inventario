@@ -17,6 +17,11 @@
 // «Reintentar». Cada error de la sesion queda en core/errores.js: el boton rojo de la
 // cabecera y «Ver detalles» de un aviso abren la lista. Cada seccion va dentro de una
 // Barrera: si falla al dibujarse, lo dice ella sola y el menu sigue funcionando.
+//
+// Carga por partes (v1.6.1, fase 2): resumen, furnis, lotes y «por revisar» llegan cada
+// uno por su cuenta y cada seccion espera solo lo que usa (NECESITA). Si una parte falla,
+// solo las secciones que la usan lo dicen; las demas siguen. Ajustes no espera nada: se
+// abre siempre, aunque no llegue ningun dato.
 
 import { h, useState, useEffect, useCallback, useRef, createRoot } from './core/react.js';
 import { API, setErrorHandler } from './core/api.js';
@@ -43,9 +48,23 @@ import { ErroresModal } from './componentes/ErroresModal.js';
 import { Barrera } from './componentes/Barrera.js';
 import { registrarError, erroresRegistrados, alCambiarErrores, limpiarErrores, describirEquipo } from './core/errores.js';
 
-// Cuanto se espera cada peticion de la carga inicial antes de darla por fallida.
+// Cuanto se espera cada peticion de la carga antes de darla por fallida.
 var ESPERA_CARGA = 30000;
-var RUTAS_CARGA = ['/api/resumen', '/api/furnis', '/api/compras', '/api/pendientes'];
+// Las partes de la carga y lo que necesita cada seccion para dibujarse.
+var PARTES = {
+  resumen: { ruta: '/api/resumen', nombre: 'el resumen' },
+  furnis: { ruta: '/api/furnis', nombre: 'tus furnis' },
+  compras: { ruta: '/api/compras', nombre: 'tus lotes' },
+  pendientes: { ruta: '/api/pendientes', nombre: 'lo «por revisar»' },
+};
+var NECESITA = {
+  resumen: ['resumen'],
+  mercadillo: ['furnis', 'compras'],
+  inventario: ['compras', 'pendientes'],
+  auditoria: ['furnis', 'compras'],
+  ajustes: [],
+};
+function esDeSesion(e) { return e && (e.codigo === 'SIN_SESION' || e.codigo === 'SIN_CONFIG'); }
 
 var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
@@ -60,7 +79,8 @@ function leerTema() { try { return localStorage.getItem('tema') || 'dark'; } cat
 function App() {
   var sC = useState(null); var cuenta = sC[0]; var setCuenta = sC[1];
   var sV = useState('resumen'); var vista = sV[0]; var setVista = sV[1];
-  var sD = useState(null); var datos = sD[0]; var setDatos = sD[1];
+  // Las partes que ya llegaron (una clave de PARTES que falta = todavia no llego).
+  var sD = useState({}); var datos = sD[0]; var setDatos = sD[1];
   var sT = useState(null); var toast = sT[0]; var setToast = sT[1];
   var sTe = useState(leerTema()); var tema = sTe[0]; var setTema = sTe[1];
   var sM = useState(null); var modal = sM[0]; var setModal = sM[1];
@@ -76,13 +96,15 @@ function App() {
   // recarga sola); el clic en una notificacion deja en `abrirAuditoria` el keko a abrir.
   var sSen = useState(0); var senalAuditoria = sSen[0]; var setSenalAuditoria = sSen[1];
   var sAbA = useState(null); var abrirAuditoria = sAbA[0]; var setAbrirAuditoria = sAbA[1];
-  // Errores de la sesion, el modal que los muestra ('carga' | 'registro') y si fallo la
-  // carga inicial (sin datos todavia).
+  // Errores de la sesion, el modal que los muestra ('carga' | 'registro') y las partes de
+  // la carga que fallaron la ultima vez ({ clave: Error }).
   var sErr = useState(erroresRegistrados); var errores = sErr[0]; var setErrores = sErr[1];
   var sVE = useState(null); var verErrores = sVE[0]; var setVerErrores = sVE[1];
-  var sFC = useState(false); var falloCarga = sFC[0]; var setFalloCarga = sFC[1];
+  var sFa = useState({}); var fallos = sFa[0]; var setFallos = sFa[1];
   var sEM = useState(null); var estadoMig = sEM[0]; var setEstadoMig = sEM[1];
-  var hayDatos = useRef(false);
+  // Las partes que llegaron alguna vez en esta sesion (para distinguir una carga que falla
+  // de una recarga que falla).
+  var llegaron = useRef({});
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -123,36 +145,42 @@ function App() {
     return function () { quitar(); window.removeEventListener('error', suelto); window.removeEventListener('unhandledrejection', promesa); };
   }, []);
 
-  // Carga los datos. Si algo falla o no responde a tiempo: sin datos todavia, se abre el
-  // modal de la carga; con datos, se conservan los que habia y sale un aviso con «Ver
-  // detalles». La sesion vencida no es un fallo: vuelve al acceso.
+  // Carga los datos por partes: cada una se guarda en cuanto llega. Si una falla o no
+  // responde a tiempo: si nunca habia llegado, se abre el modal de la carga; si ya la
+  // habia, se conserva la anterior y sale un aviso con «Ver detalles». La sesion vencida
+  // no es un fallo: vuelve al acceso.
   var recargar = useCallback(function () {
-    return Promise.all(RUTAS_CARGA.map(function (u) { return API.intentar('GET', u, null, { espera: ESPERA_CARGA }); }))
-      .then(function (r) {
-        var fallos = r.filter(function (x) { return x.error; }).map(function (x) { return x.error; });
-        if (fallos.some(function (e) { return e.codigo === 'SIN_SESION' || e.codigo === 'SIN_CONFIG'; })) { cargarCuenta(); return; }
-        if (!fallos.length) {
-          hayDatos.current = true;
-          setFalloCarga(false);
-          setDatos({ resumen: r[0].datos, furnis: r[1].datos, compras: r[2].datos, pendientes: r[3].datos });
-        } else if (!hayDatos.current) {
-          setFalloCarga(true);
-          setVerErrores('carga');
-        } else {
-          avisar('No se pudieron actualizar tus datos: ' + fallos[0].message, 'error');
+    var antes = Object.assign({}, llegaron.current);
+    return Promise.all(Object.keys(PARTES).map(function (clave) {
+      return API.intentar('GET', PARTES[clave].ruta, null, { espera: ESPERA_CARGA }).then(function (r) {
+        if (!r.error) {
+          llegaron.current[clave] = true;
+          setDatos(function (d) { var n = Object.assign({}, d); n[clave] = r.datos; return n; });
+          setFallos(function (f) { if (!f[clave]) return f; var n = Object.assign({}, f); delete n[clave]; return n; });
+        } else if (!esDeSesion(r.error)) {
+          setFallos(function (f) { var n = Object.assign({}, f); n[clave] = r.error; return n; });
         }
-        // Diferencias de la auditoria y kekos (aparte: sin su migracion responden vacio).
-        API.get('/api/auditoria/resumen').then(function (a) { if (a) setResAuditoria(a); });
-        API.get('/api/kekos').then(function (k) { if (k) setKekos(k); });
+        return { clave: clave, error: r.error };
       });
+    })).then(function (r) {
+      var malas = r.filter(function (x) { return x.error; });
+      if (malas.some(function (x) { return esDeSesion(x.error); })) { cargarCuenta(); return; }
+      if (malas.some(function (x) { return !antes[x.clave]; })) setVerErrores(function (v) { return v || 'carga'; });
+      else if (malas.length) {
+        avisar('No se pudo actualizar ' + malas.map(function (x) { return PARTES[x.clave].nombre; }).join(', ') + ': ' + malas[0].error.message, 'error');
+      }
+      // Diferencias de la auditoria y kekos (aparte: sin su migracion responden vacio).
+      API.get('/api/auditoria/resumen').then(function (a) { if (a) setResAuditoria(a); });
+      API.get('/api/kekos').then(function (k) { if (k) setKekos(k); });
+    });
   }, []);
 
   var lista = cuenta && cuenta.estado === 'lista';
   useEffect(function () {
     if (lista) recargar();
-    else { setDatos(null); hayDatos.current = false; setFalloCarga(false); }
+    else { setDatos({}); llegaron.current = {}; setFallos({}); }
   }, [lista]);
-  function reintentarCarga() { setVerErrores(null); setFalloCarga(false); recargar(); }
+  function reintentarCarga() { setVerErrores(null); recargar(); }
 
   // ── Novedades post-actualizacion (como Proyecto_Cartera) ──────────────────
   // Compara la version que corre con la ultima vista (localStorage.lastSeenVersion): si
@@ -217,7 +245,7 @@ function App() {
 
   function cambio(msg) { setModal(null); if (msg) avisar(msg); recargar(); }
 
-  function furniDe(id) { return datos.furnis.find(function (f) { return f.id === id; }); }
+  function furniDe(id) { return (datos.furnis || []).find(function (f) { return f.id === id; }); }
   // Los bloques por keko publican, venden y retiran solo en su keko: `ambito` es { keko }
   // o { sin_keko: true } (core/kekos.js, ambitoDe). Sin ambito, todos los lotes.
   function delAmbito(c, ambito) { return !ambito || esDelKeko(c, ambito.sin_keko ? null : ambito.keko); }
@@ -225,7 +253,7 @@ function App() {
   // Lotes en mano de un furni (comprados y no "por revisar"), del mas antiguo al mas
   // nuevo: el mismo orden en que los toma publicar_furni.
   function enManoFifo(furniId, ambito) {
-    return datos.compras.filter(function (c) { return c.furni_id === furniId && c.estado === 'comprado' && !c.pendiente && delAmbito(c, ambito); })
+    return (datos.compras || []).filter(function (c) { return c.furni_id === furniId && c.estado === 'comprado' && !c.pendiente && delAmbito(c, ambito); })
       .sort(function (a, b) {
         if (a.fecha_compra !== b.fecha_compra) {
           if (!a.fecha_compra) return -1;
@@ -236,7 +264,7 @@ function App() {
       });
   }
   function publicadosDe(furniId, soloManual, ambito) {
-    return datos.compras.filter(function (c) { return c.furni_id === furniId && c.estado === 'publicado' && (!soloManual || c.publicado_por === 'manual') && delAmbito(c, ambito); });
+    return (datos.compras || []).filter(function (c) { return c.furni_id === furniId && c.estado === 'publicado' && (!soloManual || c.publicado_por === 'manual') && delAmbito(c, ambito); });
   }
   // Abre el Inventario en una pestana, filtrado por el nombre del furni.
   function verLotes(nombre, estado) { setFiltroFurni(nombre); setFiltroEstado(estado); setVista('inventario'); }
@@ -271,25 +299,29 @@ function App() {
   if (!lista) return h('div', null, h(AccesoView, { cuenta: cuenta, onCuenta: setCuenta }), aviso);
 
   var nav = NAV.find(function (n) { return n[0] === vista; });
-  var huerfanos = datos ? datos.pendientes.length : 0;
-  var tasa = datos ? datos.resumen.tasa : 50;
+  var huerfanos = datos.pendientes ? datos.pendientes.length : 0;
+  var tasa = datos.resumen ? datos.resumen.tasa : 50;
 
   function abrirErrores() { setVerErrores('registro'); }
   var contenido;
-  // Sin datos porque fallo la carga: el motivo y Reintentar, nunca un spinner eterno.
-  if (!datos && falloCarga) contenido = h('div', { className: 'contenedor fade-in' },
+  // Lo que esta seccion necesita y aun no llego: si fallo, el motivo y Reintentar (nunca un
+  // spinner eterno); si sigue en camino, el spinner (como mucho ESPERA_CARGA).
+  var faltanPartes = (NECESITA[vista] || []).filter(function (c) { return datos[c] === undefined; });
+  var partesRotas = faltanPartes.filter(function (c) { return fallos[c]; });
+  if (partesRotas.length) contenido = h('div', { className: 'contenedor fade-in' },
     h('div', { className: 'card panel-error' },
       h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700, fontSize: 15 } },
-        h(Ico, { name: 'alert', size: 18, color: 'var(--red)' }), 'No se pudieron cargar tus datos'),
-      h('p', { className: 'suave', style: { fontSize: 13, margin: '8px 0 10px', lineHeight: 1.55 } }, 'Tus datos siguen guardados en tu Supabase. Mira el detalle, cópialo para enviarlo y prueba de nuevo.'),
-      errores.length ? h('div', { className: 'aviso aviso-rojo', style: { fontSize: 13, wordBreak: 'break-word', marginBottom: 12 } }, errores[errores.length - 1].mensaje) : null,
+        h(Ico, { name: 'alert', size: 18, color: 'var(--red)' }), 'Esta sección no pudo cargar sus datos'),
+      h('p', { className: 'suave', style: { fontSize: 13, margin: '8px 0 10px', lineHeight: 1.55 } },
+        'No se pudo cargar: ' + partesRotas.map(function (c) { return PARTES[c].nombre; }).join(' ni ') + '. Tus datos siguen guardados en tu Supabase y el resto de la app funciona. Mira el detalle, cópialo para enviarlo y prueba de nuevo.'),
+      h('div', { className: 'aviso aviso-rojo', style: { fontSize: 13, wordBreak: 'break-word', marginBottom: 12 } }, fallos[partesRotas[0]].message),
       h('div', { style: { display: 'flex', gap: 8 } },
         h('button', { className: 'btn', onClick: function () { setVerErrores('carga'); } }, h(Ico, { name: 'copy', size: 14 }), 'Ver y copiar detalles'),
         h('button', { className: 'btn btn-verde', onClick: reintentarCarga }, h(Ico, { name: 'refresh', size: 14 }), 'Reintentar'))));
-  else if (!datos) contenido = h(Spinner);
+  else if (faltanPartes.length) contenido = h(Spinner);
   else if (vista === 'resumen') contenido = h(ResumenView, { resumen: datos.resumen, onNav: navegar, onVerFurni: verFurni, onCambio: cambio, onError: function (m) { avisar(m, 'error'); } });
   else if (vista === 'mercadillo') contenido = h(MercadilloView, {
-    furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos,
+    furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos, onVerErrores: abrirErrores,
     onVerLotes: function (f) { verLotes(f.nombre, 'publicado'); },
     // Desde el bloque de un keko: solo lo publicado en ese keko.
     onVender: function (f, ambito) { setModal({ tipo: 'vender-furni', furni: f, lotes: publicadosDe(f.id, false, ambito), ambito: ambito }); },
@@ -301,7 +333,7 @@ function App() {
     },
   });
   else if (vista === 'inventario') contenido = h(InventarioView, {
-    compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado, kekos: kekos,
+    compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado, kekos: kekos, onVerErrores: abrirErrores,
     // «+ Compra» de un bloque llega con su keko ya elegido.
     onNueva: function (keko) { setModal({ tipo: 'compra', keko: keko || null }); },
     // Lo publicado se vende en el mercadillo (con comision); lo que esta en mano, con la
@@ -343,7 +375,7 @@ function App() {
         h('img', { className: 'logo-app', src: '/img/icono.png', alt: '' }),
         h('div', null,
           h('div', { style: { fontWeight: 700, fontSize: 16 } }, 'Habbo Inventario'),
-          h('div', { className: 'mono', style: { fontSize: 12, color: 'var(--text3)' } }, datos ? datos.furnis.length + ' furnis' : '…'))),
+          h('div', { className: 'mono', style: { fontSize: 12, color: 'var(--text3)' } }, datos.furnis ? datos.furnis.length + ' furnis' : '…'))),
       h('div', { className: 'sidebar-nav' }, NAV.map(function (n) {
         return h('button', { key: n[0], className: 'nav-item' + (vista === n[0] ? ' active' : ''), onClick: function () { navegar(n[0]); } },
           h(Ico, { name: n[1], size: 18, color: vista === n[0] ? 'var(--green)' : 'var(--text3)' }),
@@ -375,9 +407,9 @@ function App() {
       onLimpiar: function () { limpiarErrores(); setVerErrores(null); },
       onClose: function () { setVerErrores(null); } }) : null,
     novedades ? h(NovedadesModal, { version: novedades.version, items: novedades.items, onClose: function () { setNovedades(null); } }) : null,
-    modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, keko: modal.keko, propios: datos.furnis, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, keko: modal.keko, propios: datos.furnis || [], kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
-    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis, compras: datos.compras, furni: modal.furni, lote: modal.lote, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis || [], compras: datos.compras || [], furni: modal.furni, lote: modal.lote, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender-furni' ? h(VenderFurniModal, { furni: modal.furni, lotes: modal.lotes, ambito: modal.ambito, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'retirar-furni' ? h(RetirarFurniModal, { furni: modal.furni, lotes: modal.lotes, unidadesSniper: modal.unidadesSniper, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,

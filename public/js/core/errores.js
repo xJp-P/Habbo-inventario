@@ -89,6 +89,27 @@ export function textoInforme(d) {
   return lineas.join('\n');
 }
 
+// Los errores de React en produccion llegan cifrados («Minified React error #31; visit
+// https://reactjs.org/docs/error-decoder.html?invariant=31&args[]=…»). Se traducen a algo
+// legible, con el codigo y sus datos para el diagnostico.
+var ERRORES_REACT = {
+  31: 'un dato con formato inesperado (un objeto donde se esperaba texto o un número)',
+  130: 'una pieza de la pantalla que no existe',
+  185: 'demasiadas actualizaciones seguidas (un bucle)',
+  301: 'demasiados redibujos seguidos (un bucle)',
+  310: 'un cambio de estructura entre dos dibujos',
+};
+export function mensajeLegible(msg) {
+  msg = String(msg || '');
+  var m = msg.match(/Minified React error #(\d+)/);
+  if (!m) return msg;
+  var datos = [];
+  var re = /args\[\]=([^&\s]+)/g;
+  var x;
+  while ((x = re.exec(msg))) { try { datos.push(decodeURIComponent(x[1])); } catch (_) { datos.push(x[1]); } }
+  return 'Error al dibujar: ' + (ERRORES_REACT[m[1]] || 'error interno de React') + (datos.length ? ' — ' + datos.join(', ') : '') + ' (React #' + m[1] + ')';
+}
+
 // «Windows · Electron 38» a partir del navegador (sin datos personales).
 export function describirEquipo(ua) {
   ua = String(ua || '');

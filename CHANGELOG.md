@@ -35,6 +35,17 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   copiar detalles» y «Reintentar»; el menú y las demás secciones siguen funcionando.
 - La Auditoría ya no se queda girando si su primera carga falla: muestra el motivo y
   «Reintentar».
+- **Cada sección carga lo suyo**. El resumen, los furnis, los lotes y lo «por revisar»
+  llegan por separado, y cada sección espera solo lo que usa: si falla una parte, solo las
+  secciones que la necesitan lo dicen («No se pudo cargar: tus lotes»), con el detalle y
+  «Reintentar»; las demás funcionan. Cada parte se muestra en cuanto llega.
+- **Ajustes siempre disponible**, aunque no llegue ningún dato: desde ahí se puede revisar
+  la conexión, la cuenta o la versión.
+- **Un lote o un keko con un dato raro ya no tapan el resto**. En el Inventario y el
+  Mercadillo, cada tarjeta de keko y cada fila tienen su propia barrera: si una falla, solo
+  ella dice «no se pudo mostrar» (con «Detalles» y «Reintentar») y lo demás se ve normal.
+- Los errores internos al dibujar se explican en lenguaje claro (por ejemplo «un dato con
+  formato inesperado»), con su código original en el detalle.
 
 ## [1.6.0] - 2026-09-29
 

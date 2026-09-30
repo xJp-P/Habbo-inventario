@@ -248,6 +248,9 @@ async function main() {
     assert.ok(informe.includes(trozo), 'el informe dice: ' + trozo);
   }
   assert.ok(informe.indexOf('/roto') < informe.indexOf('/colgado'), 'del error mas reciente al mas antiguo');
+  assert.equal(errMod.mensajeLegible('Minified React error #31; visit https://reactjs.org/docs/error-decoder.html?invariant=31&args[]=object%20with%20keys%20%7Braro%7D for the full message'),
+    'Error al dibujar: un dato con formato inesperado (un objeto donde se esperaba texto o un número) — object with keys {raro} (React #31)', 'los errores cifrados de React se leen');
+  assert.equal(errMod.mensajeLegible('Cannot read properties of undefined'), 'Cannot read properties of undefined');
   for (let i = 0; i < 40; i++) errMod.registrarError({ mensaje: 'x' + i });
   assert.equal(errMod.erroresRegistrados().length, 30, 'el registro guarda los 30 ultimos');
   errMod.limpiarErrores();
