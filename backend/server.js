@@ -11,6 +11,10 @@
 // SniperMercadillo de los VPS no pasan por aca: envian sus eventos (compra, publicar,
 // recuperar) directo a Supabase con su token, y Supabase Realtime avisa a este
 // servidor, que lo reenvia a la interfaz.
+//
+// Registro de errores (v1.6.1, core/registro.js): registro-errores.log en la carpeta de
+// datos, con una linea al arrancar, los errores 5xx de este servidor y los que envia la
+// interfaz.
 
 const express = require('express');
 const path = require('path');
@@ -24,6 +28,8 @@ const { protegerApiLocal } = require('./core/seguridad');
 const { crearDetectorAuditoria, avisoCatalogo } = require('./core/avisos');
 const crearRutasApi = require('./routes/api');
 const { ClientError, rastro } = require('./core/util');
+const { crearRegistroErrores } = require('./core/registro');
+const VERSION = require('../package.json').version;
 
 const RAIZ = path.join(__dirname, '..');
 
@@ -33,6 +39,8 @@ async function crearApp({
 } = {}) {
   const eventos = new EventEmitter();
   eventos.setMaxListeners(50);
+  const registro = crearRegistroErrores({ dirDatos, version: VERSION });
+  registro.inicio(demo ? 'modo demo' : '');
 
   let negocio = null;
   // Catalogo nuevo (se busca solo al abrir la app): tus furnis toman sus nombres, sprites
@@ -113,17 +121,26 @@ async function crearApp({
     eventos,
     demo,
     instalacion: crearServicioInstalacion(),
+    registro,
     importar: (ruta, opciones) => importarExcel(negocio, furnidata, ruta, opciones),
   }));
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 
   // eslint-disable-next-line no-unused-vars
-  app.use((err, _req, res, _next) => {
-    if (err instanceof ClientError) return res.status(err.code).json({ error: err.message, codigo: err.codigo || null });
+  app.use((err, req, res, _next) => {
+    if (err instanceof ClientError) {
+      // Los errores del usuario (400, 404, 409...) no van al registro; los 5xx y la base
+      // sin esquema, si.
+      if (err.code >= 500 || err.codigo === 'SIN_ESQUEMA') {
+        registro.anotar({ origen: 'servidor', metodo: req.method, ruta: req.originalUrl, status: err.code, codigo: err.codigo, mensaje: err.message });
+      }
+      return res.status(err.code).json({ error: err.message, codigo: err.codigo || null });
+    }
     if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON invalido.' });
     if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'Envio demasiado grande.' });
     log('Error inesperado: ' + (err && err.stack || err));
+    registro.anotar({ origen: 'servidor', metodo: req.method, ruta: req.originalUrl, status: 500, mensaje: err && err.message ? err.message : String(err), detalle: rastro(err, 6) });
     // `detalle`: donde fallo, para el informe de errores que la interfaz deja copiar.
     res.status(500).json({ error: err && err.message ? err.message : 'Error interno del servidor.', detalle: rastro(err) });
   });
@@ -135,7 +152,7 @@ async function crearApp({
     else if (clienteFijo && clienteFijo.cerrar) await clienteFijo.cerrar();
   }
 
-  return { app, conexion, negocio, furnidata, eventos, cerrar };
+  return { app, conexion, negocio, furnidata, eventos, registro, cerrar };
 }
 
 module.exports = { crearApp };

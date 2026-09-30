@@ -13,6 +13,12 @@
 // llave del sistema operativo (safeStorage de Electron: DPAPI en Windows, Llavero en Mac).
 //
 // La clave anon NO da acceso a los datos: las politicas RLS exigen sesion iniciada.
+//
+// TIEMPO MAXIMO (v1.6.1): cada peticion a Supabase espera como mucho ESPERA_SUPABASE_MS.
+// Antes, si Supabase no contestaba, el servidor local esperaba sin fin y la interfaz se
+// quedaba en un spinner. Se corta con un AbortError a proposito: postgrest-js no reintenta
+// las peticiones canceladas (si reintentara, serian 4 esperas seguidas). 25 s: termina
+// antes que la espera de la interfaz (30 s), asi el error que se ve dice la causa.
 
 const fs = require('fs');
 const path = require('path');
@@ -119,6 +125,28 @@ function almacenSesion(ruta, cifrado = null) {
   };
 }
 
+const ESPERA_SUPABASE_MS = 25000;
+
+// fetch con tiempo maximo. Si ya viene una senal (una cancelacion pedida), tambien la
+// respeta. El reloj no retiene el proceso (unref).
+function fetchConEspera(ms, fetchBase = globalThis.fetch) {
+  return function (recurso, init = {}) {
+    const ctrl = new AbortController();
+    const reloj = setTimeout(() => {
+      const e = new Error(`Supabase no respondió en ${Math.round(ms / 1000)} s.`);
+      e.name = 'AbortError';
+      e.codigo = 'SUPABASE_SIN_RESPUESTA';
+      ctrl.abort(e);
+    }, ms);
+    if (reloj.unref) reloj.unref();
+    if (init.signal) {
+      if (init.signal.aborted) ctrl.abort(init.signal.reason);
+      else init.signal.addEventListener('abort', () => ctrl.abort(init.signal.reason), { once: true });
+    }
+    return fetchBase(recurso, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(reloj));
+  };
+}
+
 // `sinSesion`: cliente solo con la clave publica (rol anon), que no lee ni guarda la
 // sesion del archivo.
 function crearClienteSupabase({ url, anonKey, dirDatos, cifrado = null, sinSesion = false }) {
@@ -131,8 +159,8 @@ function crearClienteSupabase({ url, anonKey, dirDatos, cifrado = null, sinSesio
       autoRefreshToken: true,
       detectSessionInUrl: false,
     },
-    global: { headers: { 'X-Client-Info': 'habbo-inventario' } },
+    global: { headers: { 'X-Client-Info': 'habbo-inventario' }, fetch: fetchConEspera(ESPERA_SUPABASE_MS) },
   });
 }
 
-module.exports = { leerConfiguracion, validarConfiguracion, guardarConfiguracion, crearClienteSupabase, parsearEnv, normalizarUrl, ARCHIVO_SESION };
+module.exports = { leerConfiguracion, validarConfiguracion, guardarConfiguracion, crearClienteSupabase, parsearEnv, normalizarUrl, ARCHIVO_SESION, fetchConEspera, ESPERA_SUPABASE_MS };

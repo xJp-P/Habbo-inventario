@@ -21,6 +21,13 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   portapapeles del sistema.
 - Los errores inesperados del servidor local traen **dónde** fallaron (archivo y línea), sin
   la carpeta de instalación, que lleva el nombre del usuario del equipo.
+- **Registro de errores en un archivo**: `registro-errores.log`, en la carpeta de datos de
+  la app. Anota una línea al arrancar (versión y sistema), los errores del servidor local
+  que no son del usuario (inesperados, sin conexión, Supabase sin respuesta, base sin
+  esquema) y los que ve la interfaz (secciones, bloques o filas que no se pudieron dibujar,
+  peticiones sin respuesta). Tacha tokens y claves, recorta las rutas y, al pasar de ~1 MB,
+  guarda el anterior como `registro-errores.anterior.log`. La ventana de errores lo indica
+  y, en la app de escritorio, tiene «Abrir la carpeta».
 
 ### Corregido
 
@@ -35,6 +42,11 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   copiar detalles» y «Reintentar»; el menú y las demás secciones siguen funcionando.
 - La Auditoría ya no se queda girando si su primera carga falla: muestra el motivo y
   «Reintentar».
+- **El servidor local ya no espera a Supabase sin fin**. Cada petición a Supabase espera
+  como mucho 25 s (menos que la ventana, que espera 30): pasado ese tiempo se corta y el
+  error lo dice claro («Supabase no respondió en 25 s. Revisa tu internet o si tu proyecto
+  está pausado o muy lento»), sin reintentos que multipliquen la espera. Un fallo de red
+  también se explica en claro («No se pudo conectar con Supabase»).
 - **Cada sección carga lo suyo**. El resumen, los furnis, los lotes y lo «por revisar»
   llegan por separado, y cada sección espera solo lo que usa: si falla una parte, solo las
   secciones que la necesitan lo dicen («No se pudo cargar: tus lotes»), con el detalle y

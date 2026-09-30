@@ -17,8 +17,21 @@ function id(req) {
   return n;
 }
 
-module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos, importar, demo, instalacion }) {
+module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos, importar, demo, instalacion, registro }) {
   const r = express.Router();
+
+  // Errores que la interfaz quiere dejar en registro-errores.log (secciones que no se
+  // dibujaron, peticiones sin respuesta...). No exige sesion: tambien sirve en el acceso.
+  r.post('/api/registro-errores', (req, res) => {
+    const lista = Array.isArray(req.body && req.body.errores) ? req.body.errores.slice(0, 20) : [];
+    for (const e of lista) {
+      if (!e || typeof e !== 'object') continue;
+      registro.anotar({ origen: 'interfaz' + (e.origen ? ' · ' + String(e.origen).slice(0, 20) : ''), metodo: e.metodo && String(e.metodo).slice(0, 10),
+        ruta: e.ruta && String(e.ruta).slice(0, 300), status: Number(e.status) || null, codigo: e.codigo && String(e.codigo).slice(0, 40),
+        mensaje: e.mensaje, detalle: e.detalle });
+    }
+    res.json({ ok: true, anotados: lista.length });
+  });
 
   // ── Cuenta y conexion con Supabase ───────────────────────────────────────
   r.get('/api/cuenta', (_req, res) => res.json(conexion.estado()));

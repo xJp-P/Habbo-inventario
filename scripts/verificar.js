@@ -27,7 +27,9 @@ const { crearServicioFurnidata } = require('../backend/services/furnidata');
 const ExcelJS = require('exceljs');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
 const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/instalacion');
-const { validarConfiguracion, leerConfiguracion } = require('../backend/db/supabase');
+const { validarConfiguracion, leerConfiguracion, fetchConEspera } = require('../backend/db/supabase');
+const { crearRegistroErrores } = require('../backend/core/registro');
+const { datos: datosSupabase } = require('../backend/db/respuestas');
 const { normalizar, rastro } = require('../backend/core/util');
 const { DIR_DATOS_DEV } = require('./comun');
 
@@ -336,7 +338,7 @@ async function main() {
   assert.equal(comision.precioMinimoSinPerder(192081), null);
   ok('la base (comision_mercadillo) cobra lo mismo que la interfaz de 0 a 200.000 cr; precio minimo identico y exacto');
 
-  const { app, negocio, furnidata, cerrar } = await crearApp({ dirDatos: dir, clienteFijo: clienteA, log: () => {} });
+  const { app, negocio, furnidata, registro: registroApp, cerrar } = await crearApp({ dirDatos: dir, clienteFijo: clienteA, log: () => {} });
   assert.ok(furnidata.estado().disponible, 'El catalogo de Habbo.es deberia estar disponible');
   ok(`catalogo Habbo.es cargado (${furnidata.estado().total} furnis)`);
 
@@ -1429,6 +1431,53 @@ async function main() {
     h = await pedir(puerto, 'GET', '/api/pendientes');
     assert.equal(h.json.length, (await negocio.pendientesPorFurni()).length);
     ok('API local: cuenta, buscador, validacion y pendientes');
+
+    // ── Fase 3 de la 1.6.1: tiempo maximo con Supabase y registro-errores.log ──
+    // Una «Supabase» que nunca contesta: error claro (504) en el tiempo maximo, UNA sola
+    // peticion (postgrest-js no reintenta lo cancelado).
+    let pedidasLento = 0;
+    const supaLenta = http.createServer(() => { pedidasLento++; });
+    await new Promise((r) => supaLenta.listen(0, '127.0.0.1', r));
+    const clienteLento = require('@supabase/supabase-js').createClient('http://127.0.0.1:' + supaLenta.address().port, 'clave-de-prueba',
+      { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: fetchConEspera(250) } });
+    const t0 = Date.now();
+    await assert.rejects(datosSupabase(clienteLento.from('v_compras').select('*')), (e) => {
+      assert.deepEqual([e.code, e.codigo], [504, 'SUPABASE_SIN_RESPUESTA']);
+      assert.match(e.message, /^Supabase no respondió en .* Revisa tu internet/);
+      return true;
+    });
+    assert.ok(Date.now() - t0 < 5000 && pedidasLento === 1, 'corta en el tiempo maximo y sin reintentos');
+    supaLenta.closeAllConnections();
+    supaLenta.close();
+    // El archivo: una linea al arrancar, los 500 del servidor (con donde) y lo que envia la
+    // interfaz; los errores del usuario (4xx) no; tokens tachados.
+    const listarOriginal = negocio.listarCompras;
+    negocio.listarCompras = () => Promise.resolve().then(() => { const f = undefined; return f.id; });
+    h = await pedir(puerto, 'GET', '/api/compras');
+    negocio.listarCompras = listarOriginal;
+    assert.equal(h.status, 500);
+    assert.match(h.json.detalle || '', /^at /, 'el 500 dice donde fallo');
+    h = await pedir(puerto, 'POST', '/api/registro-errores', { cuerpo: { errores: [{ origen: 'seccion', ruta: 'Inventario › lote Nº 7',
+      mensaje: 'Error al dibujar: dato raro', detalle: 'token hbi_ABCDEFGHIJ123 en la pila' }] } });
+    assert.deepEqual([h.status, h.json.anotados], [200, 1]);
+    h = await pedir(puerto, 'POST', '/api/furnis', { cuerpo: { nombre: 'Furni Inventado XYZ' } });
+    assert.equal(h.status, 422);
+    await registroApp.pendiente();
+    const textoReg = fs.readFileSync(path.join(dir, 'registro-errores.log'), 'utf8');
+    assert.match(textoReg, /=== \d{4}-\d\d-\d\d \d\d:\d\d:\d\d · Habbo Inventario \d+\.\d+\.\d+ · /, 'una linea al arrancar, con la version');
+    assert.match(textoReg, /servidor · GET \/api\/compras · 500\n    Cannot read properties of undefined \(reading 'id'\)\n    at /);
+    assert.match(textoReg, /interfaz · seccion · Inventario › lote Nº 7\n    Error al dibujar: dato raro\n    token hbi_… en la pila/);
+    assert.ok(!/ABCDEFGHIJ123|422/.test(textoReg), 'sin tokens y sin los errores del usuario');
+    // Tope: al pasarlo, el archivo pasa a .anterior.log y empieza otro.
+    const dirReg = fs.mkdtempSync(path.join(os.tmpdir(), 'hbi-registro-'));
+    const regChico = crearRegistroErrores({ dirDatos: dirReg, version: '9.9.9', tope: 60 });
+    await regChico.anotar({ mensaje: 'primero con un texto largo para pasar el tope de prueba' });
+    await regChico.anotar({ mensaje: 'segundo' });
+    assert.deepEqual(fs.readdirSync(dirReg).sort(), ['registro-errores.anterior.log', 'registro-errores.log']);
+    assert.match(fs.readFileSync(path.join(dirReg, 'registro-errores.log'), 'utf8'), /segundo/);
+    await crearRegistroErrores({ dirDatos: null, version: 'x' }).anotar({ mensaje: 'sin carpeta: no escribe ni falla' });
+    fs.rmSync(dirReg, { recursive: true, force: true });
+    ok('fase 3: Supabase sin respuesta se corta en el tiempo maximo (504 claro, sin reintentos); registro-errores.log anota el arranque, los 500 con donde y lo de la interfaz, sin tokens ni errores del usuario, con tope');
     h = await pedir(puerto, 'POST', `/api/compras/${lote.id}/revertir`, { crudo: 'x=1', tipo: 'application/x-www-form-urlencoded' });
     assert.equal(h.status, 415);
     h = await pedir(puerto, 'GET', '/api/resumen', { origin: 'https://sitio-malicioso.com' });

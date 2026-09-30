@@ -31,6 +31,14 @@ function traducirError(e) {
       code === 'PGRST205' || /schema cache/i.test(msg)) {
     return conCodigo(new ClientError('Falta instalar el esquema en Supabase: pega supabase/migrations/*.sql en el SQL Editor.', 424), 'SIN_ESQUEMA');
   }
+  // El servidor local dejo de esperar a Supabase (fetchConEspera en db/supabase.js) o no
+  // pudo ni conectar: errores claros, no el «AbortError» / «fetch failed» de la libreria.
+  if (/^AbortError: Supabase no respondió/.test(msg)) {
+    return conCodigo(new ClientError(msg.replace(/^AbortError: /, '') + ' Revisa tu internet o si tu proyecto de Supabase está pausado o muy lento.', 504), 'SUPABASE_SIN_RESPUESTA');
+  }
+  if (/^(TypeError|FetchError): fetch failed/i.test(msg)) {
+    return new ClientError('No se pudo conectar con Supabase. Revisa tu internet. (' + msg + ')', 503);
+  }
   if (code === '42501') {
     return new ClientError('Sin permiso para esa operacion. Revisa que el esquema este instalado y que hayas iniciado sesion.', 403);
   }

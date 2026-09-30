@@ -56,6 +56,11 @@ export function ErroresModal(props) {
     h('textarea', { className: 'inp mono informe-errores', readOnly: true, value: texto, ref: setArea, spellCheck: false,
       rows: Math.min(14, texto.split('\n').length + 1), onFocus: function (e) { e.target.select(); } }),
     copiado === 'manual' ? h('div', { className: 'suave', style: { fontSize: 12, marginTop: 6 } }, 'El texto quedó seleccionado: cópialo con Ctrl+C.') : null,
+    // El archivo de registro (v1.6.1): queda aunque cierres la app.
+    h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+      h('span', { style: { flex: 1, minWidth: 220 } }, 'También quedan guardados en el archivo «registro-errores.log», en la carpeta de datos de la app.'),
+      window.electronAPI && window.electronAPI.abrirCarpetaDatos
+        ? h('button', { className: 'btn btn-chico', onClick: function () { window.electronAPI.abrirCarpetaDatos(); } }, h(Ico, { name: 'folder', size: 12 }), 'Abrir la carpeta') : null),
     h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12, flexWrap: 'wrap' } },
       !carga && errores.length && props.onLimpiar ? h('button', { className: 'btn', style: { marginRight: 'auto' }, onClick: props.onLimpiar, title: 'Vacía la lista de errores de esta sesión' }, h(Ico, { name: 'trash', size: 14 }), 'Vaciar lista') : null,
       h('button', { className: 'btn', onClick: alCopiar }, h(Ico, { name: copiado === 'ok' ? 'check' : 'copy', size: 14 }), copiado === 'ok' ? '¡Copiado!' : 'Copiar detalles'),

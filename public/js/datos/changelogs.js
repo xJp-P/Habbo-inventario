@@ -19,6 +19,8 @@ export const CHANGELOGS = {
     'Si una sección no se puede mostrar, solo esa sección lo avisa: el menú y el resto de la app siguen funcionando.',
     'Cada sección carga lo suyo: si falla una parte de tus datos, solo las secciones que la usan lo avisan y las demás siguen funcionando. Ajustes se abre siempre.',
     'Si un lote o un keko trae un dato raro, solo esa fila o esa tarjeta lo avisa; el resto de tu Inventario y tu Mercadillo se ve normal.',
+    'Si tus datos tardan demasiado en llegar, la app te lo dice a los pocos segundos en vez de esperar sin fin.',
+    'Los errores también quedan anotados en un archivo dentro de la carpeta de la app, para poder revisarlos aunque nadie haya alcanzado a sacar una foto.',
   ],
   '1.6.0': [
     'Tu Inventario y tu Mercadillo ahora se ordenan por keko: cada keko tiene su propia tarjeta con su cara de Habbo, cuántos lotes y unidades tiene y lo que costaron. Ya no hace falta abrir un lote para saber dónde está.',

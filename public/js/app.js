@@ -137,7 +137,18 @@ function App() {
   // El registro de errores de la sesion, al dia; y los errores de JavaScript sueltos (fuera
   // de React, p. ej. en una promesa) tambien quedan ahi.
   useEffect(function () {
-    var quitar = alCambiarErrores(function (l) { setErrores(l); });
+    // Al archivo registro-errores.log (carpeta de datos) van los de la interfaz y las
+    // peticiones que no llegaron a tener respuesta; los 5xx ya los anota el servidor.
+    var anotados = 0;
+    var quitar = alCambiarErrores(function (l) {
+      setErrores(l);
+      var nuevos = l.filter(function (e) { return e.id > anotados && (e.origen !== 'api' || !e.status); });
+      if (l.length) anotados = Math.max(anotados, l[l.length - 1].id);
+      if (nuevos.length) {
+        fetch('/api/registro-errores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ errores: nuevos }) })
+          .catch(function () { /* sin servidor: queda en pantalla igual */ });
+      }
+    });
     function suelto(e) { registrarError({ origen: 'interfaz', mensaje: e.message || 'Error de JavaScript', detalle: e.error && e.error.stack ? String(e.error.stack).split('\n').slice(0, 4).join('\n') : null }); }
     function promesa(e) { var r = e.reason; registrarError({ origen: 'interfaz', mensaje: r && r.message ? r.message : String(r), detalle: r && r.stack ? String(r.stack).split('\n').slice(0, 4).join('\n') : null }); }
     window.addEventListener('error', suelto);
