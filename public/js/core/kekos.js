@@ -83,6 +83,11 @@ export function ambitoDe(keko) {
   return keko && keko.clave ? { keko: keko.nombre } : { sin_keko: true };
 }
 
+// Para los textos de los modales: « en xJp», « sin keko» o nada (todos los kekos).
+export function textoAmbito(ambito) {
+  return !ambito ? '' : ambito.sin_keko ? ' sin keko' : ' en ' + ambito.keko;
+}
+
 // ¿Este lote es del keko `nombre`? (null = sin keko).
 export function esDelKeko(lote, nombre) {
   return claveKeko(lote.keko) === claveKeko(nombre);

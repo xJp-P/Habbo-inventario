@@ -8,7 +8,8 @@
 // menos, el ultimo lote que entra se divide. Lo "por revisar" (recien comprado por el
 // Sniper) no se toca: lo publica el Sniper. El precio de lista es en creditos y se pone
 // aqui (lo en mano no tiene precio); si el furni ya tiene algo publicado, se propone ese
-// mismo precio de lista. Con "Ingresar precio neto" escribes lo que quieres que te entre
+// mismo precio de lista. Desde el bloque de un keko (props.ambito) solo toma las unidades
+// en mano de ese keko. Con "Ingresar precio neto" escribes lo que quieres que te entre
 // y se calcula el precio de lista (el menor que deja ese neto tras la comision). Siempre
 // se ven los dos: lo que paga el comprador y lo que entra a tu monedero, y la ganancia.
 // Lo publicado a mano se retira desde su fila.
@@ -21,12 +22,14 @@ import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 import { calcularComision, calcularGananciaNeta, calcularPrecioLista } from '../core/comision.js';
 import { repartirFifo } from '../core/lotes.js';
+import { textoAmbito } from '../core/kekos.js';
 
 function texto(n) { return String(n).replace('.', ','); }
 
 export function PublicarModal(props) {
   var furni = props.furni || {};
   var lotes = props.lotes || [];
+  var donde = textoAmbito(props.ambito);
   var total = lotes.reduce(function (s, l) { return s + l.cantidad; }, 0);
   var costoTotal = lotes.reduce(function (s, l) { return s + l.precio_compra_cr * l.cantidad; }, 0);
   var sQ = useState(String(total)); var cant = sQ[0]; var setCant = sQ[1];
@@ -66,15 +69,15 @@ export function PublicarModal(props) {
       return;
     }
     _submitGuard(enviando, setEnviando, function () {
-      return API.post('/api/furnis/' + furni.id + '/publicar', { cantidad: q, precio_lista: p })
+      return API.post('/api/furnis/' + furni.id + '/publicar', Object.assign({ cantidad: q, precio_lista: p }, props.ambito))
         .then(function (r) {
-          if (r) props.onGuardado(r, r.cantidad + ' und de ' + furni.nombre + ' publicadas a ' + fmtCr(p) + ' cr' + (r.en_mano ? ' · quedan ' + r.en_mano + ' en Comprado' : ' · el furni salió de Comprado'));
+          if (r) props.onGuardado(r, r.cantidad + ' und de ' + furni.nombre + ' publicadas a ' + fmtCr(p) + ' cr' + (r.en_mano ? ' · quedan ' + r.en_mano + ' en Comprado' + donde : ' · el furni salió de Comprado' + donde));
         });
     });
   }
 
   return h(Modal, { titulo: 'Publicar en el mercadillo', onClose: props.onClose },
-    h(NombreFurni, { furni: furni, sub: total + ' und en mano en ' + lotes.length + (lotes.length === 1 ? ' lote' : ' lotes') + ' · costo promedio ' + fmtLg(total ? costoTotal / total : 0) + ' cr' }),
+    h(NombreFurni, { furni: furni, sub: total + ' und en mano' + donde + ' en ' + lotes.length + (lotes.length === 1 ? ' lote' : ' lotes') + ' · costo promedio ' + fmtLg(total ? costoTotal / total : 0) + ' cr' }),
     h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
       h(Ico, { name: 'store', size: 14 }), 'Úsalo para lo que ya pusiste tú en el mercadillo de Habbo. Lo que publica el Sniper llega solo.'),
     h(Fld, { label: '¿Cuántas publicaste?' },
@@ -100,8 +103,8 @@ export function PublicarModal(props) {
     qValida ? h('div', { className: 'aviso' },
       q === total
         ? h('div', null, 'Las ', h('b', { className: 'mono' }, total), ' und pasan a ',
-            h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Publicado'), ' y el furni sale de Comprado.')
-        : h('div', null, 'Se publican ', h('b', { className: 'mono' }, q), ' und de los lotes más antiguos y quedan ', h('b', { className: 'mono' }, total - q), ' en Comprado',
+            h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Publicado'), ' y el furni sale de Comprado' + donde + '.')
+        : h('div', null, 'Se publican ', h('b', { className: 'mono' }, q), ' und de los lotes más antiguos y quedan ', h('b', { className: 'mono' }, total - q), ' en Comprado' + donde,
             divide ? ' (el lote Nº ' + tomas[tomas.length - 1].lote.id + ' se divide).' : '.'),
       pValido ? h('div', { style: { marginTop: 6 } }, 'Si se venden las ', q, ', entran ',
         h('b', { className: 'mono' }, fmtCr(netoU * q) + ' cr'), ' · ganancia ',

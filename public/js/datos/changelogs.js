@@ -13,6 +13,14 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.6.0': [
+    'Tu Inventario y tu Mercadillo ahora se ordenan por keko: cada keko tiene su propia tarjeta con su cara de Habbo, cuántos lotes y unidades tiene y lo que costaron. Ya no hace falta abrir un lote para saber dónde está.',
+    'Primero van tus kekos manuales, del más antiguo al más nuevo; después los de tus Snipers, y al final lo que aún no tiene keko. Todas las tarjetas se ven abiertas: bajas y lo ves todo.',
+    'Al bajar, el nombre del keko y los títulos de las columnas se quedan arriba, así nunca pierdes de vista en qué keko estás. Con «Ir a» saltas directo a cualquier keko.',
+    'Cada tarjeta tiene su botón «+ Compra», que abre la compra con ese keko ya elegido.',
+    '«Publicar», «Vendido» y «Retirar» ahora solo mueven las unidades del keko donde los pulsas. Antes podían tomar unidades de otro keko.',
+    'Arreglado: al publicar, vender o separar un LTD de solo una parte de un lote, esa parte ya no pierde su keko. Lo publicado y lo vendido que lo había perdido lo recupera solo.',
+  ],
   '1.5.2': [
     'Auditoría más honesta: ya no te sugiere que unos furnis «volvieron» de otro keko sin pruebas. Solo lo propone cuando la foto de ese otro keko confirma que allí faltan; para todo lo demás, incluidos tus kekos manuales, eliges tú de dónde vinieron.',
   ],

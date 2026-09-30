@@ -6,7 +6,8 @@
 // mercadillo tiene su precio); dentro de ese precio las unidades salen de los lotes
 // publicados hace mas tiempo (FIFO, funcion vender_furni). El precio que se escribe es
 // el del mercadillo (lo que pago el comprador) y se guarda lo que entro al monedero:
-// precio menos comision. En lingos no hay comision (intercambio directo).
+// precio menos comision. En lingos no hay comision (intercambio directo). Desde el bloque
+// de un keko (props.ambito) solo se vende lo publicado en ese keko.
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -16,6 +17,7 @@ import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 import { calcularComision } from '../core/comision.js';
 import { gruposPorPrecioLista, repartirFifo, etiquetaLote } from '../core/lotes.js';
+import { textoAmbito } from '../core/kekos.js';
 
 function texto(n) { return String(n).replace('.', ','); }
 function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' lg' : ' cr'); }
@@ -56,7 +58,7 @@ export function VenderFurniModal(props) {
     if (!qValida) { setError('La cantidad debe estar entre 1 y ' + g.unidades + '.'); return; }
     if (!pValido) { setError('Escribe el precio al que se vendió en el mercadillo.'); return; }
     _submitGuard(enviando, setEnviando, function () {
-      return API.post('/api/furnis/' + furni.id + '/vender', { cantidad: q, precio_lista: g.precio_lista, precio_venta: p, fecha_venta: fecha })
+      return API.post('/api/furnis/' + furni.id + '/vender', Object.assign({ cantidad: q, precio_lista: g.precio_lista, precio_venta: p, fecha_venta: fecha }, props.ambito))
         .then(function (r) {
           if (r) props.onGuardado(r, q + ' und de ' + furni.nombre + ' vendidas · entraron ' + (lingos ? fmtLg(netoU * q) + ' lingos' : fmtCr(netoU * q) + ' cr'));
         });
@@ -65,7 +67,7 @@ export function VenderFurniModal(props) {
 
   return h(Modal, { titulo: 'Registrar venta', onClose: props.onClose },
     h(NombreFurni, { furni: furni, sub: g.unidades === (props.lotes || []).reduce(function (s, l) { return s + l.cantidad; }, 0)
-      ? g.unidades + ' und publicadas a ' + fmtLista(g) : 'Publicado a varios precios' }),
+      ? g.unidades + ' und publicadas' + textoAmbito(props.ambito) + ' a ' + fmtLista(g) : 'Publicado' + textoAmbito(props.ambito) + ' a varios precios' }),
     h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
       h(Ico, { name: 'lock', size: 14 }), 'Regístralo cuando se haya vendido en el mercadillo. Se guarda lo que entró a tu monedero.'),
     grupos.length > 1 ? h(Fld, { label: '¿A qué precio de lista estaba?' },

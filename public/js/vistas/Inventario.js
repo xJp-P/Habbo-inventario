@@ -17,7 +17,13 @@
 // Arriba, destacadas en ambar, las compras que llegaron de los SniperMercadillo "por
 // revisar", agrupadas por furni (con mas de un furni, en un acordeon: cerrado muestra el
 // resumen y se despliega con una transicion suave; se recuerda si lo dejaste abierto).
-// "Confirmar" las pasa a en mano. Debajo, la tabla de lotes con detalle al clic.
+// "Confirmar" las pasa a en mano.
+//
+// Debajo, los lotes en un bloque por keko (v1.6.0, componentes/BloquesKeko.js): primero
+// los kekos manuales, luego los de los Snipers (cada grupo del mas antiguo al mas nuevo) y
+// al final lo que no tiene keko. Ningun bloque se pliega ni se recorta. Cada bloque dice
+// cuanto hay en ese keko en la pestana, y «Publicar» de una fila solo toma unidades de su
+// keko (migracion 20261014000000). Clic en un lote: su detalle.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -25,6 +31,8 @@ import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
 import { NombreFurni, IconoFurni, EtiquetaPublicado, EtiquetaLtd, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
+import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado } from '../componentes/BloquesKeko.js';
+import { agruparPorKeko } from '../core/kekos.js';
 import { ingresoNeto } from '../core/comision.js';
 
 // Un furni que llego del Sniper sin revisar: cuantas, a cuanto, cuando y desde que VPS.
@@ -103,6 +111,27 @@ function PrecioVenta(props) {
 }
 var ORIGEN = { excel: 'Excel', manual: 'Manual', sniper: 'Sniper' };
 
+// Anchos de las columnas de cada pestana (null = Furni). Con sitio para todos, fijos: los
+// bloques quedan alineados entre si.
+var ANCHOS = {
+  comprado: [62, null, 56, 96, 100, 124, 176],
+  publicado: [62, null, 56, 96, 100, 96, 100, 68, 116, 188],
+  vendido: [62, null, 56, 96, 100, 96, 100, 68, 100, 64],
+};
+var VACIOS = { comprado: 'Sin nada en mano: ', publicado: 'Sin nada publicado: ', vendido: 'Sin ventas: ' };
+
+function sumar(lotes, campo) { return lotes.reduce(function (s, l) { return s + (l[campo] || 0); }, 0); }
+
+// Lo que dice la cabecera de un bloque en cada pestana.
+function datosBloque(lotes, filtro) {
+  var und = sumar(lotes, 'cantidad');
+  var n = lotes.length;
+  var datos = [[fmtCr(n), filtro === 'vendido' ? (n === 1 ? 'venta' : 'ventas') : (n === 1 ? 'lote' : 'lotes')], [fmtCr(und), 'und']];
+  if (filtro === 'comprado') return datos.concat([[fmtCr(sumar(lotes, 'costo_total_cr')) + ' cr', 'costo']]);
+  var g = sumar(lotes, 'ganancia_cr');
+  return datos.concat([[(g > 0 ? '+' : '') + fmtCr(g) + ' cr', filtro === 'publicado' ? 'ganancia esperada' : 'ganancia', g > 0 ? 'pos' : g < 0 ? 'neg' : '']]);
+}
+
 export function InventarioView(props) {
   var compras = props.compras;
   var pendientes = props.pendientes;
@@ -111,6 +140,8 @@ export function InventarioView(props) {
   var sA = useState(null); var abierto = sA[0]; var setAbierto = sA[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
   var sConf = useState(null); var confirmacion = sConf[0]; var setConfirmacion = sConf[1];
+  var usaKekos = !!(props.kekos && props.kekos.disponible);
+  var alineado = useAlineado(anchoMinimo(ANCHOS[filtro]));
   useEffect(function () { if (props.filtroFurni) { setQ(props.filtroFurni); setFiltro(props.filtroEstado || 'comprado'); } }, [props.filtroFurni, props.filtroEstado]);
 
   var cuenta = useMemo(function () {
@@ -124,6 +155,7 @@ export function InventarioView(props) {
   var visibles = compras.filter(function (l) {
     return l.estado === filtro && (!q || normalizar(l.nombre).indexOf(normalizar(q)) !== -1);
   }).sort(function (a, b) { return (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0) || b.id - a.id; });
+  var agrupado = agruparPorKeko(visibles, usaKekos ? props.kekos.kekos : [], function (l) { return l.keko; });
 
   // Ejecuta la accion confirmada y cierra el dialogo al terminar.
   function ejecutar(accion) {
@@ -168,77 +200,87 @@ export function InventarioView(props) {
           x[0] === 'publicado' ? h(Ico, { name: 'lock', size: 12, sw: 2.2 }) : null, x[1], h('span', { className: 'mono' }, cuenta[x[0]]));
       }),
       h('button', { className: 'btn', onClick: props.onVentaManual, title: 'Registrar una venta hecha fuera del Sniper: un tradeo o una venta desde otro keko' }, h(Ico, { name: 'tag', size: 14 }), 'Venta'),
-      h('button', { className: 'btn btn-verde', onClick: props.onNueva }, h(Ico, { name: 'plus', size: 14, sw: 2.4 }), 'Compra')),
+      h('button', { className: 'btn btn-verde', onClick: function () { props.onNueva(); } }, h(Ico, { name: 'plus', size: 14, sw: 2.4 }), 'Compra')),
 
-    h('div', { className: 'tabla-caja' },
-      visibles.length === 0
-        ? h('div', { className: 'vacio' }, !compras.length ? 'Aún no hay compras. Registra una o importa tu Excel desde Ajustes.'
-            : q ? 'Ningún lote coincide en esta pestaña.'
-            : filtro === 'publicado' ? 'No hay nada publicado en el mercadillo.' : filtro === 'vendido' ? 'Aún no hay ventas.' : 'No tienes nada en mano.')
-        : h('table', { className: 'tabla' },
-            h('thead', null, h('tr', null,
-              h('th', null, 'Nº'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Cant.'), h('th', { className: 'r' }, 'Compra c/u'),
-              h('th', { className: 'r' }, 'Costo'),
-              conPrecio ? h('th', { className: 'r', title: filtro === 'publicado' ? 'Precio de lista' : 'Lo que entró (neto si fue en el mercadillo)' }, 'Venta c/u') : null,
-              conPrecio ? h('th', { className: 'r' }, 'Ganancia') : null, conPrecio ? h('th', { className: 'r' }, 'Margen') : null,
-              h('th', null, 'Estado'), h('th', null))),
-            h('tbody', null, visibles.map(function (l) {
-              var abiertoEste = abierto === l.id;
-              var publicado = l.estado === 'publicado';
-              var manual = publicado && l.publicado_por === 'manual';
-              var clase = 'fila' + (abiertoEste ? ' abierta' : '') + (l.pendiente ? ' huerfana' : '') + (l.estado === 'vendido' ? ' vendida' : '') + (publicado ? ' publicada' : '');
-              var g = l.ganancia_cr;
-              var filas = [h('tr', { key: l.id, className: clase, onClick: function () { setAbierto(abiertoEste ? null : l.id); } },
-                h('td', { className: 'mono', style: { color: l.pendiente ? 'var(--yellow)' : 'var(--text3)' } }, l.id),
-                h('td', null, h(NombreFurni, { furni: l })),
-                h('td', { className: 'r mono' }, l.cantidad),
-                h('td', { className: 'r mono' }, l.moneda_compra === 'lingos' ? fmtLg(l.precio_compra) + ' lg' : fmtLg(l.precio_compra)),
-                h('td', { className: 'r mono' }, fmtCr(l.costo_total_cr)),
-                conPrecio ? h('td', { className: 'r mono' }, h(PrecioVenta, { lote: l })) : null,
-                conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)) : null,
-                conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)) : null,
-                h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
-                  : publicado ? h(EtiquetaPublicado, { manual: manual, texto: 'Publicado · ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') })
-                  : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
-                h('td', { className: 'r' }, publicado
-                  ? h('span', { style: { display: 'inline-flex', gap: 6 } },
-                      h('button', { className: 'btn btn-chico', title: 'Registrar la venta de lo publicado', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
-                      manual ? h('button', { className: 'btn btn-chico', title: 'Lo quitaste del mercadillo: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)
-                  : l.estado === 'comprado'
-                  ? h('span', { style: { display: 'inline-flex', gap: 6 } },
-                      l.pendiente ? null : h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pasa a Publicado (todas sus unidades en mano)', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
-                      h('button', { className: 'btn btn-chico', title: 'Lo vendiste fuera del Sniper: tradeo o venta desde otro keko', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
-                  : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
-              if (abiertoEste) {
-                filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: conPrecio ? 10 : 7, className: 'detalle' },
-                  h('div', { className: 'detalle-grid' },
-                    h('div', null, h('div', { className: 'dato-l' }, 'Origen'), h('div', { className: 'dato-v' }, (ORIGEN[l.fuente] || l.fuente) + (l.instancia ? ' · ' + l.instancia : ''))),
-                    l.estado !== 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Keko'),
-                      h('div', { className: 'dato-v' }, l.keko || h('span', { className: 'tenue' }, 'Sin keko (asígnalo en Ajustes → Kekos)'))) : null,
-                    h('div', null, h('div', { className: 'dato-l' }, 'Número LTD'),
-                      h('div', { className: 'dato-v', style: { display: 'flex', alignItems: 'center', gap: 8 } },
-                        l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : h('span', { className: 'tenue' }, '—'),
-                        h('button', { className: 'btn btn-chico', onClick: function (e) { e.stopPropagation(); props.onLtd(l); } }, l.numero_ltd ? 'Cambiar' : 'Agregar'))),
-                    h('div', null, h('div', { className: 'dato-l' }, 'Fecha de compra'), h('div', { className: 'dato-v' }, fmtD(l.fecha_compra))),
-                    h('div', null, h('div', { className: 'dato-l' }, 'Precio de compra en créditos'), h('div', { className: 'dato-v' }, fmtLg(l.precio_compra_cr) + ' cr')),
-                    conPrecio ? h('div', null, h('div', { className: 'dato-l' }, l.estado === 'vendido' ? (l.comision_venta !== null && l.comision_venta !== undefined ? 'Entró a tu monedero (neto, congelado)' : 'Vendido a (congelado)') : 'Precio de lista'), h('div', { className: 'dato-v' }, fmtLg(l.precio_venta_cr) + ' cr')) : null,
-                    l.estado === 'vendido' && l.comision_pagada_cr !== null && l.comision_pagada_cr !== undefined ? h('div', null, h('div', { className: 'dato-l' }, 'Comisión del mercadillo pagada'),
-                      h('div', { className: 'dato-v' }, fmtCr(l.comision_pagada_cr * l.cantidad) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · el comprador pagó ' + fmtLg(l.precio_venta_cr + l.comision_pagada_cr) + ' c/u'))) : null,
-                    l.precio_lista !== null && l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Estaba publicado a'), h('div', { className: 'dato-v' }, fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr'))) : null,
-                    publicado && l.publicado_en ? h('div', null, h('div', { className: 'dato-l' }, 'Publicado'), h('div', { className: 'dato-v' }, fmtHace(l.publicado_en) + (manual ? ' · por ti' : ' · por el Sniper'))) : null,
-                    l.estado !== 'vendido' && l.comision_cr ? h('div', null, h('div', { className: 'dato-l' }, 'Recibes por unidad (tras comisión)'),
-                      h('div', { className: 'dato-v' }, fmtLg(ingresoNeto(l.precio_venta_cr, l.moneda_precio)) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · comisión ' + fmtCr(l.comision_cr)))) : null,
-                    l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Fecha de venta'), h('div', { className: 'dato-v' }, fmtD(l.fecha_venta))) : null,
-                    l.origen_id ? h('div', null, h('div', { className: 'dato-l' }, 'Dividido del lote'), h('div', { className: 'dato-v' }, 'Nº ' + l.origen_id)) : null),
-                  l.notas ? h('div', { className: 'suave', style: { fontSize: 12, marginBottom: 10 } }, l.notas) : null,
-                  publicado
-                    ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
-                        h(Ico, { name: 'lock', size: 15 }), h('span', { style: { flex: 1 } }, manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO))
-                    : h('div', { style: { display: 'flex', gap: 8 } },
-                        h('button', { className: 'btn btn-peligro', onClick: function (e) { e.stopPropagation(); eliminar(l); }, disabled: enviando }, h(Ico, { name: 'trash', size: 14 }), 'Eliminar lote')))));
-              }
-              return filas;
-            })))),
+    visibles.length === 0
+      ? h('div', { className: 'tabla-caja' }, h('div', { className: 'vacio' }, !compras.length ? 'Aún no hay compras. Registra una o importa tu Excel desde Ajustes.'
+          : q ? 'Ningún lote coincide en esta pestaña.'
+          : filtro === 'publicado' ? 'No hay nada publicado en el mercadillo.' : filtro === 'vendido' ? 'Aún no hay ventas.' : 'No tienes nada en mano.'))
+      : h('div', null,
+          h(IndiceKekos, { bloques: agrupado.bloques, cuenta: function (b) { return fmtCr(sumar(b.items, 'cantidad')); } }),
+          h('div', { className: 'bk-lista' + (alineado.alineado ? ' alineado' : ''), ref: alineado.ref }, agrupado.bloques.map(function (b) {
+            var k = b.keko;
+            var pendientesAqui = b.items.filter(function (l) { return l.pendiente; }).length;
+            return h(BloqueKeko, { key: k.clave, keko: k, datos: datosBloque(b.items, filtro),
+                aviso: pendientesAqui ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), pendientesAqui + ' por revisar') : null,
+                accion: filtro === 'comprado' && usaKekos && k.origen !== 'sin' && !k.desconocido
+                  ? h('button', { className: 'btn btn-chico', title: 'Registrar una compra ya asignada a ' + k.nombre, onClick: function () { props.onNueva(k.nombre); } },
+                      h(Ico, { name: 'plus', size: 12, sw: 2.4 }), 'Compra') : null },
+              h('table', { className: 'tabla' },
+                h(Columnas, { anchos: ANCHOS[filtro] }),
+                h('thead', null, h('tr', null,
+                  h('th', null, 'Nº'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Cant.'), h('th', { className: 'r' }, 'Compra c/u'),
+                  h('th', { className: 'r' }, 'Costo'),
+                  conPrecio ? h('th', { className: 'r', title: filtro === 'publicado' ? 'Precio de lista' : 'Lo que entró (neto si fue en el mercadillo)' }, 'Venta c/u') : null,
+                  conPrecio ? h('th', { className: 'r' }, 'Ganancia') : null, conPrecio ? h('th', { className: 'r' }, 'Margen') : null,
+                  h('th', null, 'Estado'), h('th', null))),
+                h('tbody', null, b.items.map(function (l) {
+                  var abiertoEste = abierto === l.id;
+                  var publicado = l.estado === 'publicado';
+                  var manual = publicado && l.publicado_por === 'manual';
+                  var clase = 'fila' + (abiertoEste ? ' abierta' : '') + (l.pendiente ? ' huerfana' : '') + (l.estado === 'vendido' ? ' vendida' : '') + (publicado ? ' publicada' : '');
+                  var g = l.ganancia_cr;
+                  var filas = [h('tr', { key: l.id, className: clase, onClick: function () { setAbierto(abiertoEste ? null : l.id); } },
+                    h('td', { className: 'mono', style: { color: l.pendiente ? 'var(--yellow)' : 'var(--text3)' } }, l.id),
+                    h('td', null, h(NombreFurni, { furni: l })),
+                    h('td', { className: 'r mono' }, l.cantidad),
+                    h('td', { className: 'r mono' }, l.moneda_compra === 'lingos' ? fmtLg(l.precio_compra) + ' lg' : fmtLg(l.precio_compra)),
+                    h('td', { className: 'r mono' }, fmtCr(l.costo_total_cr)),
+                    conPrecio ? h('td', { className: 'r mono' }, h(PrecioVenta, { lote: l })) : null,
+                    conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)) : null,
+                    conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)) : null,
+                    h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
+                      : publicado ? h(EtiquetaPublicado, { manual: manual })
+                      : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
+                    h('td', { className: 'r' }, publicado
+                      ? h('span', { style: { display: 'inline-flex', gap: 6 } },
+                          h('button', { className: 'btn btn-chico', title: 'Registrar la venta de lo publicado', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
+                          manual ? h('button', { className: 'btn btn-chico', title: 'Lo quitaste del mercadillo: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)
+                      : l.estado === 'comprado'
+                      ? h('span', { style: { display: 'inline-flex', gap: 6 } },
+                          l.pendiente ? null : h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pasa a Publicado (todas sus unidades en mano)', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
+                          h('button', { className: 'btn btn-chico', title: 'Lo vendiste fuera del Sniper: tradeo o venta desde otro keko', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
+                      : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
+                  if (abiertoEste) {
+                    filas.push(h('tr', { key: l.id + '-d' }, h('td', { colSpan: conPrecio ? 10 : 7, className: 'detalle' },
+                      h('div', { className: 'detalle-grid' },
+                        h('div', null, h('div', { className: 'dato-l' }, 'Origen'), h('div', { className: 'dato-v' }, (ORIGEN[l.fuente] || l.fuente) + (l.instancia ? ' · ' + l.instancia : ''))),
+                        h('div', null, h('div', { className: 'dato-l' }, 'Número LTD'),
+                          h('div', { className: 'dato-v', style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                            l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : h('span', { className: 'tenue' }, '—'),
+                            h('button', { className: 'btn btn-chico', onClick: function (e) { e.stopPropagation(); props.onLtd(l); } }, l.numero_ltd ? 'Cambiar' : 'Agregar'))),
+                        h('div', null, h('div', { className: 'dato-l' }, 'Fecha de compra'), h('div', { className: 'dato-v' }, fmtD(l.fecha_compra))),
+                        h('div', null, h('div', { className: 'dato-l' }, 'Precio de compra en créditos'), h('div', { className: 'dato-v' }, fmtLg(l.precio_compra_cr) + ' cr')),
+                        conPrecio ? h('div', null, h('div', { className: 'dato-l' }, l.estado === 'vendido' ? (l.comision_venta !== null && l.comision_venta !== undefined ? 'Entró a tu monedero (neto, congelado)' : 'Vendido a (congelado)') : 'Precio de lista'), h('div', { className: 'dato-v' }, fmtLg(l.precio_venta_cr) + ' cr')) : null,
+                        l.estado === 'vendido' && l.comision_pagada_cr !== null && l.comision_pagada_cr !== undefined ? h('div', null, h('div', { className: 'dato-l' }, 'Comisión del mercadillo pagada'),
+                          h('div', { className: 'dato-v' }, fmtCr(l.comision_pagada_cr * l.cantidad) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · el comprador pagó ' + fmtLg(l.precio_venta_cr + l.comision_pagada_cr) + ' c/u'))) : null,
+                        l.precio_lista !== null && l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Estaba publicado a'), h('div', { className: 'dato-v' }, fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr'))) : null,
+                        publicado && l.publicado_en ? h('div', null, h('div', { className: 'dato-l' }, 'Publicado'), h('div', { className: 'dato-v' }, fmtHace(l.publicado_en) + (manual ? ' · por ti' : ' · por el Sniper'))) : null,
+                        l.estado !== 'vendido' && l.comision_cr ? h('div', null, h('div', { className: 'dato-l' }, 'Recibes por unidad (tras comisión)'),
+                          h('div', { className: 'dato-v' }, fmtLg(ingresoNeto(l.precio_venta_cr, l.moneda_precio)) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · comisión ' + fmtCr(l.comision_cr)))) : null,
+                        l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Fecha de venta'), h('div', { className: 'dato-v' }, fmtD(l.fecha_venta))) : null,
+                        l.origen_id ? h('div', null, h('div', { className: 'dato-l' }, 'Dividido del lote'), h('div', { className: 'dato-v' }, 'Nº ' + l.origen_id)) : null),
+                      l.notas ? h('div', { className: 'suave', style: { fontSize: 12, marginBottom: 10 } }, l.notas) : null,
+                      publicado
+                        ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
+                            h(Ico, { name: 'lock', size: 15 }), h('span', { style: { flex: 1 } }, manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO))
+                        : h('div', { style: { display: 'flex', gap: 8 } },
+                            h('button', { className: 'btn btn-peligro', onClick: function (e) { e.stopPropagation(); eliminar(l); }, disabled: enviando }, h(Ico, { name: 'trash', size: 14 }), 'Eliminar lote')))));
+                  }
+                  return filas;
+                }))));
+          })),
+          q ? null : h(KekosVacios, { nombres: agrupado.vacios, texto: VACIOS[filtro] })),
     confirmacion ? h(Confirmar, Object.assign({}, confirmacion, { enviando: enviando,
       onClose: function () { setConfirmacion(null); }, onConfirmar: function () { ejecutar(confirmacion.accion); } })) : null,
     h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, filtro === 'comprado'

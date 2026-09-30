@@ -31,7 +31,10 @@ export function CompraModal(props) {
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
   var usaKekos = !!(props.kekos && props.kekos.disponible);
   var listaKekos = usaKekos ? props.kekos.kekos : [];
-  var sK = useState(function () { return ultimoKeko(listaKekos); }); var keko = sK[0]; var setKeko = sK[1];
+  // Desde «+ Compra» de un bloque llega su keko; si no, el ultimo que usaste.
+  var sK = useState(function () {
+    return props.keko && listaKekos.some(function (k) { return k.nombre === props.keko; }) ? props.keko : ultimoKeko(listaKekos);
+  }); var keko = sK[0]; var setKeko = sK[1];
   var sKn = useState(''); var kekoNuevo = sKn[0]; var setKekoNuevo = sKn[1];
   // Si el keko nuevo ya se creo pero la compra fallo, al reintentar no se vuelve a crear.
   var sKc = useState(null); var kekoCreado = sKc[0]; var setKekoCreado = sKc[1];

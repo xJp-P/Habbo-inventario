@@ -10,6 +10,27 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Inventario y Mercadillo por keko**. Las dos vistas se dividen en una tarjeta por keko:
+  primero los kekos manuales (del más antiguo al más nuevo), luego los de los Snipers
+  (también por antigüedad) y al final lo que no tiene keko. Ninguna tarjeta se pliega ni
+  se recorta: todo se ve haciendo scroll. La cabecera de cada keko lleva su cabeza de
+  Habbo.es (o su inicial), si es manual o de qué Sniper, desde cuándo existe y el resumen
+  de la pestaña (lotes, unidades y costo; o la ganancia esperada o realizada), con las
+  compras «por revisar» en ámbar. Al bajar, la cabecera y la fila de títulos se quedan
+  arriba hasta que llega el siguiente keko; con sitio para todas las columnas, las de
+  todos los bloques quedan alineadas. Arriba, «Ir a» salta a cualquier keko y marca el que
+  estás viendo. Los kekos sin nada en esa pestaña se nombran en una línea al final.
+- **«+ Compra» en cada keko** (pestaña Comprado): abre la compra con ese keko ya elegido.
+
+### Cambiado
+
+- En la pestaña Publicado del Inventario la etiqueta dice solo «Publicado»: el precio de
+  lista ya está en «Venta c/u». El detalle de un lote ya no repite su keko.
+- En el Mercadillo, cada fila resume un furni **en ese keko**, y el detalle muestra la
+  comisión pagada y la ganancia realizada en ese keko.
+
 ### Corregido
 
 - **Las partes de un lote ya no pierden su keko**. Desde la 1.1.0, al publicar, vender o

@@ -4,8 +4,9 @@
 // Solo lo publicado a mano: lo que publico el Sniper lo mueve el Sniper. Si lo tuyo esta
 // a mas de un precio de lista, se elige cual; dentro de ese precio salen primero las
 // publicadas hace mas tiempo (FIFO, funcion retirar_furni). Las unidades vuelven a
-// Comprado (a su lote de origen si sigue en mano al mismo costo); si sale una parte de
-// un lote, el lote se divide.
+// Comprado (a su lote de origen si sigue en mano al mismo costo y en el mismo keko); si
+// sale una parte de un lote, el lote se divide. Desde el bloque de un keko (props.ambito)
+// solo se retira lo de ese keko.
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -14,6 +15,7 @@ import { leerNumero, fmtLg } from '../core/format.js';
 import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 import { gruposPorPrecioLista, repartirFifo, etiquetaLote } from '../core/lotes.js';
+import { textoAmbito } from '../core/kekos.js';
 
 function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' lg' : ' cr'); }
 
@@ -37,13 +39,13 @@ export function RetirarFurniModal(props) {
   function retirar() {
     if (!qValida) { setError('La cantidad debe estar entre 1 y ' + g.unidades + '.'); return; }
     _submitGuard(enviando, setEnviando, function () {
-      return API.post('/api/furnis/' + furni.id + '/retirar', { cantidad: q, precio_lista: g.precio_lista })
+      return API.post('/api/furnis/' + furni.id + '/retirar', Object.assign({ cantidad: q, precio_lista: g.precio_lista }, props.ambito))
         .then(function (r) { if (r) props.onGuardado(r, 'Retiradas ' + r.cantidad + ' und de ' + furni.nombre + ': volvieron a Comprado'); });
     });
   }
 
   return h(Modal, { titulo: 'Retirar del mercadillo', onClose: props.onClose },
-    h(NombreFurni, { furni: furni, sub: 'Publicado por ti: ' + (props.lotes || []).reduce(function (s, l) { return s + l.cantidad; }, 0) + ' und' }),
+    h(NombreFurni, { furni: furni, sub: 'Publicado por ti' + textoAmbito(props.ambito) + ': ' + (props.lotes || []).reduce(function (s, l) { return s + l.cantidad; }, 0) + ' und' }),
     grupos.length > 1 ? h(Fld, { label: '¿Las de qué precio de lista?' },
       h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, grupos.map(function (x, i) {
         return h('button', { key: i, className: 'chip' + (i === iGrupo ? ' activo morado' : ''), onClick: function () { elegirGrupo(i); } },
