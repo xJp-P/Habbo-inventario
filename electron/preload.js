@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   info:               () => ipcRenderer.invoke('app:info'),
   abrirCarpetaDatos:  () => ipcRenderer.invoke('app:abrir-carpeta-datos'),
   elegirExcel:        () => ipcRenderer.invoke('app:elegir-excel'),
+  // «Copiar detalles» del informe de errores (v1.6.1): el portapapeles del sistema, sin
+  // depender de los permisos del navegador.
+  copiar:             (texto) => ipcRenderer.invoke('app:copiar', String(texto)),
   // Notificaciones del sistema (electron/notificaciones.js): las decide el proceso
   // principal; aqui solo las preferencias y una de prueba.
   notificaciones: {

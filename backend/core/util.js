@@ -71,4 +71,21 @@ function parecido(a, b) {
   return max === 0 ? 1 : 1 - distancia(x, y) / max;
 }
 
-module.exports = { hoyStr, ClientError, normalizar, MONEDAS, monedaDesdeTexto, numeroValido, distancia, parecido };
+// Donde fallo un error inesperado, para el informe de errores de la interfaz (v1.6.1):
+// las primeras lineas de la pila con la ruta recortada desde backend/, electron/ o
+// node_modules/ (sin la carpeta de instalacion, que lleva el nombre del usuario).
+function rastro(err, lineas = 3) {
+  if (!err || !err.stack) return null;
+  const pila = String(err.stack).split('\n').slice(1).map((l) => l.trim()).filter((l) => l.startsWith('at '));
+  if (!pila.length) return null;
+  return pila.slice(0, lineas).map((l) => {
+    const m = l.match(/[\\/](backend|electron|node_modules|scripts)[\\/]/);
+    if (!m) return l;
+    // La ruta empieza tras el ultimo «(» o tras «at » / «at async » (puede tener espacios).
+    const parentesis = l.lastIndexOf('(', m.index);
+    const inicio = parentesis >= 0 ? parentesis + 1 : l.startsWith('at async ') ? 9 : 3;
+    return l.slice(0, inicio) + l.slice(m.index + 1).replace(/\\/g, '/');
+  }).join('\n');
+}
+
+module.exports = { hoyStr, ClientError, normalizar, MONEDAS, monedaDesdeTexto, numeroValido, distancia, parecido, rastro };

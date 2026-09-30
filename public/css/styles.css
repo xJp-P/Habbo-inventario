@@ -346,3 +346,12 @@ input[type=number]{-moz-appearance:textfield}
 .ind-chip:hover{border-color:var(--border2);color:var(--text)}
 .ind-chip.activo{border-color:var(--green-bd);color:var(--text);background:var(--green-bg)}
 .ind-chip .mono{color:var(--text3);font-weight:400}
+
+/* ── Errores visibles (v1.6.1): nada de spinners eternos ni avisos que se escapan ── */
+.toast.con-accion{pointer-events:auto;display:flex;align-items:center;gap:12px;text-align:left}
+.toast-accion{flex-shrink:0;background:none;border:1px solid currentColor;color:inherit;border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.toast-accion:hover{background:rgba(255,255,255,.08)}
+.btn-errores{display:inline-flex;align-items:center;gap:5px;background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red);border-radius:99px;padding:3px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.btn-errores:hover{border-color:var(--red)}
+.informe-errores{width:100%;resize:vertical;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:340px}
+.panel-error{max-width:640px;border-color:var(--red-bd)}

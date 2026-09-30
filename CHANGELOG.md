@@ -10,6 +10,32 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Errores visibles y fáciles de enviar**. Todo error queda registrado durante la sesión
+  con su detalle y se ve en una ventana fija («Errores de esta sesión»): el último error
+  destacado y un informe completo (versión, equipo, estado de las migraciones y cada error
+  con la petición, el código y dónde falló) en un recuadro seleccionable, con «Copiar
+  detalles». Se abre desde un botón rojo en la cabecera (aparece cuando hay errores) o con
+  «Ver detalles» en el aviso de error, que ahora dura más. En la app de escritorio copia al
+  portapapeles del sistema.
+- Los errores inesperados del servidor local traen **dónde** fallaron (archivo y línea), sin
+  la carpeta de instalación, que lleva el nombre del usuario del equipo.
+
+### Corregido
+
+- **Adiós al spinner infinito al abrir la app**. Si la carga inicial fallaba, la app se
+  quedaba cargando para siempre y solo mostraba un aviso de 4 segundos (o nada, si la
+  petición no respondía). Ahora abre la ventana «No se pudieron cargar tus datos» con el
+  detalle, «Copiar detalles» y «Reintentar», y la sección muestra lo mismo si la cierras.
+  Cada petición de la carga tiene un tiempo máximo de 30 s: si no responde, es un error
+  visible. Si falla una recarga posterior, se conservan los datos que había.
+- **Una sección que falla ya no tumba la app**. Si algo falla al dibujar una sección (por
+  ejemplo, un lote con un dato raro), solo esa sección lo dice, con su mensaje, «Ver y
+  copiar detalles» y «Reintentar»; el menú y las demás secciones siguen funcionando.
+- La Auditoría ya no se queda girando si su primera carga falla: muestra el motivo y
+  «Reintentar».
+
 ## [1.6.0] - 2026-09-29
 
 ### Añadido

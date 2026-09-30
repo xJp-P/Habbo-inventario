@@ -187,9 +187,12 @@ export function AuditoriaView(props) {
   var sConf = useState(null); var confirmacion = sConf[0]; var setConfirmacion = sConf[1];
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
   var sCmp = useState(false); var comparando = sCmp[0]; var setComparando = sCmp[1];
+  // La primera carga fallo (v1.6.1): se dice y se ofrece reintentar, no un spinner eterno.
+  var sFa = useState(false); var fallo = sFa[0]; var setFallo = sFa[1];
 
   function cargar(keko) {
-    return API.get('/api/auditoria' + (keko ? '?keko=' + encodeURIComponent(keko) : '')).then(function (r) { if (r) setAud(r); return r; });
+    setFallo(false);
+    return API.get('/api/auditoria' + (keko ? '?keko=' + encodeURIComponent(keko) : '')).then(function (r) { if (r) setAud(r); else setFallo(true); return r; });
   }
   // Al entrar, el primer keko (o el de la notificacion en la que hiciste clic).
   useEffect(function () {
@@ -236,6 +239,15 @@ export function AuditoriaView(props) {
     });
   }
 
+  if (!aud && fallo) {
+    return h('div', { className: 'contenedor fade-in' }, h('div', { className: 'card panel-error' },
+      h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700, fontSize: 15 } },
+        h(Ico, { name: 'alert', size: 18, color: 'var(--red)' }), 'No se pudo cargar la auditoría'),
+      h('p', { className: 'suave', style: { fontSize: 13, margin: '8px 0 12px', lineHeight: 1.55 } }, 'Mira el detalle del error, cópialo para enviarlo y prueba de nuevo.'),
+      h('div', { style: { display: 'flex', gap: 8 } },
+        props.onVerErrores ? h('button', { className: 'btn', onClick: props.onVerErrores }, h(Ico, { name: 'copy', size: 14 }), 'Ver y copiar detalles') : null,
+        h('button', { className: 'btn btn-verde', onClick: function () { cargar(props.abrir ? props.abrir.keko : null); } }, h(Ico, { name: 'refresh', size: 14 }), 'Reintentar'))));
+  }
   if (!aud) return h('div', { className: 'contenedor' }, h('div', { className: 'spinner' }));
 
   if (!aud.keko) {

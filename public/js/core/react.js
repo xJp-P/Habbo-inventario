@@ -11,3 +11,6 @@ export var useMemo = React.useMemo;
 export var useCallback = React.useCallback;
 export var useRef = React.useRef;
 export var createRoot = ReactDOM.createRoot;
+// Solo para la barrera de errores (componentes/Barrera.js): React no tiene otra forma
+// de atrapar un error al dibujar que un componente de clase.
+export var Component = React.Component;

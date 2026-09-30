@@ -28,7 +28,7 @@ const ExcelJS = require('exceljs');
 const { leerExcel, importarDatos } = require('../backend/services/importarExcel');
 const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/instalacion');
 const { validarConfiguracion, leerConfiguracion } = require('../backend/db/supabase');
-const { normalizar } = require('../backend/core/util');
+const { normalizar, rastro } = require('../backend/core/util');
 const { DIR_DATOS_DEV } = require('./comun');
 
 let pasos = 0;
@@ -219,6 +219,45 @@ async function main() {
     'previsualizar sin entrada para la version que corre muestra la mas reciente');
   assert.equal(nov.novedadesAMostrar({ version: '1.3.0', vista: '1.3.0', forzar: '1.3.0', changelogs: CHANGELOGS }).version, '1.3.0', 'o la que se pida');
   ok('novedades: cada version publicada despues de la 1.2.0 trae las suyas, sin tecnicismos; salen una vez tras actualizar y ?novedades las previsualiza');
+
+  // ── Errores visibles (v1.6.1): registro, informe para copiar y espera maxima ──
+  const errMod = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'errores.js')).href);
+  const apiMod = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'api.js')).href);
+  errMod.limpiarErrores();
+  const lento = http.createServer((req, res) => {
+    if (req.url === '/roto') { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Supabase: canceling statement due to statement timeout (57014)', detalle: 'at listarCompras (backend/services/negocio.js:49:12)' })); return; }
+    if (req.url === '/sesion') { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Inicia sesion', codigo: 'SIN_SESION' })); return; }
+    // /colgado: nunca responde.
+  });
+  await new Promise((r) => lento.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + lento.address().port;
+  const colgado = await apiMod.API.intentar('GET', base + '/colgado', null, { espera: 150 });
+  assert.deepEqual([colgado.datos, colgado.error.codigo, colgado.error.metodo, /150|0 s/.test(colgado.error.message)], [null, 'SIN_RESPUESTA', 'GET', true], 'una peticion colgada es un error visible, no un spinner eterno');
+  const roto = await apiMod.API.intentar('GET', base + '/roto');
+  assert.deepEqual([roto.error.status, roto.error.detalle, roto.error.ruta], [500, 'at listarCompras (backend/services/negocio.js:49:12)', base + '/roto']);
+  await apiMod.API.intentar('GET', base + '/sesion');
+  lento.closeAllConnections();
+  lento.close();
+  const reg = errMod.erroresRegistrados();
+  assert.deepEqual(reg.map((e) => e.codigo || e.status), ['SIN_RESPUESTA', 500], 'la sesion vencida no es un error del registro');
+  const informe = errMod.textoInforme({ version: '1.6.1', equipo: errMod.describirEquipo('Mozilla/5.0 (Windows NT 10.0) Electron/38.2.0 Chrome/140'),
+    seccion: 'Inventario', migraciones: { instaladas: 17, total: 18, siguiente: '20261014000000_inventario_por_keko.sql' }, errores: reg });
+  for (const trozo of ['Habbo Inventario 1.6.1', 'Equipo: Windows · app de escritorio (Electron 38)', 'Sección abierta: Inventario',
+    'Base de datos: 17 de 18 migraciones (falta 20261014000000_inventario_por_keko.sql)', 'GET ' + base + '/roto · 500',
+    'Supabase: canceling statement due to statement timeout (57014)', 'Dónde: at listarCompras (backend/services/negocio.js:49:12)', '· sin respuesta']) {
+    assert.ok(informe.includes(trozo), 'el informe dice: ' + trozo);
+  }
+  assert.ok(informe.indexOf('/roto') < informe.indexOf('/colgado'), 'del error mas reciente al mas antiguo');
+  for (let i = 0; i < 40; i++) errMod.registrarError({ mensaje: 'x' + i });
+  assert.equal(errMod.erroresRegistrados().length, 30, 'el registro guarda los 30 ultimos');
+  errMod.limpiarErrores();
+  // Donde fallo el servidor, sin la carpeta de instalacion (lleva el nombre del usuario).
+  const errServidor = new Error('x');
+  errServidor.stack = ['TypeError: boom',
+    '    at pendientesPorFurni (C:\\Users\\Pepe\\AppData\\Local\\Programs\\Habbo Inventario\\resources\\app.asar\\backend\\services\\negocio.js:384:17)',
+    '    at async /Applications/Habbo Inventario.app/Contents/Resources/app.asar/backend/routes/api.js:74:52'].join('\n');
+  assert.equal(rastro(errServidor), 'at pendientesPorFurni (backend/services/negocio.js:384:17)\nat async backend/routes/api.js:74:52');
+  ok('errores visibles: una peticion colgada o rota queda registrada con su detalle; el informe para copiar trae version, equipo, migraciones y cada error; el servidor dice donde fallo sin rutas personales');
 
   // ── URL del proyecto: el panel de Supabase a veces la muestra con /rest/v1/ ──
   const claveEjemplo = 'sb_publishable_' + 'x'.repeat(24);

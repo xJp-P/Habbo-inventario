@@ -23,7 +23,7 @@ const { importarExcel } = require('./services/importarExcel');
 const { protegerApiLocal } = require('./core/seguridad');
 const { crearDetectorAuditoria, avisoCatalogo } = require('./core/avisos');
 const crearRutasApi = require('./routes/api');
-const { ClientError } = require('./core/util');
+const { ClientError, rastro } = require('./core/util');
 
 const RAIZ = path.join(__dirname, '..');
 
@@ -124,7 +124,8 @@ async function crearApp({
     if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON invalido.' });
     if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'Envio demasiado grande.' });
     log('Error inesperado: ' + (err && err.stack || err));
-    res.status(500).json({ error: err && err.message ? err.message : 'Error interno del servidor.' });
+    // `detalle`: donde fallo, para el informe de errores que la interfaz deja copiar.
+    res.status(500).json({ error: err && err.message ? err.message : 'Error interno del servidor.', detalle: rastro(err) });
   });
 
   async function cerrar() {

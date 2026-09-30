@@ -13,6 +13,11 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.6.1': [
+    'Si algo falla al abrir la app, ya no se queda cargando para siempre: te muestra qué pasó en una ventana fija, con un botón para copiar los detalles (o sacarles una foto con calma) y otro para reintentar.',
+    'Arriba a la derecha aparece un botón rojo cuando hubo errores: ábrelo cuando quieras para verlos y copiarlos, y así enviarlos para que se revisen.',
+    'Si una sección no se puede mostrar, solo esa sección lo avisa: el menú y el resto de la app siguen funcionando.',
+  ],
   '1.6.0': [
     'Tu Inventario y tu Mercadillo ahora se ordenan por keko: cada keko tiene su propia tarjeta con su cara de Habbo, cuántos lotes y unidades tiene y lo que costaron. Ya no hace falta abrir un lote para saber dónde está.',
     'Primero van tus kekos manuales, del más antiguo al más nuevo; después los de tus Snipers, y al final lo que aún no tiene keko. Todas las tarjetas se ven abiertas: bajas y lo ves todo.',

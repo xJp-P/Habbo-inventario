@@ -28,7 +28,7 @@
 //   --simular-actualizacion[=error]  recorre el flujo de actualizacion con una version
 //                     ficticia (solo con npm start; no descarga nada)
 
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, clipboard } = require('electron');
 const path = require('path');
 const http = require('http');
 const { crearApp } = require('../backend/server');
@@ -244,6 +244,12 @@ ipcMain.handle('app:info', () => ({
 }));
 
 ipcMain.handle('app:abrir-carpeta-datos', () => shell.openPath(dirDatos));
+
+// Copiar el informe de errores al portapapeles (solo texto, con un tope razonable).
+ipcMain.handle('app:copiar', (_e, texto) => {
+  clipboard.writeText(String(texto || '').slice(0, 100000));
+  return true;
+});
 
 // Notificaciones: la interfaz solo lee o cambia que tipos quieres y pide una de prueba.
 ipcMain.handle('app:notificaciones', () => ({

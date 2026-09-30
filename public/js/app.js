@@ -11,8 +11,14 @@
 //
 // Si a la base le falta una migracion (una actualizacion de la app trajo una nueva y
 // aun no se ejecuto en Supabase), un aviso arriba abre la misma lista del asistente.
+//
+// Errores visibles (v1.6.1): si la carga inicial falla o no responde en ESPERA_CARGA, en
+// vez de un spinner infinito se abre ErroresModal con el detalle para copiar y
+// «Reintentar». Cada error de la sesion queda en core/errores.js: el boton rojo de la
+// cabecera y «Ver detalles» de un aviso abren la lista. Cada seccion va dentro de una
+// Barrera: si falla al dibujarse, lo dice ella sola y el menu sigue funcionando.
 
-import { h, useState, useEffect, useCallback, createRoot } from './core/react.js';
+import { h, useState, useEffect, useCallback, useRef, createRoot } from './core/react.js';
 import { API, setErrorHandler } from './core/api.js';
 import { fmtLg } from './core/format.js';
 import { Ico } from './componentes/iconos.js';
@@ -33,6 +39,13 @@ import { NovedadesModal } from './componentes/NovedadesModal.js';
 import { novedadesAMostrar, previsualizacionPedida, CLAVE_VISTA } from './core/novedades.js';
 import { LtdModal } from './modales/LtdModal.js';
 import { esDelKeko } from './core/kekos.js';
+import { ErroresModal } from './componentes/ErroresModal.js';
+import { Barrera } from './componentes/Barrera.js';
+import { registrarError, erroresRegistrados, alCambiarErrores, limpiarErrores, describirEquipo } from './core/errores.js';
+
+// Cuanto se espera cada peticion de la carga inicial antes de darla por fallida.
+var ESPERA_CARGA = 30000;
+var RUTAS_CARGA = ['/api/resumen', '/api/furnis', '/api/compras', '/api/pendientes'];
 
 var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
@@ -63,6 +76,13 @@ function App() {
   // recarga sola); el clic en una notificacion deja en `abrirAuditoria` el keko a abrir.
   var sSen = useState(0); var senalAuditoria = sSen[0]; var setSenalAuditoria = sSen[1];
   var sAbA = useState(null); var abrirAuditoria = sAbA[0]; var setAbrirAuditoria = sAbA[1];
+  // Errores de la sesion, el modal que los muestra ('carga' | 'registro') y si fallo la
+  // carga inicial (sin datos todavia).
+  var sErr = useState(erroresRegistrados); var errores = sErr[0]; var setErrores = sErr[1];
+  var sVE = useState(null); var verErrores = sVE[0]; var setVerErrores = sVE[1];
+  var sFC = useState(false); var falloCarga = sFC[0]; var setFalloCarga = sFC[1];
+  var sEM = useState(null); var estadoMig = sEM[0]; var setEstadoMig = sEM[1];
+  var hayDatos = useRef(false);
 
   var avisar = useCallback(function (msg, tipo) {
     setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
@@ -70,7 +90,7 @@ function App() {
 
   useEffect(function () {
     if (!toast) return;
-    var t = setTimeout(function () { setToast(null); }, toast.tipo === 'error' ? 4500 : 2800);
+    var t = setTimeout(function () { setToast(null); }, toast.tipo === 'error' ? 8000 : 2800);
     return function () { clearTimeout(t); };
   }, [toast]);
 
@@ -92,10 +112,35 @@ function App() {
     cargarCuenta();
   }, []);
 
+  // El registro de errores de la sesion, al dia; y los errores de JavaScript sueltos (fuera
+  // de React, p. ej. en una promesa) tambien quedan ahi.
+  useEffect(function () {
+    var quitar = alCambiarErrores(function (l) { setErrores(l); });
+    function suelto(e) { registrarError({ origen: 'interfaz', mensaje: e.message || 'Error de JavaScript', detalle: e.error && e.error.stack ? String(e.error.stack).split('\n').slice(0, 4).join('\n') : null }); }
+    function promesa(e) { var r = e.reason; registrarError({ origen: 'interfaz', mensaje: r && r.message ? r.message : String(r), detalle: r && r.stack ? String(r.stack).split('\n').slice(0, 4).join('\n') : null }); }
+    window.addEventListener('error', suelto);
+    window.addEventListener('unhandledrejection', promesa);
+    return function () { quitar(); window.removeEventListener('error', suelto); window.removeEventListener('unhandledrejection', promesa); };
+  }, []);
+
+  // Carga los datos. Si algo falla o no responde a tiempo: sin datos todavia, se abre el
+  // modal de la carga; con datos, se conservan los que habia y sale un aviso con «Ver
+  // detalles». La sesion vencida no es un fallo: vuelve al acceso.
   var recargar = useCallback(function () {
-    return Promise.all([API.get('/api/resumen'), API.get('/api/furnis'), API.get('/api/compras'), API.get('/api/pendientes')])
+    return Promise.all(RUTAS_CARGA.map(function (u) { return API.intentar('GET', u, null, { espera: ESPERA_CARGA }); }))
       .then(function (r) {
-        if (r.every(function (x) { return x; })) setDatos({ resumen: r[0], furnis: r[1], compras: r[2], pendientes: r[3] });
+        var fallos = r.filter(function (x) { return x.error; }).map(function (x) { return x.error; });
+        if (fallos.some(function (e) { return e.codigo === 'SIN_SESION' || e.codigo === 'SIN_CONFIG'; })) { cargarCuenta(); return; }
+        if (!fallos.length) {
+          hayDatos.current = true;
+          setFalloCarga(false);
+          setDatos({ resumen: r[0].datos, furnis: r[1].datos, compras: r[2].datos, pendientes: r[3].datos });
+        } else if (!hayDatos.current) {
+          setFalloCarga(true);
+          setVerErrores('carga');
+        } else {
+          avisar('No se pudieron actualizar tus datos: ' + fallos[0].message, 'error');
+        }
         // Diferencias de la auditoria y kekos (aparte: sin su migracion responden vacio).
         API.get('/api/auditoria/resumen').then(function (a) { if (a) setResAuditoria(a); });
         API.get('/api/kekos').then(function (k) { if (k) setKekos(k); });
@@ -103,7 +148,11 @@ function App() {
   }, []);
 
   var lista = cuenta && cuenta.estado === 'lista';
-  useEffect(function () { if (lista) recargar(); else setDatos(null); }, [lista]);
+  useEffect(function () {
+    if (lista) recargar();
+    else { setDatos(null); hayDatos.current = false; setFalloCarga(false); }
+  }, [lista]);
+  function reintentarCarga() { setVerErrores(null); setFalloCarga(false); recargar(); }
 
   // ── Novedades post-actualizacion (como Proyecto_Cartera) ──────────────────
   // Compara la version que corre con la ultima vista (localStorage.lastSeenVersion): si
@@ -122,7 +171,7 @@ function App() {
 
   // Migraciones que faltan en la base (solo se avisa si se pudo comprobar).
   var revisarMigraciones = useCallback(function () {
-    API.get('/api/instalacion').then(function (r) { setFaltanMig(r && !r.error && !r.completa ? r : null); });
+    API.get('/api/instalacion').then(function (r) { setEstadoMig(r); setFaltanMig(r && !r.error && !r.completa ? r : null); });
   }, []);
   useEffect(function () { if (lista) revisarMigraciones(); else setFaltanMig(null); }, [lista]);
 
@@ -213,7 +262,9 @@ function App() {
   var colorToast = toast && toast.tipo === 'error' ? ['var(--red-bg)', 'var(--red-bd)', 'var(--red)']
     : toast && toast.tipo === 'sniper' ? ['var(--yellow-bg)', 'var(--yellow-bd)', 'var(--yellow)']
     : ['var(--green-bg)', 'var(--green-bd)', 'var(--green)'];
-  var aviso = toast ? h('div', { key: toast.id, className: 'toast', style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } }, toast.msg) : null;
+  var aviso = toast ? h('div', { key: toast.id, className: 'toast' + (toast.tipo === 'error' && lista ? ' con-accion' : ''), style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } },
+    toast.msg,
+    toast.tipo === 'error' && lista ? h('button', { className: 'toast-accion', onClick: function () { setToast(null); setVerErrores('registro'); } }, 'Ver detalles') : null) : null;
 
   if (!cuenta) return h('div', { className: 'acceso', 'data-app-lista': '1' }, h(Spinner));
   // El aviso tambien se ve en el acceso (antes sus errores no se mostraban).
@@ -223,8 +274,19 @@ function App() {
   var huerfanos = datos ? datos.pendientes.length : 0;
   var tasa = datos ? datos.resumen.tasa : 50;
 
+  function abrirErrores() { setVerErrores('registro'); }
   var contenido;
-  if (!datos) contenido = h(Spinner);
+  // Sin datos porque fallo la carga: el motivo y Reintentar, nunca un spinner eterno.
+  if (!datos && falloCarga) contenido = h('div', { className: 'contenedor fade-in' },
+    h('div', { className: 'card panel-error' },
+      h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700, fontSize: 15 } },
+        h(Ico, { name: 'alert', size: 18, color: 'var(--red)' }), 'No se pudieron cargar tus datos'),
+      h('p', { className: 'suave', style: { fontSize: 13, margin: '8px 0 10px', lineHeight: 1.55 } }, 'Tus datos siguen guardados en tu Supabase. Mira el detalle, cópialo para enviarlo y prueba de nuevo.'),
+      errores.length ? h('div', { className: 'aviso aviso-rojo', style: { fontSize: 13, wordBreak: 'break-word', marginBottom: 12 } }, errores[errores.length - 1].mensaje) : null,
+      h('div', { style: { display: 'flex', gap: 8 } },
+        h('button', { className: 'btn', onClick: function () { setVerErrores('carga'); } }, h(Ico, { name: 'copy', size: 14 }), 'Ver y copiar detalles'),
+        h('button', { className: 'btn btn-verde', onClick: reintentarCarga }, h(Ico, { name: 'refresh', size: 14 }), 'Reintentar'))));
+  else if (!datos) contenido = h(Spinner);
   else if (vista === 'resumen') contenido = h(ResumenView, { resumen: datos.resumen, onNav: navegar, onVerFurni: verFurni, onCambio: cambio, onError: function (m) { avisar(m, 'error'); } });
   else if (vista === 'mercadillo') contenido = h(MercadilloView, {
     furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos,
@@ -259,7 +321,7 @@ function App() {
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
     furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio, onRecargar: recargar,
-    senal: senalAuditoria, abrir: abrirAuditoria,
+    senal: senalAuditoria, abrir: abrirAuditoria, onVerErrores: abrirErrores,
     onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
   });
   else contenido = h(AjustesView, {
@@ -300,11 +362,18 @@ function App() {
         h(Ico, { name: nav[1], size: 18, color: 'var(--green)' }),
         h('span', { style: { fontWeight: 700, fontSize: 16 } }, nav[2]),
         h('div', { style: { flex: 1 } }),
+        errores.length ? h('button', { className: 'btn-errores', onClick: abrirErrores, title: 'Errores de esta sesión: ver y copiar los detalles' },
+          h(Ico, { name: 'alert', size: 13 }), errores.length === 1 ? '1 error' : errores.length + ' errores') : null,
         h('span', { className: 'tag tag-morado', title: 'Tasa del Lingo en Habbo.es (valor fijo del juego)' }, h(Ico, { name: 'diamond', size: 12 }), '1 lingo = ' + fmtLg(tasa) + ' cr'),
         h('button', { className: 'btn-icono', onClick: function () { setTema(tema === 'dark' ? 'light' : 'dark'); }, title: tema === 'dark' ? 'Tema claro' : 'Tema oscuro' },
           h(Ico, { name: tema === 'dark' ? 'sun' : 'moon', size: 14, color: 'var(--text3)' }))),
-      h('div', { className: 'main-content' }, avisoMigraciones, contenido)),
+      h('div', { className: 'main-content' }, avisoMigraciones, h(Barrera, { key: vista, seccion: nav[2], onVerErrores: abrirErrores }, contenido))),
 
+    verErrores ? h(ErroresModal, { modo: verErrores, errores: errores,
+      contexto: { version: cuenta.version, equipo: describirEquipo(navigator.userAgent), seccion: nav[2], migraciones: estadoMig },
+      onReintentar: verErrores === 'carga' ? reintentarCarga : null,
+      onLimpiar: function () { limpiarErrores(); setVerErrores(null); },
+      onClose: function () { setVerErrores(null); } }) : null,
     novedades ? h(NovedadesModal, { version: novedades.version, items: novedades.items, onClose: function () { setNovedades(null); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, keko: modal.keko, propios: datos.furnis, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
