@@ -1,7 +1,7 @@
 {
   "name": "habbo-inventario",
   "productName": "Habbo Inventario",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "Inventario de compra y venta de furnis para Habbo.es con base de datos en Supabase: stock, costos, ganancias y compras en tiempo real desde SniperMercadillo.",
   "author": "xJp-P",
   "license": "MIT",

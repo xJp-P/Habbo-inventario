@@ -10,6 +10,8 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+## [1.6.0] - 2026-09-29
+
 ### Añadido
 
 - **Inventario y Mercadillo por keko**. Las dos vistas se dividen en una tarjeta por keko:
@@ -324,7 +326,8 @@ Primera versión pública. Funciona solo con el hotel **Habbo.es**.
 Instalación nueva: ejecutar en orden todos los archivos de `supabase/migrations/`, de
 `20260927000000_esquema_inicial.sql` a `20261006000000_numero_ltd.sql`.
 
-[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.2...HEAD
+[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.4.0...v1.5.0
