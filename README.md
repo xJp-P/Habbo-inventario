@@ -98,6 +98,7 @@ Las migraciones son los archivos de [`supabase/migrations/`](supabase/migrations
 | 16 | `20261012000000_limpieza_tokens.sql` | Eliminar tokens con limpieza profunda de su keko |
 | 17 | `20261013000000_origen_con_evidencia.sql` | Auditoría: «Vinieron de otro keko» solo con evidencia |
 | 18 | `20261014000000_inventario_por_keko.sql` | Inventario y Mercadillo por keko: cada acción en su keko y las partes de un lote conservan su keko |
+| 19 | `20261015000000_ventas_sniper.sql` | Ventas del Sniper: cada venta del mercadillo pasa a Vendido en su keko; lo que no casa queda por asignar |
 
 Para cada archivo, en orden:
 

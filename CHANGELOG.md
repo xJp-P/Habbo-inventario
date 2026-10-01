@@ -10,6 +10,29 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
 ## [Sin publicar]
 
+### Añadido
+
+- **Ventas del Sniper** (la base; la interfaz llega en las próximas fases). El Sniper puede
+  enviar cada venta del mercadillo (evento `venta`, ver `docs/INTEGRACION-SNIPER.md`): la
+  base pasa una unidad de Publicado a Vendido en el keko de la venta, con el neto y la
+  comisión exactos, sin tocar otros kekos ni lo publicado después de la venta, y marca la
+  venta como registrada por el Sniper. Lo que no puede casar con un lote queda «por
+  asignar» (no se pierde) y se aplica solo cuando llega la publicación que faltaba.
+- El evento `publicar` del Sniper acepta `fecha`: la hora en que Habbo confirmó la
+  publicación, que pasa a ser la hora de publicación del lote.
+
+### Corregido
+
+- **Una retirada del Sniper ya no toma lotes de otro keko**. Al recuperar una oferta, la
+  base tomaba lo publicado del Sniper más antiguo de cualquier keko: con dos Snipers, una
+  retirada en uno podía devolver a Comprado un lote del otro. Ahora toma de su keko y luego
+  de lo sin keko.
+
+### Migraciones de Supabase
+
+- `20261015000000_ventas_sniper.sql` (requiere la `20261014000000`). Hay que correrla
+  antes de activar el envío de ventas en el Sniper: sin ella, la base las rechaza.
+
 ## [1.6.1] - 2026-09-30
 
 ### Añadido

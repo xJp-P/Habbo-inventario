@@ -39,6 +39,7 @@ demo-token.txt
 
 # Contexto privado para asistentes de IA
 CLAUDE.md
+fase_plan.md
 .claude/
 
 # Registros y temporales
