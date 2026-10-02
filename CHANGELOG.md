@@ -8,18 +8,42 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
-## [Sin publicar]
+## [1.7.0] - 2026-10-02
 
 ### Añadido
 
-- **Ventas del Sniper** (la base; la interfaz llega en las próximas fases). El Sniper puede
-  enviar cada venta del mercadillo (evento `venta`, ver `docs/INTEGRACION-SNIPER.md`): la
-  base pasa una unidad de Publicado a Vendido en el keko de la venta, con el neto y la
-  comisión exactos, sin tocar otros kekos ni lo publicado después de la venta, y marca la
-  venta como registrada por el Sniper. Lo que no puede casar con un lote queda «por
-  asignar» (no se pierde) y se aplica solo cuando llega la publicación que faltaba.
+- **Ventas del Sniper**. El Sniper envía cada venta del mercadillo (evento `venta`, ver
+  `docs/INTEGRACION-SNIPER.md`) y la app la registra sola: una unidad pasa de Publicado a
+  Vendido **en el keko de la venta**, con el neto y la comisión exactos, sin tocar otros
+  kekos ni lo publicado después de la venta. Elige el lote con el mismo número LTD (un LTD
+  con otro número nunca se toca), luego el de ese keko antes que lo sin keko, el del mismo
+  precio de lista y, entre iguales, el más antiguo. Los reintentos del bot no la cuentan
+  dos veces.
+- **Inventario › «Por asignar»**: una pestaña azul, con su número, para las ventas que el
+  Sniper envió y no casaron con ningún lote (el furni no está registrado, no hay nada
+  publicado en ese keko, solo hay LTD con otro número o lo publicado es posterior a la
+  venta). Cada una dice cuándo fue, en qué keko, el furni, el precio con su neto y por qué
+  no se asignó. «Asignar a un lote…» muestra los lotes publicados que valen (los del keko
+  de la venta y los sin keko) con lo que entra y la ganancia; «Descartar» la saca de la
+  bandeja sin registrarla. Una venta por asignar se aplica sola cuando llega la
+  publicación que faltaba. El menú muestra un número azul junto a Inventario.
+- **«Vendido · Sniper»**: en la pestaña Vendido, lo que registró el Sniper lleva esa
+  etiqueta y, bajo el nombre, la hora de la venta («vendida hoy a las 18:42»). El detalle
+  del lote muestra la fecha con hora y quién la registró (el Sniper y su VPS, o tú).
+- **Aviso antes de vender a mano** en un keko cuyas ventas registra el Sniper («Vendido»
+  en el Mercadillo y en Publicado): explica que, si el Sniper también la envía, se contará
+  dos veces, y deja seguir con «Registrar a mano igual». En los kekos manuales y en lo sin
+  keko se abre directo, como antes.
+- **Avisos de ventas**. Dentro de la app: «Vendido en Keko: 1 × Furni a 117 cr · +24 cr de
+  ganancia», con «Ver» si alguna quedó por asignar. Con la app minimizada, una notificación
+  de Windows (o el Dock en Mac) por keko; varias ventas seguidas llegan en un solo aviso, y
+  el siguiente, si llega antes de 2 minutos, sin sonido. El clic abre Vendido de ese keko,
+  o «Por asignar». Se apaga en **Ajustes → Notificaciones → Ventas del Sniper**.
 - El evento `publicar` del Sniper acepta `fecha`: la hora en que Habbo confirmó la
-  publicación, que pasa a ser la hora de publicación del lote.
+  publicación, que pasa a ser la hora de publicación del lote (así una venta nunca casa
+  con algo publicado después).
+- Modo demo: botones «Venta» y «Venta por asignar» en Ajustes para simular las ventas del
+  Sniper.
 
 ### Corregido
 
@@ -27,11 +51,19 @@ migración debe ejecutarse **antes** de publicar el Release en GitHub.
   base tomaba lo publicado del Sniper más antiguo de cualquier keko: con dos Snipers, una
   retirada en uno podía devolver a Comprado un lote del otro. Ahora toma de su keko y luego
   de lo sin keko.
+- «Revertir venta» limpia también quién la registró y su hora, y la limpieza profunda de un
+  token borra sus ventas por asignar.
+- El modo demo vuelve a aplicar una migración si su archivo cambió (antes las recordaba
+  solo por nombre y se quedaba con la versión vieja).
 
 ### Migraciones de Supabase
 
 - `20261015000000_ventas_sniper.sql` (requiere la `20261014000000`). Hay que correrla
-  antes de activar el envío de ventas en el Sniper: sin ella, la base las rechaza.
+  **antes de publicar** el Release y antes de activar el envío de ventas en el Sniper: sin
+  ella, la base rechaza las ventas y la app no muestra «Por asignar» (todo lo demás
+  funciona como en la 1.6.1).
+- Después de instalarla, marca a mano las ventas anteriores que el Sniper no envió, hasta
+  que el Mercadillo de cada keko coincida con lo que tienes en venta en Habbo.
 
 ## [1.6.1] - 2026-09-30
 
@@ -400,7 +432,7 @@ Primera versión pública. Funciona solo con el hotel **Habbo.es**.
 Instalación nueva: ejecutar en orden todos los archivos de `supabase/migrations/`, de
 `20260927000000_esquema_inicial.sql` a `20261006000000_numero_ltd.sql`.
 
-[Sin publicar]: https://github.com/xJp-P/Habbo-inventario/compare/v1.6.1...HEAD
+[1.7.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/xJp-P/Habbo-inventario/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.1...v1.5.2

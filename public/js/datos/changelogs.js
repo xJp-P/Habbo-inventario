@@ -13,6 +13,14 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.7.0': [
+    'Tu Sniper ahora anota tus ventas solo: cuando alguien compra uno de tus furnis en el mercadillo, la venta aparece en Vendido del keko correcto, con lo que te entró y la ganancia. Ya no tienes que marcarla a mano.',
+    'En Vendido, lo que anotó el Sniper lleva la etiqueta «Vendido · Sniper» y la hora exacta de la venta.',
+    'Si el Sniper no sabe a qué lote pertenece una venta (por ejemplo, un furni que aún no tienes anotado), no se pierde: queda en la nueva pestaña «Por asignar» del Inventario, con un número azul en el menú. Desde ahí la asignas al lote correcto o la descartas.',
+    'Si vas a marcar a mano una venta en un keko donde el Sniper ya las anota, la app te pregunta primero, para que no se cuente dos veces.',
+    'Te avisamos de cada venta: dentro de la app y, si está minimizada, con una notificación que abre directo ese keko. Si vendes varias seguidas, llegan juntas en un solo aviso. Puedes apagarlo en Ajustes → Notificaciones.',
+    'Arreglado: cuando el Sniper retira una oferta, ya no puede devolver a tu inventario un lote de otro keko.',
+  ],
   '1.6.1': [
     'Si algo falla al abrir la app, ya no se queda cargando para siempre: te muestra qué pasó en una ventana fija, con un botón para copiar los detalles (o sacarles una foto con calma) y otro para reintentar.',
     'Arriba a la derecha aparece un botón rojo cuando hubo errores: ábrelo cuando quieras para verlos y copiarlos, y así enviarlos para que se revisen.',

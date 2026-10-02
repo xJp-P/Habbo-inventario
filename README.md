@@ -1,6 +1,6 @@
 # Habbo Inventario
 
-Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de furnis en **Habbo.es**: stock, costo promedio, precios de lista, ganancias esperadas y realizadas con la comisión exacta del mercadillo, alertas de pérdida y compras en tiempo real desde **SniperMercadillo** (extensión de G-Earth), aunque los snipers corran en servidores remotos.
+Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de furnis en **Habbo.es**: stock, costo promedio, precios de lista, ganancias esperadas y realizadas con la comisión exacta del mercadillo, alertas de pérdida y compras y ventas en tiempo real desde **SniperMercadillo** (extensión de G-Earth), aunque los snipers corran en servidores remotos.
 
 > Proyecto de fans, sin relación con Sulake ni con Habbo. Habbo, los nombres y las imágenes de los furnis son de Sulake Oy.
 > La app funciona **solo con el hotel Habbo.es**. No tiene soporte para Habbo Origins ni para otros hoteles.
@@ -23,7 +23,7 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 |---|---|
 | **Resumen** | Lo **publicado** (inversión, lo que te entraría, ganancia esperada y margen), lo que tienes **en mano** (unidades y costo), ventas realizadas, compras del Sniper por revisar, alertas de lo publicado con pérdida y la tasa del Lingo |
 | **Mercadillo** | Solo lo que está publicado en el mercadillo de Habbo.es: precio de lista, unidades, costo promedio y ganancia neta esperada. En cada fila, **Vendido** y **Retirar** (de lo más antiguo a lo más nuevo, FIFO) |
-| **Inventario** | Cada lote en tres pestañas: **Comprado** (en mano, solo costo), **Publicado** y **Vendido**. Publicar, retirar, registrar ventas fuera del Sniper (tradeos sin comisión o ventas desde otro keko) y el número de serie de los **LTD** (#45). Arriba, las compras que llegaron del Sniper para revisarlas |
+| **Inventario** | Cada lote en tres pestañas: **Comprado** (en mano, solo costo), **Publicado** y **Vendido** (lo que registró el Sniper, con la etiqueta «Vendido · Sniper» y la hora de la venta). Publicar, retirar, registrar ventas fuera del Sniper (tradeos sin comisión o ventas desde otro keko) y el número de serie de los **LTD** (#45). Arriba, las compras que llegaron del Sniper para revisarlas; en **Por asignar**, las ventas del Sniper que no casaron con ningún lote, para asignarlas o descartarlas |
 | **Auditoría** | Compara el inventario de Habbo que envía cada sniper (uno por keko) con lo que la app tiene en mano y muestra **solo las diferencias**: sobrantes (entrada con costo, «son de este keko» o «volvieron de otro keko»), faltantes (las vendí, están en otro keko o borrar), LTD con otro número y furnis sin registrar (agregar o quitar de la auditoría). Si el Sniper sabe lo que costó un furni, la entrada propone ese costo |
 | **Ajustes** | Los datos para configurar cada sniper y sus tokens (uno por VPS), tus **kekos** (los de los snipers y los manuales), importar desde Excel, catálogo de Habbo.es, versión y actualizaciones, tema y cuenta |
 
@@ -209,15 +209,16 @@ Si no creas el `.env`, la app abre el mismo asistente que en la opción A y guar
 1. En la app: **Ajustes → Conexión con SniperMercadillo → Crear token**, uno por cada VPS. Cópialo: se muestra una sola vez.
 2. En la configuración del sniper de ese VPS: la Project URL, la clave pública y ese token.
 
-El bot envía tres tipos de evento a una sola función de Supabase (`registrar_eventos_sniper`):
+El bot envía cuatro tipos de evento a una sola función de Supabase (`registrar_eventos_sniper`):
 
 | Evento | Qué pasa en el Inventario |
 |---|---|
 | **compra** | Entra como lote **«Por revisar»**: cuenta en tu stock y, al confirmarlo, pasa a en mano |
 | **publicar** | Las unidades pasan a **Publicado** con su precio de lista (FIFO; si es una parte del lote, el lote se divide) |
-| **recuperar** | Las unidades publicadas vuelven a **Comprado** (FIFO) |
+| **recuperar** | Las unidades publicadas vuelven a **Comprado** (FIFO, en su keko o lo sin keko) |
+| **venta** | Una unidad publicada pasa a **Vendido** en el keko de la venta, con el neto y la comisión exactos. Si no casa con ningún lote (furni sin registrar, nada publicado en ese keko, LTD con otro número o publicado después de la venta), queda en **Por asignar** |
 
-Los reintentos del bot con el mismo `id_externo` se ignoran. El contrato completo (campos, respuesta y errores) está en [`docs/INTEGRACION-SNIPER.md`](docs/INTEGRACION-SNIPER.md).
+Los reintentos del bot con el mismo `id_externo` se ignoran. Si el Sniper registra las ventas de un keko, la app pregunta antes de que marques una a mano en ese keko, para que no se cuente dos veces. El contrato completo (campos, respuesta y errores) está en [`docs/INTEGRACION-SNIPER.md`](docs/INTEGRACION-SNIPER.md).
 
 ## Problemas comunes
 
