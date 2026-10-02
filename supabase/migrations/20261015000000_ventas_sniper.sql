@@ -7,8 +7,9 @@
 -- despues las marca como vistas y Habbo las borra, aqui ninguna venta se puede perder:
 --
 --   1. eventos_sniper acepta el tipo 'venta'.
---   2. compras.vendido_por: 'sniper' en las ventas que registro el Sniper (las demas, null).
---      v_compras lo expone (se recrea junto con v_furnis, que depende de ella).
+--   2. compras.vendido_por: 'sniper' en las ventas que registro el Sniper (las demas, null),
+--      y compras.vendido_en: la hora exacta de esa venta (las demas solo tienen el dia).
+--      v_compras los expone (se recrea junto con v_furnis, que depende de ella).
 --   3. ventas_por_asignar: la venta que no se puede casar con un lote queda guardada aqui
 --      (pendiente / aplicada / descartada). Cada usuario ve solo las suyas; se escribe
 --      solo con las funciones de esta migracion.
@@ -21,7 +22,7 @@
 --          antes que uno con numero (si la venta trae numero, uno con OTRO numero nunca se
 --          toca); el mismo precio de lista; lo publicado hace mas tiempo.
 --      Vende con vender_lote (divide el lote si hace falta; la parte vendida conserva su
---      keko), guarda el neto y la comision, el dia de la venta y vendido_por = 'sniper'.
+--      keko), guarda el neto y la comision, el dia y la hora de la venta y vendido_por = 'sniper'.
 --      La unidad vendida se queda con el numero LTD de la venta y con el keko de la venta
 --      si no tenia. Si no casa, queda «por asignar» y responde por_asignar: true.
 --   5. publicar acepta `fecha` (la confirmacion de Habbo): es la hora de publicacion del
@@ -31,7 +32,7 @@
 --      usuario, sin la regla de la hora) y descartar_venta_por_asignar.
 --   7. recuperar ya no cruza kekos: un sniper con keko toma de su keko y luego de lo sin
 --      keko, nunca de otro.
---   8. revertir_venta limpia vendido_por; la limpieza profunda de tokens borra tambien las
+--   8. revertir_venta limpia vendido_por y vendido_en; la limpieza profunda borra tambien las
 --      ventas por asignar de ese keko.
 -- =============================================================================
 
@@ -62,19 +63,20 @@ $$;
 alter table public.eventos_sniper add constraint eventos_sniper_tipo_evento_check
   check (tipo_evento in ('compra', 'publicar', 'recuperar', 'venta'));
 
--- ─── 2. Quién registró cada venta ───────────────────────────────────────────
+-- ─── 2. Quién registró cada venta, y a qué hora ─────────────────────────────
 
 alter table public.compras add column if not exists vendido_por text;
+alter table public.compras add column if not exists vendido_en timestamptz;
 alter table public.compras drop constraint if exists compras_vendido_por_valido;
 alter table public.compras add constraint compras_vendido_por_valido
   check (vendido_por is null or vendido_por in ('sniper', 'manual'));
 
--- ─── 3. Vistas (v_compras expone vendido_por) ───────────────────────────────
+-- ─── 3. Vistas (v_compras expone vendido_por y vendido_en) ──────────────────
 
 drop view if exists public.v_furnis;
 drop view if exists public.v_compras;
 
--- Igual que en 20261007000000, más vendido_por.
+-- Igual que en 20261007000000, más vendido_por y vendido_en.
 create view public.v_compras with (security_invoker = true) as
 select
   n.*,
@@ -100,7 +102,7 @@ from (
     from (
       select
         c.id, c.furni_id, f.nombre, f.classname, f.revision,
-        c.estado, c.pendiente, c.fuente, c.id_externo, c.instancia, c.sprite_id, c.numero_ltd, c.keko, c.vendido_por,
+        c.estado, c.pendiente, c.fuente, c.id_externo, c.instancia, c.sprite_id, c.numero_ltd, c.keko, c.vendido_por, c.vendido_en,
         c.cantidad, c.moneda_compra, c.precio_compra,
         c.moneda_venta as moneda_venta_real, c.precio_venta as precio_venta_real, c.comision_venta,
         c.moneda_lista, c.precio_lista, c.publicado_en, c.publicado_por,
@@ -328,8 +330,8 @@ begin
 end;
 $$;
 
--- Vende UNA unidad del lote como venta del Sniper: neto, comision, dia de la venta (UTC),
--- vendido_por, numero LTD de la venta y su keko si el lote no tenia. Devuelve el detalle
+-- Vende UNA unidad del lote como venta del Sniper: neto, comision, dia (UTC) y hora exacta
+-- de la venta, vendido_por, numero LTD de la venta y su keko si el lote no tenia. Devuelve el detalle
 -- (tambien la ganancia frente al costo del lote, para el log y el Discord del bot).
 create or replace function public._vender_lote_sniper(
   p_lote bigint, p_precio numeric, p_ltd integer, p_keko text, p_vendido_en timestamptz)
@@ -352,7 +354,7 @@ begin
   v_venta := (r ->> 'venta_id')::bigint;
   v_neto := (r ->> 'precio_venta')::numeric;
   update public.compras
-     set vendido_por = 'sniper', numero_ltd = coalesce(numero_ltd, p_ltd), keko = coalesce(keko, p_keko)
+     set vendido_por = 'sniper', vendido_en = p_vendido_en, numero_ltd = coalesce(numero_ltd, p_ltd), keko = coalesce(keko, p_keko)
    where id = v_venta
   returning keko into v_keko;
   select f.nombre into v_nombre from public.furnis f where f.id = c.furni_id;
@@ -393,6 +395,7 @@ declare
   v_motivo text;
   v_pendiente bigint;
   v_comision numeric;
+  v_nombre text;
 begin
   if v_keko is null then raise exception 'Falta keko: la cuenta de Habbo donde se vendio.'; end if;
   if length(v_keko) > 60 then raise exception 'keko demasiado largo (maximo 60 caracteres).'; end if;
@@ -448,8 +451,9 @@ begin
           v_precio, v_ltd, v_vendido, v_causa, v_motivo)
   returning id into v_pendiente;
   v_comision := public.comision_mercadillo(v_precio);
+  select f.nombre into v_nombre from public.furnis f where f.id = v_furni;
   return jsonb_build_object('por_asignar', true, 'causa', v_causa, 'motivo', v_motivo, 'venta_por_asignar_id', v_pendiente,
-                            'furni_id', v_furni, 'keko', v_keko, 'precio', v_precio, 'comision', v_comision,
+                            'furni_id', v_furni, 'nombre', v_nombre, 'keko', v_keko, 'precio', v_precio, 'comision', v_comision,
                             'neto', v_precio - v_comision, 'numero_ltd', v_ltd);
 end;
 $$;
@@ -771,7 +775,8 @@ begin
 
   update public.compras
      set estado = case when c.precio_lista is not null then 'publicado' else 'comprado' end,
-         moneda_venta = null, precio_venta = null, comision_venta = null, fecha_venta = null, vendido_por = null
+         moneda_venta = null, precio_venta = null, comision_venta = null, fecha_venta = null,
+         vendido_por = null, vendido_en = null
    where id = c.id;
   return jsonb_build_object('fusionada', false, 'compra_id', c.id);
 end;

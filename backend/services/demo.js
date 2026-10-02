@@ -4,10 +4,11 @@
 //
 // Levanta el Postgres local (PGlite) con el MISMO esquema de supabase/migrations
 // (empieza vacio; `npm run demo` importa el unico .xlsx de la raiz, si hay) y permite
-// simular eventos de un SniperMercadillo (compra, publicar, recuperar y el envio del
-// inventario de su keko para la auditoria) desde Ajustes. Los eventos pasan por
-// la funcion SQL real registrar_eventos_sniper, con la clave "anon", un token de sniper
-// y SOLO el sprite_id del furni, igual que los envia el bot desde el VPS.
+// simular eventos de un SniperMercadillo (compra, publicar, recuperar, venta, una venta
+// que queda por asignar y el envio del inventario de su keko para la auditoria) desde
+// Ajustes. Los eventos pasan por la funcion SQL real registrar_eventos_sniper, con la
+// clave "anon", un token de sniper y SOLO el sprite_id del furni, igual que los envia el
+// bot desde el VPS.
 //
 // La base demo se guarda en data/demo-db/ (bórrala para empezar de cero).
 
@@ -16,6 +17,7 @@ const path = require('path');
 const { crearClienteLocal } = require('../db/clienteLocal');
 
 const USUARIO = { email: 'demo@habbo.local', password: 'demo1234' };
+const KEKO = 'KekoDemo';
 
 async function crearDemo({ dirDatos }) {
   const dir = path.join(dirDatos, 'demo-db');
@@ -129,15 +131,52 @@ async function crearDemo({ dirDatos }) {
     const registrados = new Set(furnis.filter((f) => f.sprite_id !== null).map((f) => f.tipo + ':' + f.sprite_id));
     const deco = DECORACION.map((c) => furnidata.porClase(c)).find((f) => f && !registrados.has(f.tipo + ':' + f.sprite_id));
     if (deco) lista.push({ sprite_id: deco.sprite_id, tipo: deco.tipo, cantidad: 12, costo_unidad: 3.4, unidades_con_costo: 5, costo_medio: true });
-    const r = await anon.rpc('auditar_inventario', { token_sniper: token, keko: 'KekoDemo', hotel: 'es', inventario: lista });
+    const r = await anon.rpc('auditar_inventario', { token_sniper: token, keko: KEKO, hotel: 'es', inventario: lista });
     if (r.error) throw new Error(r.error.message);
     return r.data;
   }
 
+  // Una venta del mercadillo como la envia el Sniper (pestaña «vendido»): una unidad, con su
+  // id de venta, su keko, el precio de lista y la hora exacta (migracion 20261015000000).
+  //   porAsignar = false: una unidad publicada del Sniper demo (en KekoDemo o sin keko).
+  //   porAsignar = true: una venta de ANTES de que se publicara ese furni (10 min antes de
+  //     su primera publicacion): la base no la casa con ningun lote y queda por asignar. Si
+  //     no hay ninguno asi, la venta de un furni que la app no tiene registrado.
+  async function armarVenta(porAsignar) {
+    const [furnis, compras] = await Promise.all([negocio.listarFurnis(), negocio.listarCompras()]);
+    const porId = new Map(furnis.filter((f) => f.sprite_id !== null).map((f) => [f.id, f]));
+    const lotes = compras.filter((c) => c.estado === 'publicado' && porId.has(c.furni_id) && (!c.keko || c.keko === KEKO)
+      && (c.moneda_lista || 'creditos') === 'creditos');
+    contador++;
+    const base = { tipo_evento: 'venta', id_externo: `ven_demo_${Date.now()}_${contador}`, oferta_id: null, hotel: 'es', keko: KEKO };
+    let lote = null;
+    let fecha = Date.now();
+    if (!porAsignar) {
+      if (!lotes.length) throw new Error('No hay nada publicado del Sniper demo (KekoDemo o sin keko) para vender: simula antes una compra y una publicación.');
+      lote = azar(lotes);
+    } else {
+      const porFurni = new Map();
+      for (const l of lotes) { if (!porFurni.has(l.furni_id)) porFurni.set(l.furni_id, []); porFurni.get(l.furni_id).push(l); }
+      const conFecha = [...porFurni.values()].filter((ls) => ls.every((l) => l.publicado_en));
+      if (conFecha.length) {
+        const ls = azar(conFecha);
+        lote = ls[0];
+        fecha = Math.min(...ls.map((l) => new Date(l.publicado_en).getTime())) - 10 * 60 * 1000;
+      } else {
+        const registrados = new Set(furnis.filter((f) => f.sprite_id !== null).map((f) => f.tipo + ':' + f.sprite_id));
+        const deco = DECORACION.map((c) => furnidata.porClase(c)).find((f) => f && !registrados.has(f.tipo + ':' + f.sprite_id));
+        if (!deco) throw new Error('No hay con qué simular una venta por asignar.');
+        return { ...base, sprite_id: deco.sprite_id, tipo: deco.tipo, precio: 50, numero_ltd: null, fecha };
+      }
+    }
+    const f = porId.get(lote.furni_id);
+    return { ...base, sprite_id: f.sprite_id, tipo: f.tipo, precio: Math.max(1, Math.round(Number(lote.precio_lista))), numero_ltd: lote.numero_ltd || null, fecha };
+  }
+
   async function simularEvento(tipo) {
     if (tipo === 'inventario') return simularInventario();
-    if (!['compra', 'publicar', 'recuperar'].includes(tipo)) throw new Error('Tipo de evento no valido.');
-    const evento = await armarEvento(tipo);
+    if (!['compra', 'publicar', 'recuperar', 'venta', 'venta-por-asignar'].includes(tipo)) throw new Error('Tipo de evento no valido.');
+    const evento = tipo.startsWith('venta') ? await armarVenta(tipo === 'venta-por-asignar') : await armarEvento(tipo);
     const r = await anon.rpc('registrar_eventos_sniper', { token_sniper: token, eventos: [evento] });
     if (r.error) throw new Error(r.error.message);
     return r.data;

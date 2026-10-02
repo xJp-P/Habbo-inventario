@@ -6,11 +6,12 @@
 //   lista           sesion activa: la API de datos funciona
 //
 // TIEMPO REAL: con la sesion activa se suscribe a los INSERT de `eventos_sniper` (una
-// fila por cada compra, publicacion o recuperacion que envia un SniperMercadillo;
+// fila por cada compra, publicacion, recuperacion o venta que envia un SniperMercadillo;
 // Supabase Realtime respeta RLS: solo llegan las filas propias). Las rafagas se agrupan
 // (~0,7 s); antes de avisar se corre `alRecibirEventos` (sincroniza con el catalogo los
 // furnis nuevos que llegaron solo con sprite_id) y luego se publica un evento
-// `eventos-sniper` en el bus que alimenta /api/eventos.
+// `eventos-sniper` en el bus que alimenta /api/eventos. Si en la rafaga hay ventas, sus
+// filas van a `alRecibirVentas` (el servidor arma con ellas el aviso del sistema).
 //
 // AUDITORIA EN VIVO (migracion 20261011000000): la foto del inventario de cada sniper
 // (inventario_habbo) tambien llega por Realtime, en un canal APARTE: sin esa migracion la
@@ -49,7 +50,7 @@ function datosParaSniper(config) {
 
 function crearServicioConexion({
   raiz, dirDatos, eventos, log = () => {}, cifrado = null, clienteFijo = null, demo = false, alRecibirEventos = null,
-  alEscucharInventario = null, alRecibirInventario = null, esperaInventarioMs = ESPERA_INVENTARIO_MS,
+  alEscucharInventario = null, alRecibirInventario = null, esperaInventarioMs = ESPERA_INVENTARIO_MS, alRecibirVentas = null,
 }) {
   let config = clienteFijo ? { url: 'local', anonKey: 'local', origen: 'demo' } : leerConfiguracion({ raiz, dirDatos });
   let cliente = clienteFijo || (config ? crearClienteSupabase({ ...config, dirDatos, cifrado }) : null);
@@ -77,8 +78,13 @@ function crearServicioConexion({
       compras: cuenta('compra'),
       publicaciones: cuenta('publicar'),
       recuperaciones: cuenta('recuperar'),
+      ventas: cuenta('venta'),
       unidades: filas.reduce((s, f) => s + (Number(f.cantidad) || 0), 0),
     });
+    const ventas = filas.filter((f) => f.tipo_evento === 'venta' && f.id);
+    if (ventas.length && alRecibirVentas) {
+      try { await alRecibirVentas(ventas); } catch (e) { log('No se pudo armar el aviso de las ventas del Sniper: ' + e.message); }
+    }
   }
 
   async function avisarInventario() {

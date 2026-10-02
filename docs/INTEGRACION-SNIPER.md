@@ -222,7 +222,7 @@ El Sniper lee la pestaña «vendido» de «Mis ventas» (`GetMarketplaceOwnOffer
 | Dónde | Lotes `publicado` de ese furni en **ese keko** (sin distinguir mayúsculas) o **sin keko**. Nunca de otro keko |
 | Cuándo | Solo lotes publicados **antes de la venta**, con 2 min de margen por la diferencia de relojes. Lo publicado sin fecha (lo del Excel) también cuenta. Por eso `publicar` lleva su `fecha` (la confirmación de Habbo): sin ella, la hora de publicación sería la de llegada del evento, y una cola atrasada dejaría la venta «antes» de su propia publicación |
 | Orden | 1) el mismo `numero_ltd`; 2) el keko antes que lo sin keko; 3) un lote sin número antes que uno con número (si la venta trae número, un lote con **otro** número nunca se toca); 4) el mismo precio de lista; 5) lo publicado hace más tiempo |
-| Qué hace | Una unidad pasa a `vendido` (si el lote tiene más, se divide) con el neto, la comisión, el día de la venta (UTC) y la marca de que la registró el Sniper. La unidad vendida se queda con el `numero_ltd` de la venta y, si el lote no tenía keko, con el de la venta |
+| Qué hace | Una unidad pasa a `vendido` (si el lote tiene más, se divide) con el neto, la comisión, el día (UTC) y la hora exacta de la venta (la `fecha` del evento) y la marca de que la registró el Sniper. La unidad vendida se queda con el `numero_ltd` de la venta y, si el lote no tenía keko, con el de la venta |
 
 ### Ventas «por asignar»
 
@@ -256,9 +256,11 @@ Una venta por asignar cuenta como **procesada** (se quita de la cola), y el tota
 ```json
 { "indice": 1, "id_externo": "ven_174670944", "tipo_evento": "venta", "por_asignar": true,
   "causa": "despues", "motivo": "Lo publicado de Corona Estrella en Ux_Data se publicó después de la venta.",
-  "venta_por_asignar_id": 7, "furni_id": 12, "keko": "Ux_Data",
+  "venta_por_asignar_id": 7, "furni_id": 12, "nombre": "Corona Estrella", "keko": "Ux_Data",
   "precio": 128, "comision": 3, "neto": 125, "numero_ltd": null }
 ```
+
+(`furni_id` y `nombre` van en `null` si la app no tiene ese furni.)
 
 A `errores`, sin registrarse, solo va lo mal formado: sin `keko`, `sprite_id`, `precio` o `fecha`; una fecha en segundos o ilegible; un `tipo` desconocido; `cantidad` distinta de 1; otro hotel.
 

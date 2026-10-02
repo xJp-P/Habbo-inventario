@@ -277,11 +277,14 @@ export function AjustesView(props) {
     API.post('/api/demo/simular-sniper', { tipo: tipo }).then(function (r) {
       if (r && r.errores && r.errores.length) props.onError(r.errores[0].error);
       if (r && tipo === 'inventario') props.onCambio('Inventario de ' + r.keko + ' recibido: revisa Auditoría');
+      var v = r && tipo.indexOf('venta') === 0 && r.eventos && r.eventos[0];
+      if (v) props.onCambio(v.por_asignar ? 'Venta del Sniper por asignar: ' + v.motivo
+        : 'Venta del Sniper registrada: 1 × ' + v.nombre + ' en ' + v.keko + ' · entraron ' + v.neto + ' cr');
       cargar();
     });
   }
 
-  var ejemplo = conexion && conexion.url_eventos ? 'POST ' + conexion.url_eventos + '\napikey: <SUPABASE_ANON_KEY>\nAuthorization: Bearer <SUPABASE_ANON_KEY>\nContent-Type: application/json\n\n{ "token_sniper": "hbi_…",\n  "eventos": [\n    { "tipo_evento": "compra",    "id_externo": "…", "sprite_id": 4623, "cantidad": 1, "precio": 100, "moneda": "creditos", "hotel": "es", "notas": "…" },\n    { "tipo_evento": "publicar",  "id_externo": "pub_…", "sprite_id": 4623, "cantidad": 1, "precio_lista": 125, "moneda": "creditos", "hotel": "es" },\n    { "tipo_evento": "recuperar", "id_externo": "rec_…", "sprite_id": 4623, "cantidad": 1, "hotel": "es" } ] }' : null;
+  var ejemplo = conexion && conexion.url_eventos ? 'POST ' + conexion.url_eventos + '\napikey: <SUPABASE_ANON_KEY>\nAuthorization: Bearer <SUPABASE_ANON_KEY>\nContent-Type: application/json\n\n{ "token_sniper": "hbi_…",\n  "eventos": [\n    { "tipo_evento": "compra",    "id_externo": "…", "sprite_id": 4623, "cantidad": 1, "precio": 100, "moneda": "creditos", "hotel": "es", "notas": "…" },\n    { "tipo_evento": "publicar",  "id_externo": "pub_…", "sprite_id": 4623, "cantidad": 1, "precio_lista": 125, "moneda": "creditos", "hotel": "es" },\n    { "tipo_evento": "recuperar", "id_externo": "rec_…", "sprite_id": 4623, "cantidad": 1, "hotel": "es" },\n    { "tipo_evento": "venta",     "id_externo": "ven_…", "keko": "…", "sprite_id": 4623, "precio": 125, "fecha": 1790792395000, "hotel": "es" } ] }' : null;
 
   return h('div', { className: 'contenedor fade-in', style: { display: 'flex', flexDirection: 'column', gap: 14 } },
     confirmacion ? h(Confirmar, Object.assign({}, confirmacion, {
@@ -303,7 +306,9 @@ export function AjustesView(props) {
         h('button', { className: 'btn btn-chico', onClick: function () { simular('compra'); } }, h(Ico, { name: 'cart', size: 12 }), 'Compra'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('publicar'); } }, h(Ico, { name: 'lock', size: 12 }), 'Publicar'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('recuperar'); } }, h(Ico, { name: 'undo', size: 12 }), 'Recuperar'),
-        h('button', { className: 'btn btn-chico', onClick: function () { simular('inventario'); } }, h(Ico, { name: 'audit', size: 12 }), 'Inventario')) : null,
+        h('button', { className: 'btn btn-chico', onClick: function () { simular('inventario'); } }, h(Ico, { name: 'audit', size: 12 }), 'Inventario'),
+        h('button', { className: 'btn btn-chico', onClick: function () { simular('venta'); } }, h(Ico, { name: 'tag', size: 12 }), 'Venta'),
+        h('button', { className: 'btn btn-chico', onClick: function () { simular('venta-por-asignar'); } }, h(Ico, { name: 'radar', size: 12 }), 'Venta por asignar')) : null,
 
       nuevo ? h('div', { className: 'token-nuevo', style: { margin: '10px 0' } },
         h('div', { style: { fontWeight: 700, color: 'var(--green)', marginBottom: 6 } }, 'Token de "' + nuevo.nombre + '" — cópialo ahora, no se vuelve a mostrar'),

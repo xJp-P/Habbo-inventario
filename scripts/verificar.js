@@ -136,15 +136,35 @@ async function main() {
   assert.equal(avisoCatalogo({ anterior: 'a', version: 'b', nuevos: 0 }), null, 'una version sin furnis nuevos no avisa');
   assert.equal(avisoCatalogo({ anterior: 'a', version: 'b', nuevos: 3 }).cuerpo, '3 furnis nuevos llegaron al catálogo. Ya puedes buscarlos en la app.');
   ok('avisos: solo diferencias nuevas de la Auditoria (no lo que ya habia, ni al resolver; seguidas, sin sonido) y catalogos con furnis nuevos');
+  const { crearAvisosVentas } = require('../backend/core/avisos');
+  let relojV = 0;
+  const avV = crearAvisosVentas({ ahora: () => relojV });
+  const ventaAv = (extra) => ({ keko: 'Ux_Data', nombre: 'Corona Estrella', precio: 128, ganancia_cr: 10, por_asignar: false, ...extra });
+  let aV = avV.avisar([ventaAv()]);
+  assert.deepEqual([aV.length, aV[0].titulo, aV[0].cuerpo, aV[0].silencioso, aV[0].destino],
+    [1, 'Vendido en Ux_Data', '1 × Corona Estrella a 128 cr · +10 cr de ganancia', false, { vista: 'inventario', filtro: 'vendido', keko: 'Ux_Data' }]);
+  relojV = 30 * 1000;
+  aV = avV.avisar([ventaAv(), ventaAv(), ventaAv({ nombre: 'Cama Criogénica Negra', numero_ltd: 1475, precio: 210, ganancia_cr: 5 }), ventaAv({ keko: '-JDark', nombre: 'Trono HC', ganancia_cr: -3 })]);
+  assert.deepEqual(aV.map((a) => [a.titulo, a.cuerpo, a.silencioso]), [
+    ['Vendido en Ux_Data: 3 ventas', '2 × Corona Estrella y 1 × Cama Criogénica Negra #1475 · +25 cr de ganancia', true],
+    ['Vendido en -JDark', '1 × Trono HC a 128 cr · 3 cr de pérdida', false]], 'un aviso por keko; el segundo de Ux_Data en 2 min, sin sonido');
+  aV = avV.avisar([ventaAv({ por_asignar: true, nombre: null, sprite_id: 98765, ganancia_cr: null, precio: 300 })]);
+  assert.deepEqual([aV[0].titulo, aV[0].cuerpo, aV[0].destino.filtro],
+    ['Venta por asignar en Ux_Data', '1 × un furni sin registrar (sprite 98765) a 300 cr: no se supo de qué lote salió. Ábrela para asignarla.', 'por_asignar']);
+  aV = avV.avisar([ventaAv(), ventaAv({ por_asignar: true }), ventaAv({ por_asignar: true, nombre: 'Trono HC' })]);
+  assert.deepEqual([aV[0].titulo, aV[0].cuerpo, aV[0].destino.filtro], ['Vendido en Ux_Data: 3 ventas', '1 × Corona Estrella · +10 cr de ganancia · 2 quedaron por asignar', 'por_asignar']);
+  aV = avV.avisar(['A', 'B', 'C', 'D', 'E'].map((x) => ventaAv({ nombre: 'Furni ' + x })));
+  assert.equal(aV[0].cuerpo, '1 × Furni A, 1 × Furni B y 3 furnis más · +50 cr de ganancia', 'una lista larga se resume');
+  ok('avisos de ventas del Sniper: uno por keko y rafaga (lo vendido agrupado, LTD con su numero, ganancia o perdida; las por asignar abren la bandeja); seguidos, sin sonido');
 
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');
   assert.equal(notif.APP_ID, paquete.build.appId, 'el AUMID de Windows es el appId que el instalador pone en el acceso directo');
   const dirPref = fs.mkdtempSync(path.join(os.tmpdir(), 'habbo-pref-'));
   const pref = notif.crearPreferencias(dirPref);
-  assert.deepEqual(pref.leer(), { inventario: true, catalogo: true }, 'encendidas si nunca se tocaron');
-  assert.deepEqual(pref.guardar({ catalogo: false, inventario: 'si', raro: true }), { inventario: true, catalogo: false });
-  assert.deepEqual(notif.crearPreferencias(dirPref).leer(), { inventario: true, catalogo: false }, 'quedan guardadas en la carpeta de datos');
+  assert.deepEqual(pref.leer(), { inventario: true, catalogo: true, ventas: true }, 'encendidas si nunca se tocaron');
+  assert.deepEqual(pref.guardar({ catalogo: false, inventario: 'si', raro: true }), { inventario: true, catalogo: false, ventas: true });
+  assert.deepEqual(notif.crearPreferencias(dirPref).leer(), { inventario: true, catalogo: false, ventas: true }, 'quedan guardadas en la carpeta de datos');
   class NotificacionFalsa {
     constructor(o) { this.o = o; this.manejadores = {}; NotificacionFalsa.creadas.push(this); }
     static isSupported() { return true; }
@@ -173,9 +193,21 @@ async function main() {
   ventanaFalsa.min = true;
   avisador.alEvento({ tipo: 'catalogo-nuevo', titulo: 'Catálogo', cuerpo: 'Nuevo' });
   assert.equal(NotificacionFalsa.creadas.length, 1, 'el aviso del catalogo esta apagado en las preferencias');
+  const evVen = { tipo: 'ventas', avisos: [{ keko: 'Ux_Data', titulo: 'Vendido en Ux_Data', cuerpo: '1 × Corona Estrella a 128 cr · +10 cr de ganancia', silencioso: false,
+    destino: { vista: 'inventario', filtro: 'vendido', keko: 'Ux_Data' } }] };
+  avisador.alEvento(evVen);
+  const toastV = NotificacionFalsa.creadas[NotificacionFalsa.creadas.length - 1];
+  assert.deepEqual([NotificacionFalsa.creadas.length, toastV.o.title, toastV.o.id, toastV.o.id.length <= 16], [2, 'Vendido en Ux_Data', notif.idVentas('Ux_Data'), true]);
+  toastV.manejadores.click();
+  assert.deepEqual(abiertos[abiertos.length - 1], { vista: 'inventario', filtro: 'vendido', keko: 'Ux_Data' }, 'el clic en el aviso de ventas abre Vendido de ese keko');
+  pref.guardar({ ventas: false });
+  ventanaFalsa.min = true;
+  avisador.alEvento(evVen);
+  assert.equal(NotificacionFalsa.creadas.length, 2, 'con las ventas apagadas en Ajustes, no sale');
+  pref.guardar({ ventas: true });
   ventanaFalsa.min = false; ventanaFalsa.foco = true;
   assert.equal(avisador.probar(), 'mostrada', 'la de prueba sale aunque estes mirando la app');
-  ok('notificaciones: AUMID = appId, solo si no estas mirando la app, respetan tus preferencias y el clic abre la Auditoria del keko');
+  ok('notificaciones: AUMID = appId, solo si no estas mirando la app, respetan tus preferencias y el clic abre la Auditoria del keko o Vendido (ventas del Sniper)');
 
   // ── Mac (plan B): el Dock rebota y muestra un globo con los avisos sin ver ──
   const dockFalso = { rebotes: 0, globos: [], rebotar() { this.rebotes++; }, globo(n) { this.globos.push(n); } };
@@ -1173,7 +1205,7 @@ async function main() {
     assert.equal((await anonVs.rpc('auditar_inventario', { token_sniper: tkVs.token, keko: 'Ux_Data', hotel: 'es', inventario: [] })).error, null);
     const evVs = async (eventos, token = tkVs.token) => (await anonVs.rpc('registrar_eventos_sniper', { token_sniper: token, eventos })).data;
     const sqlVs = async (q, p = []) => (await vs.pg.query(q, p)).rows;
-    const loteVs = async (id) => (await vs.from('compras').select('id,estado,cantidad,keko,numero_ltd,precio_venta,comision_venta,vendido_por,fecha_venta,publicado_en,origen_id').eq('id', id)).data[0];
+    const loteVs = async (id) => (await vs.from('compras').select('id,estado,cantidad,keko,numero_ltd,precio_venta,comision_venta,vendido_por,vendido_en,fecha_venta,publicado_en,origen_id').eq('id', id)).data[0];
     const porAsignar = async (idExt) => (await vs.from('ventas_por_asignar').select('*').eq('id_externo', idExt)).data[0];
     const H = 3600000;
     const T0 = Date.now() - 5 * H;
@@ -1195,6 +1227,7 @@ async function main() {
     assert.deepEqual([vend1.estado, vend1.cantidad, vend1.precio_venta, vend1.comision_venta, vend1.vendido_por, vend1.keko, vend1.origen_id],
       ['vendido', 1, 125, 3, 'sniper', 'Ux_Data', pub1]);
     assert.equal(vend1.fecha_venta, new Date(T0 + H).toISOString().slice(0, 10), 'el dia de la venta (UTC)');
+    assert.equal(new Date(vend1.vendido_en).getTime(), T0 + H, 'y la hora exacta de la venta');
     assert.equal((await loteVs(pub1)).cantidad, 6);
     assert.equal((await negVs.compraPorId(vend1.id)).vendido_por, 'sniper', 'v_compras expone vendido_por');
     rVs = await evVs([ventaVs('ven_1001', S1, 128, T0 + H)]);
@@ -1304,6 +1337,23 @@ async function main() {
     assert.match((await vs2.rpc('aplicar_venta_por_asignar', { p_id: pend9.id })).error.message, /no existe/);
     assert.match((await vs2.rpc('descartar_venta_por_asignar', { p_id: pend9.id })).error.message, /no existe/);
     assert.equal((await porAsignar('ven_9001')).estado, 'pendiente');
+    // Desde el servidor local: la bandeja, aplicar a un lote elegido, descartar y el detalle de lo que llego.
+    let bandejaVs = await negVs.ventasPorAsignar();
+    assert.deepEqual([bandejaVs.disponible, bandejaVs.ventas.map((v) => v.causa).sort()], [true, ['espacio', 'ltd', 'sin_furni']]);
+    await rechaza(negVs.aplicarVentaPorAsignar(pendL.id, { lote_id: 'abc' }), /El lote/);
+    await rechaza(negVs.aplicarVentaPorAsignar(pendL.id, { lote_id: lote1600 }), /LTD #1600/);
+    const pend5 = await porAsignar('ven_5002');
+    const loteS5 = (await sqlVs("select c.id from public.compras c join public.furnis f on f.id = c.furni_id where f.sprite_id = $1 and f.tipo = 'suelo' and c.estado = 'publicado'", [S5]))[0].id;
+    const aplicadaVs = await negVs.aplicarVentaPorAsignar(pend5.id, { lote_id: loteS5 });
+    assert.deepEqual([aplicadaVs.lote_id, aplicadaVs.precio, (await porAsignar('ven_5002')).estado, new Date((await loteVs(aplicadaVs.lote_vendido_id)).vendido_en).getTime()],
+      [loteS5, 15, 'aplicada', T0 + H], 'el espacio dudoso se resuelve eligiendo el lote; la venta guarda su hora');
+    assert.deepEqual(await negVs.descartarVentaPorAsignar(pend9.id), { id: pend9.id, estado: 'descartada' });
+    bandejaVs = await negVs.ventasPorAsignar();
+    assert.deepEqual(bandejaVs.ventas.map((v) => [v.id, v.keko, v.numero_ltd, v.precio]), [[pendL.id, 'Ux_Data', 1601, 210]]);
+    const idsVs = (await sqlVs("select id from public.eventos_sniper where id_externo in ('ven_1001', 'ven_9001') order by id")).map((x) => x.id);
+    const detVs = (await negVs.detalleVentas(idsVs.concat([999999]))).sort((a, b) => a.id - b.id);
+    assert.deepEqual(detVs.map((d) => [d.keko, d.nombre, d.sprite_id, d.precio, d.ganancia_cr, d.por_asignar]),
+      [['Ux_Data', 'Sprite 990001 (suelo)', S1, 128, 10, false], ['Ux_Data', null, 990099, 50, null, true]], 'el detalle de lo que llego, para el aviso del sistema');
     ok('ventas por asignar: lo que no casa (furni sin registrar, espacio dudoso, LTD con otro numero, publicado despues) se guarda y se aplica solo al llegar su publicacion (nunca una posterior); la bandeja lo aplica a un lote elegido o lo descarta; lo mal formado va a errores sin registrarse; nadie mas la ve');
 
     // publicar: fecha ISO; en el futuro, ilegible o sin ella -> la hora de llegada.
@@ -1327,7 +1377,8 @@ async function main() {
     assert.equal((await negVs.listarFurnis()).find((f) => f.sprite_id === S1).ganancia_realizada_cr, (125 - 115) + (140 - com140 - 115));
     const revVs = await negVs.revertirVenta(vend1500);
     const tras1500 = await loteVs(vend1500);
-    assert.deepEqual([revVs.fusionada, tras1500.estado, tras1500.vendido_por, tras1500.numero_ltd], [false, 'publicado', null, 1500], 'revertir limpia vendido_por (el LTD numerado no se fusiona)');
+    assert.deepEqual([revVs.fusionada, tras1500.estado, tras1500.vendido_por, tras1500.vendido_en, tras1500.numero_ltd], [false, 'publicado', null, null, 1500],
+      'revertir limpia vendido_por y la hora (el LTD numerado no se fusiona)');
     // La limpieza profunda de un token borra tambien las ventas por asignar de su keko.
     const tkKekoViejo = await negVs.crearToken('VPS Viejo');
     assert.equal((await anonVs.rpc('auditar_inventario', { token_sniper: tkKekoViejo.token, keko: 'KekoViejo', hotel: 'es', inventario: [] })).error, null);
@@ -1343,7 +1394,10 @@ async function main() {
     await v18.auth.signInWithPassword({ email: 'v18@prueba.local', password: 'clave-v18' });
     const conex18 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: v18 });
     await conex18.iniciar();
-    const tk18 = await crearServicioNegocio({ conexion: conex18, furnidata }).crearToken('VPS 18');
+    const neg18 = crearServicioNegocio({ conexion: conex18, furnidata });
+    const tk18 = await neg18.crearToken('VPS 18');
+    assert.deepEqual(await neg18.ventasPorAsignar(), { disponible: false, ventas: [] }, 'sin la migracion, la app no muestra la bandeja');
+    await rechaza(neg18.descartarVentaPorAsignar(1), /20261015000000_ventas_sniper/);
     const ev18 = async (eventos) => (await v18.comoAnon().rpc('registrar_eventos_sniper', { token_sniper: tk18.token, eventos })).data;
     let r18 = await ev18([compraVs('v18_c', S1, 2, 115), publicarVs('v18_p', S1, 2, 128, T0), ventaVs('v18_v', S1, 128, Date.now())]);
     assert.deepEqual([r18.procesados, r18.errores.length], [2, 1]);
@@ -1355,6 +1409,27 @@ async function main() {
     assert.deepEqual([r18.procesados, r18.eventos[0].por_asignar, r18.eventos[0].neto], [1, false, 125], 'tras la migracion, la misma venta (que no se habia registrado) entra');
     await v18.cerrar();
     ok('publicar guarda la hora de Habbo (ms o ISO; si no, la de llegada); recuperar ya no cruza kekos; las ventas del Sniper cuentan en la ganancia real y revertir limpia vendido_por; la limpieza profunda borra sus ventas por asignar; la migracion entra (dos veces) sobre una base con la 18');
+
+    // ── Modo demo: «Venta» y «Venta por asignar» pasan por la funcion real del Sniper ──
+    const { crearDemo } = require('../backend/services/demo');
+    const dirDemo = fs.mkdtempSync(path.join(os.tmpdir(), 'hbi-demo-'));
+    const demoT = await crearDemo({ dirDatos: dirDemo });
+    const conexDemo = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: demoT.cliente });
+    await conexDemo.iniciar();
+    const negDemo = crearServicioNegocio({ conexion: conexDemo, furnidata });
+    await demoT.preparar({ negocio: negDemo, furnidata });
+    await rechaza(demoT.simularEvento('venta'), /No hay nada publicado/);
+    assert.equal((await demoT.simularEvento('compra')).procesados, 1);
+    assert.equal((await demoT.simularEvento('publicar')).procesados, 1);
+    let rDemo = await demoT.simularEvento('venta');
+    assert.deepEqual([rDemo.procesados, rDemo.eventos[0].por_asignar, rDemo.eventos[0].keko], [1, false, 'KekoDemo']);
+    rDemo = await demoT.simularEvento('venta-por-asignar');
+    assert.deepEqual([rDemo.procesados, rDemo.eventos[0].por_asignar], [1, true]);
+    assert.ok(['despues', 'sin_furni'].includes(rDemo.eventos[0].causa), 'una venta anterior a la publicacion, o de un furni sin registrar');
+    assert.equal((await negDemo.ventasPorAsignar()).ventas.length, 1, 'y aparece en la bandeja');
+    await demoT.cliente.cerrar();
+    fs.rmSync(dirDemo, { recursive: true, force: true });
+    ok('modo demo: «Venta» vende una unidad publicada del Sniper demo y «Venta por asignar» deja una en la bandeja, por la funcion real del Sniper');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
     const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });
@@ -1748,6 +1823,35 @@ async function main() {
     assert.equal(h.status, 404);
     s2.close();
     ok(`asistente: detecta que migraciones faltan con la clave publica (0 en un proyecto recien creado, 1, 3, 8 y ${archivosMig.length} de ${archivosMig.length}) sin escribir nada; copia el SQL sin sesion y solo de supabase/migrations`);
+
+    // ── Ventas del Sniper desde la API de la app y en vivo ──
+    h = await pedir(puerto, 'GET', '/api/ventas-por-asignar');
+    assert.deepEqual([h.status, h.json.disponible, h.json.ventas], [200, true, []]);
+    h = await pedir(puerto, 'POST', '/api/ventas-por-asignar/abc/aplicar', { cuerpo: {} });
+    assert.equal(h.status, 400);
+    h = await pedir(puerto, 'POST', '/api/ventas-por-asignar/999999/aplicar', { cuerpo: { lote_id: 0 } });
+    assert.equal(h.status, 400, 'un lote invalido');
+    h = await pedir(puerto, 'POST', '/api/ventas-por-asignar/999999/descartar', { cuerpo: {} });
+    assert.deepEqual([h.status, /no existe/.test(h.json.error)], [404, true]);
+    // Una rafaga con una venta casada y otra por asignar: la interfaz recibe el aviso de eventos y el servidor publica `ventas`.
+    const tkEnVivo = await negocio.crearToken('VPS ventas en vivo');
+    const sVivo = 990777;
+    await sniper([{ tipo_evento: 'compra', id_externo: 'vivo_c', sprite_id: sVivo, cantidad: 2, precio: 100, hotel: 'es' },
+      { tipo_evento: 'publicar', id_externo: 'vivo_p', sprite_id: sVivo, cantidad: 2, precio_lista: 150, hotel: 'es', fecha: Date.now() - 60000 }], tkEnVivo.token);
+    await new Promise((res) => setTimeout(res, 1200));
+    const avisoEvVivo = esperarEvento(puerto, 'eventos-sniper');
+    const avisoVentas = esperarEvento(puerto, 'ventas');
+    await new Promise((res) => setTimeout(res, 150));
+    await sniper([{ tipo_evento: 'venta', id_externo: 'vivo_v1', hotel: 'es', keko: 'KekoVivo', sprite_id: sVivo, precio: 150, fecha: Date.now() },
+      { tipo_evento: 'venta', id_externo: 'vivo_v2', hotel: 'es', keko: 'KekoVivo', sprite_id: 990778, precio: 40, fecha: Date.now() }], tkEnVivo.token);
+    const [evVivo, evVentas] = await Promise.all([avisoEvVivo, avisoVentas]);
+    assert.equal(evVivo.ventas, 2, 'el aviso de eventos cuenta las ventas');
+    assert.deepEqual([evVentas.avisos.length, evVentas.avisos[0].titulo, evVentas.avisos[0].destino],
+      [1, 'Vendido en KekoVivo: 2 ventas', { vista: 'inventario', filtro: 'por_asignar', keko: 'KekoVivo' }]);
+    assert.equal(evVentas.avisos[0].cuerpo, '1 × Sprite 990777 (suelo) · +' + (150 - comision.calcularComision(150) - 100) + ' cr de ganancia · 1 quedó por asignar');
+    h = await pedir(puerto, 'GET', '/api/ventas-por-asignar');
+    assert.deepEqual(h.json.ventas.map((v) => [v.keko, v.sprite_id, v.causa]), [['KekoVivo', 990778, 'sin_furni']]);
+    ok('ventas del Sniper en la app: la API de la bandeja (lista, valida y responde 404); una rafaga de ventas llega en vivo y el servidor publica un aviso por keko con lo vendido y lo que quedo por asignar');
 
     h = await pedir(puerto, 'GET', '/api/icono/clothing_r26_scarface');
     if (h.status === 200) ok(`icono PNG servido desde cache (${h.bytes} bytes)`);

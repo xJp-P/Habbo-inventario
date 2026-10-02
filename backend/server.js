@@ -9,8 +9,9 @@
 // Arquitectura: la interfaz (navegador de Electron) habla SOLO con este servidor local
 // en 127.0.0.1. Este servidor tiene la sesion de Supabase y hace las consultas. Los
 // SniperMercadillo de los VPS no pasan por aca: envian sus eventos (compra, publicar,
-// recuperar) directo a Supabase con su token, y Supabase Realtime avisa a este
-// servidor, que lo reenvia a la interfaz.
+// recuperar, venta) directo a Supabase con su token, y Supabase Realtime avisa a este
+// servidor, que lo reenvia a la interfaz (y, con las ventas, publica `ventas`: el aviso
+// del sistema que muestra Electron si no estas mirando la app).
 //
 // Registro de errores (v1.6.1, core/registro.js): registro-errores.log en la carpeta de
 // datos, con una linea al arrancar, los errores 5xx de este servidor y los que envia la
@@ -25,7 +26,7 @@ const { crearServicioNegocio } = require('./services/negocio');
 const { crearServicioInstalacion } = require('./services/instalacion');
 const { importarExcel } = require('./services/importarExcel');
 const { protegerApiLocal } = require('./core/seguridad');
-const { crearDetectorAuditoria, avisoCatalogo } = require('./core/avisos');
+const { crearDetectorAuditoria, avisoCatalogo, crearAvisosVentas } = require('./core/avisos');
 const crearRutasApi = require('./routes/api');
 const { ClientError, rastro } = require('./core/util');
 const { crearRegistroErrores } = require('./core/registro');
@@ -80,6 +81,13 @@ async function crearApp({
     }
     eventos.emit('evento', { tipo: 'auditoria', resumen: await negocio.resumenAuditoria(), avisos });
   }
+  // Ventas del Sniper (migracion 20261015000000): lo que la base respondio a cada `venta`
+  // de la rafaga -> un aviso por keko (core/avisos.js).
+  const avisosVentas = crearAvisosVentas();
+  async function avisarVentas(filas) {
+    const avisos = avisosVentas.avisar(await negocio.detalleVentas(filas.map((f) => f.id)));
+    if (avisos.length) eventos.emit('evento', { tipo: 'ventas', avisos });
+  }
   const conexion = crearServicioConexion({
     raiz, dirDatos, eventos, log, cifrado,
     clienteFijo: clienteFijo || (demo ? demo.cliente : null),
@@ -90,6 +98,7 @@ async function crearApp({
     alEscucharInventario: baseAuditoria,
     alRecibirInventario: revisarAuditoria,
     esperaInventarioMs,
+    alRecibirVentas: avisarVentas,
   });
   negocio = crearServicioNegocio({ conexion, furnidata });
 

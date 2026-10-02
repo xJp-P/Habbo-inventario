@@ -694,6 +694,70 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return compraPorId(r.compra_id);
   }
 
+  // ── Ventas del Sniper (migracion 20261015000000) ─────────────────────────
+  // Las ventas que el Sniper envio y la base no pudo casar con un lote publicado quedan
+  // «por asignar» (tabla ventas_por_asignar, solo se escribe con sus funciones). Sin la
+  // migracion la tabla no existe: { disponible: false } y la interfaz no muestra la bandeja.
+  const MIGRACION_VENTAS = 'Para las ventas del Sniper instala la migración 20261015000000_ventas_sniper.sql en tu Supabase (aviso ámbar de arriba).';
+
+  async function ventasPorAsignar() {
+    let filas;
+    try {
+      filas = await todas(() => db().from('ventas_por_asignar')
+        .select('id, keko, sprite_id, tipo, furni_id, precio, numero_ltd, vendido_en, causa, motivo, creado_en')
+        .eq('estado', 'pendiente').order('vendido_en', { ascending: false }).order('id', { ascending: false }));
+    } catch (e) {
+      if (faltaMigracion(e)) return { disponible: false, ventas: [] };
+      throw e;
+    }
+    // Un furni que la app no tiene: su nombre e icono del catalogo, si se conocen.
+    return { disponible: true, ventas: filas.map((f) => {
+      const it = !f.furni_id && furnidata && f.sprite_id !== null ? furnidata.porSpriteId(f.sprite_id, f.tipo || 'suelo') : null;
+      return it ? { ...f, catalogo: { nombre: it.nombre, classname: it.classname, revision: it.revision } } : f;
+    }) };
+  }
+
+  async function conMigracionVentas(promesa) {
+    try { return await datos(promesa); } catch (e) {
+      if (faltaMigracion(e)) throw new ClientError(MIGRACION_VENTAS, 428);
+      throw e;
+    }
+  }
+
+  // Sin lote: con las mismas reglas que al llegar. Con lote_id: a ese lote publicado (lo
+  // elige el usuario; la base exige que sea del mismo furni y de ese keko o sin keko).
+  async function aplicarVentaPorAsignar(idVenta, entrada = {}) {
+    const vacio = entrada.lote_id === undefined || entrada.lote_id === null || entrada.lote_id === '';
+    const lote = vacio ? null : numeroValido(entrada.lote_id, { campo: 'El lote', minimo: 1, entero: true });
+    return conMigracionVentas(db().rpc('aplicar_venta_por_asignar', { p_id: Number(idVenta), p_lote_id: lote }));
+  }
+
+  async function descartarVentaPorAsignar(idVenta) {
+    return conMigracionVentas(db().rpc('descartar_venta_por_asignar', { p_id: Number(idVenta) }));
+  }
+
+  // Lo que la base respondio a cada evento `venta` recien llegado (para el aviso del
+  // sistema): keko, furni, precio, ganancia y si quedo por asignar. El nombre, el actual
+  // del furni: el catalogo ya puso el oficial a uno que llego solo con sprite_id.
+  async function detalleVentas(ids) {
+    const lista = (ids || []).map(Number).filter((x) => Number.isInteger(x) && x > 0);
+    if (!lista.length) return [];
+    const filas = (await datos(db().from('eventos_sniper').select('id, tipo_evento, datos, resultado').in('id', lista)))
+      .filter((f) => f.tipo_evento === 'venta' && f.resultado);
+    const idsFurni = [...new Set(filas.map((f) => Number(f.resultado.furni_id)).filter((x) => Number.isInteger(x) && x > 0))];
+    const nombres = new Map(idsFurni.length
+      ? (await datos(db().from('furnis').select('id, nombre').in('id', idsFurni))).map((f) => [Number(f.id), f.nombre]) : []);
+    return filas.map((f) => {
+      const r = f.resultado;
+      const d = f.datos || {};
+      return {
+        id: f.id, keko: r.keko || d.keko || null, nombre: nombres.get(Number(r.furni_id)) || r.nombre || null, sprite_id: d.sprite_id ?? null,
+        numero_ltd: r.numero_ltd ?? null, precio: Number(r.precio ?? d.precio), neto: r.neto ?? null,
+        ganancia_cr: r.ganancia_cr ?? null, por_asignar: !!r.por_asignar,
+      };
+    });
+  }
+
   return {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
@@ -703,6 +767,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     listarKekos, crearKeko, renombrarKeko, borrarKeko, asignarSinKeko,
     resolverNombre, sincronizarConCatalogo,
     auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,
+    ventasPorAsignar, aplicarVentaPorAsignar, descartarVentaPorAsignar, detalleVentas,
   };
 }
 

@@ -3,11 +3,13 @@
 //
 // El servidor local corre dentro de este proceso y publica en su bus lo que llega en vivo
 // (backend/server.js): `auditoria` (con los avisos de diferencias NUEVAS que arma
-// backend/core/avisos.js) y `catalogo-nuevo`. Aca solo se decide si mostrarlo:
+// backend/core/avisos.js), `catalogo-nuevo` y `ventas` (las que registra el Sniper, un
+// aviso por keko y por rafaga). Aca solo se decide si mostrarlo:
 //   - nunca si estas mirando la app (ventana visible, no minimizada y enfocada): ahi ya lo
-//     ves en la propia Auditoria;
+//     ves en la propia app;
 //   - nunca si apagaste ese tipo en Ajustes (preferencias.json en la carpeta de datos);
-//   - al hacer clic, la ventana se restaura, pasa al frente y abre la Auditoria del keko.
+//   - al hacer clic, la ventana se restaura, pasa al frente y abre su destino: la Auditoria
+//     del keko, o Vendido (o la bandeja «Por asignar») del Inventario.
 // La interfaz no puede disparar notificaciones: solo leer y cambiar las preferencias y
 // pedir una de prueba.
 //
@@ -32,9 +34,9 @@ const crypto = require('crypto');
 
 const APP_ID = 'io.github.xjpp.habboinventario';
 const ARCHIVO_PREFERENCIAS = 'preferencias.json';
-const POR_DEFECTO = { inventario: true, catalogo: true };
+const POR_DEFECTO = { inventario: true, catalogo: true, ventas: true };
 
-// { inventario, catalogo }: ambas encendidas si nunca se tocaron.
+// { inventario, catalogo, ventas }: todas encendidas si nunca se tocaron.
 function crearPreferencias(dirDatos) {
   const ruta = path.join(dirDatos, ARCHIVO_PREFERENCIAS);
   function archivo() {
@@ -61,9 +63,9 @@ function crearPreferencias(dirDatos) {
 
 // Un aviso por keko: el nuevo reemplaza al anterior. En Windows el id es la Tag del aviso,
 // que admite pocos caracteres (16 en Windows 10 antiguo): una huella corta del keko.
-function idAuditoria(keko) {
-  return 'aud-' + crypto.createHash('sha1').update(String(keko)).digest('hex').slice(0, 10);
-}
+function huella(keko) { return crypto.createHash('sha1').update(String(keko)).digest('hex').slice(0, 10); }
+function idAuditoria(keko) { return 'aud-' + huella(keko); }
+function idVentas(keko) { return 'ven-' + huella(keko); }
 
 // Estas mirando la app: no hace falta avisarte fuera de ella.
 function atendida(w) {
@@ -119,6 +121,10 @@ function crearNotificaciones({ Notification, ventana, preferencias, dock = null,
       }
     } else if (e.tipo === 'catalogo-nuevo') {
       mostrar({ tipo: 'catalogo', id: 'catalogo', titulo: e.titulo, cuerpo: e.cuerpo });
+    } else if (e.tipo === 'ventas') {
+      for (const a of e.avisos || []) {
+        mostrar({ tipo: 'ventas', id: idVentas(a.keko), titulo: a.titulo, cuerpo: a.cuerpo, silencioso: a.silencioso, destino: a.destino });
+      }
     }
   }
 
@@ -151,4 +157,4 @@ function crearNotificaciones({ Notification, ventana, preferencias, dock = null,
   return { mostrar, alEvento, probar, alVolver, alActivar, vivas: () => vivas.size, sinVer: () => sinVer.size };
 }
 
-module.exports = { APP_ID, crearPreferencias, crearNotificaciones, atendida, idAuditoria };
+module.exports = { APP_ID, crearPreferencias, crearNotificaciones, atendida, idAuditoria, idVentas };
