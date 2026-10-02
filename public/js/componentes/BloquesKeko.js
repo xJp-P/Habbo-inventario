@@ -6,10 +6,18 @@
 // y la fila de titulos se quedan arriba mientras recorres sus filas; la del siguiente keko
 // la empuja. Con sitio para todas las columnas, anchos fijos: todos los bloques quedan
 // alineados (useAlineado). El orden y el reparto viven en core/kekos.js.
+//
+// Encabezado C (v1.8.0, maqueta del 02-10-2026, en el Inventario y el Mercadillo): a la
+// derecha, una dona con los furnis del keko, una capsula «lotes · und · dinero» y, al pasar
+// el raton o con el teclado, un globo con «donde esta tu dinero» por furni; la misma
+// composicion pinta la barra de colores del borde inferior. Misma altura que antes (62 px):
+// la fila de titulos fija no se mueve. Los numeros salen de core/grupos.js.
 
 import { h, useState, useEffect, useRef } from '../core/react.js';
-import { fmtD } from '../core/format.js';
+import { fmtD, fmtCr } from '../core/format.js';
 import { Ico } from './iconos.js';
+import { IconoFurni } from './base.js';
+import { cortesDona } from '../core/grupos.js';
 
 // Cabeza del keko desde el generador de avatares oficial de Habbo.es (solo Habbo.es), en
 // su tamaño grande: se reduce sin suavizar y queda muy nitida (styles.css, .av-keko).
@@ -48,10 +56,79 @@ function Subtitulo(props) {
     k.desde ? (k.origen === 'sniper' ? 'desde el ' : 'creado el ') + fmtD(String(k.desde).slice(0, 10)) : null);
 }
 
-// La tarjeta de un keko. `datos`: [[valor, etiqueta, clase?]] a la derecha de la cabecera;
-// `aviso` y `accion` van junto a ellos. `children`: la tabla.
+// Colores de las partes de la composicion (por su `indice`; el 5º y «Otros», gris).
+export var COLORES_COMPOSICION = ['var(--green)', 'var(--blue)', 'var(--purple)', 'var(--gold)', 'var(--text3)'];
+
+function porcentaje(p) { var x = p * 100; return x > 0 && x < 1 ? '<1%' : Math.round(x) + '%'; }
+function nombreParte(p) { return p.otros ? 'Otros ' + p.otros + (p.otros === 1 ? ' furni' : ' furnis') : p.nombre; }
+function textoDinero(d) { return (d.tipo === 'ganancia' && d.valor > 0 ? '+' : '') + fmtCr(d.valor) + ' cr'; }
+
+// La dona: cuantos furnis distintos hay y como se reparte el dinero entre ellos.
+function Dona(props) {
+  var c = props.composicion;
+  return h('div', { className: 'dona', 'aria-hidden': true,
+      style: { background: 'conic-gradient(' + cortesDona(c.partes, COLORES_COMPOSICION, 0.6, 'var(--bg2)') + ')' } },
+    h('span', { className: 'mono' }, fmtCr(c.furnis)));
+}
+
+// «15 lotes · 65 und · 1.558 cr»: con la ventana angosta quedan los numeros (styles.css).
+function Capsula(props) {
+  var r = props.resumen;
+  var d = r.dinero;
+  var ganancia = d.tipo === 'ganancia';
+  return h('div', { className: 'cap' },
+    h('span', { title: fmtCr(r.n) + ' ' + r.nTexto }, h(Ico, { name: 'capas', size: 13 }),
+      h('b', { className: 'mono' }, fmtCr(r.n)), h('span', { className: 'cap-txt' }, r.nTexto)),
+    h('span', { title: fmtCr(r.und) + ' unidades' }, h(Ico, { name: 'cubos', size: 13 }),
+      h('b', { className: 'mono' }, fmtCr(r.und)), h('span', { className: 'cap-txt' }, 'und')),
+    h('span', { className: 'dinero' + (ganancia ? (d.valor > 0 ? ' pos' : d.valor < 0 ? ' neg' : '') : ''), title: textoDinero(d) + ' de ' + d.texto },
+      h(Ico, { name: ganancia ? (d.valor < 0 ? 'bajando' : 'trending') : 'moneda', size: 13 }),
+      h('b', { className: 'mono' }, textoDinero(d)), d.sufijo ? h('span', { className: 'cap-txt' }, d.sufijo) : null));
+}
+
+// El globo: «donde esta tu dinero» en este keko, furni por furni.
+function GloboComposicion(props) {
+  var c = props.composicion;
+  var t = props.textos || {};
+  return h('div', { className: 'globo', role: 'tooltip', id: props.id },
+    h('div', { className: 'globo-t' }, t.titulo, h('span', { className: 'mono' }, fmtCr(c.total) + ' cr')),
+    h('div', { className: 'globo-barra' }, c.partes.map(function (p, i) {
+      return h('i', { key: i, style: { flexGrow: p.valor, background: COLORES_COMPOSICION[p.indice] } });
+    })),
+    c.partes.map(function (p, i) {
+      return h('div', { key: i, className: 'globo-fila' },
+        h('span', { className: 'globo-punto', style: { background: COLORES_COMPOSICION[p.indice] } }),
+        p.otros ? h('span', { className: 'globo-otros' }, h(Ico, { name: 'box', size: 13 })) : h(IconoFurni, { classname: p.classname, revision: p.revision, size: 22 }),
+        h('span', { className: 'globo-nom', title: nombreParte(p) }, nombreParte(p)),
+        h('span', { className: 'mono' }, fmtCr(p.valor)),
+        h('span', { className: 'mono globo-pc' }, porcentaje(p.porcentaje)));
+    }),
+    t.pie ? h('div', { className: 'globo-pie' }, t.pie) : null);
+}
+
+// La barra de colores del borde inferior de la cabecera (cada porcion, con su detalle).
+function BarraComposicion(props) {
+  return h('div', { className: 'comp', 'aria-hidden': true }, props.composicion.partes.map(function (p, i) {
+    return h('i', { key: i, style: { flexGrow: p.valor, background: COLORES_COMPOSICION[p.indice] },
+      title: nombreParte(p) + ' · ' + fmtCr(p.valor) + ' cr · ' + porcentaje(p.porcentaje) });
+  }));
+}
+
+// La tarjeta de un keko. A la derecha de la cabecera: `aviso` (por ejemplo, «2 por revisar»),
+// el encabezado C y `accion` (el «+ Compra»). `children`: la tabla.
+//   resumen:     { n, nTexto, und, dinero: { tipo: 'costo' | 'ganancia', valor, texto, sufijo? } }
+//   composicion: la de core/grupos.js (composicionLotes o composicionMercadillo)
+//   textos:      { titulo, pie } del globo
+// Sin dinero que repartir (todo en 0), solo la capsula: no hay dona, globo ni barra.
 export function BloqueKeko(props) {
   var k = props.keko;
+  var r = props.resumen;
+  var c = props.composicion;
+  var conComposicion = !!(c && c.partes && c.partes.length);
+  // Un id valido y unico aunque el keko tenga espacios o simbolos (aria-describedby separa
+  // los ids por espacios).
+  var idGlobo = 'globo-' + (k.clave || 'sin-keko').replace(/[^a-z0-9]/gi, function (ch) { return '_' + ch.charCodeAt(0); });
+  var etiqueta = r ? fmtCr(r.n) + ' ' + r.nTexto + ', ' + fmtCr(r.und) + ' unidades, ' + textoDinero(r.dinero) + ' de ' + r.dinero.texto : null;
   return h('section', { className: 'bk' + (k.origen === 'sin' ? ' sin' : ''), id: 'bk-' + k.clave, 'data-keko': k.clave },
     h('div', { className: 'bk-cab ' + k.origen },
       h(AvatarKeko, { keko: k }),
@@ -60,10 +137,13 @@ export function BloqueKeko(props) {
         h(Subtitulo, { keko: k })),
       h('div', { className: 'bk-datos' },
         props.aviso || null,
-        (props.datos || []).map(function (d, i) {
-          return h('div', { key: i, className: 'bk-dato' }, h('b', { className: 'mono ' + (d[2] || '') }, d[0]), h('span', null, d[1]));
-        }),
-        props.accion || null)),
+        r ? h('div', { className: 'zona' + (conComposicion ? ' con-globo' : ''), tabIndex: conComposicion ? 0 : undefined,
+            'aria-label': etiqueta, 'aria-describedby': conComposicion ? idGlobo : undefined },
+          conComposicion ? h(Dona, { composicion: c }) : null,
+          h(Capsula, { resumen: r }),
+          conComposicion ? h(GloboComposicion, { composicion: c, textos: props.textos, id: idGlobo }) : null) : null,
+        props.accion || null),
+      conComposicion ? h(BarraComposicion, { composicion: c }) : null),
     h('div', { className: 'bk-cuerpo' }, props.children));
 }
 

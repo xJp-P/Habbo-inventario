@@ -11,7 +11,8 @@
 // (core/comision.js, resumenPublicado). "Vendido" y "Retirar" (este solo si hay algo
 // publicado por ti) abren un modal que pregunta cuantas unidades y, si hay varios precios
 // de lista, de cual; se aplican FIFO y solo en ese keko (migracion 20261014000000). Clic
-// en la fila: detalle.
+// en la fila: detalle. Desde la v1.8.0, la cabecera de cada bloque es el encabezado C del
+// Inventario: su dona y su barra reparten lo que te entraria entre los furnis del keko.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { fmtCr, fmtLg } from '../core/format.js';
@@ -22,6 +23,7 @@ import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlinead
 import { Barrera, Dibujar } from '../componentes/Barrera.js';
 import { agruparPorKeko, ambitoDe, claveKeko } from '../core/kekos.js';
 import { resumenPublicado, precioMinimoSinPerder } from '../core/comision.js';
+import { composicionMercadillo } from '../core/grupos.js';
 
 // Anchos de las columnas (null = Furni). Con sitio para todos, fijos: los bloques quedan
 // alineados entre si.
@@ -43,13 +45,16 @@ function PublicadoPor(props) {
     r.manual ? h('span', { className: 'tag tag-azul', title: r.manual + ' und publicadas por ti' }, h(Ico, { name: 'store', size: 11 }), 'Tú') : null);
 }
 
-// Lo que dice la cabecera de un bloque: furnis, unidades y ganancia esperada.
-function datosBloque(filas) {
-  var und = filas.reduce(function (s, x) { return s + x.r.unidades; }, 0);
-  var g = filas.reduce(function (s, x) { return s + x.r.ganancia; }, 0);
-  return [[fmtCr(filas.length), filas.length === 1 ? 'furni' : 'furnis'], [fmtCr(und), 'und'],
-    [(g > 0 ? '+' : '') + fmtCr(g) + ' cr', 'ganancia esperada', g > 0 ? 'pos' : g < 0 ? 'neg' : '']];
+// Lo que dice la cabecera de un bloque (encabezado C, v1.8.0): la capsula «furnis · und ·
+// ganancia esperada» y el globo con lo que te entraria por furni, el mismo `neto` del
+// detalle de cada fila (core/grupos.js, composicionMercadillo).
+function resumenBloque(filas) {
+  var n = filas.length;
+  return { n: n, nTexto: n === 1 ? 'furni' : 'furnis', und: filas.reduce(function (s, x) { return s + x.r.unidades; }, 0),
+    dinero: { tipo: 'ganancia', valor: filas.reduce(function (s, x) { return s + x.r.ganancia; }, 0), texto: 'ganancia esperada', sufijo: 'esperada' } };
 }
+var TEXTOS_COMPOSICION = { titulo: 'Lo que te entraría, por furni',
+  pie: 'Lo que te entraría tras la comisión si se vende todo lo publicado en este keko (el «neto» de cada fila).' };
 
 export function MercadilloView(props) {
   var sQ = useState(''); var q = sQ[0]; var setQ = sQ[1];
@@ -127,7 +132,8 @@ export function MercadilloView(props) {
   // La tarjeta de un keko y, dentro, una barrera por furni: si uno trae un dato raro, solo
   // su fila lo dice; si falla la tarjeta, los demas kekos siguen.
   function bloqueDe(b) {
-    return h(BloqueKeko, { key: b.keko.clave, keko: b.keko, datos: datosBloque(b.items) },
+    return h(BloqueKeko, { key: b.keko.clave, keko: b.keko, resumen: resumenBloque(b.items), composicion: composicionMercadillo(b.items),
+        textos: TEXTOS_COMPOSICION },
       h('table', { className: 'tabla' },
         h(Columnas, { anchos: ANCHOS }),
         h('thead', null, h('tr', null,

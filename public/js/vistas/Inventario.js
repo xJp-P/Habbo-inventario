@@ -23,7 +23,8 @@
 // los kekos manuales, luego los de los Snipers (cada grupo del mas antiguo al mas nuevo) y
 // al final lo que no tiene keko. Ningun bloque se pliega ni se recorta. Cada bloque dice
 // cuanto hay en ese keko en la pestana, y «Publicar» de una fila solo toma unidades de su
-// keko (migracion 20261014000000). Clic en un lote: su detalle.
+// keko (migracion 20261014000000). Clic en un lote: su detalle. Desde la v1.8.0, la
+// cabecera de cada bloque es el encabezado C (dona, capsula, globo y barra de colores).
 //
 // Ventas del Sniper (v1.7.0, migracion 20261015000000; diseño elegido en la maqueta):
 //   - en Vendido, lo que registro el Sniper lleva «Vendido · Sniper» y, bajo el nombre, la
@@ -43,6 +44,7 @@ import { Barrera, Dibujar } from '../componentes/Barrera.js';
 import { agruparPorKeko, claveKeko } from '../core/kekos.js';
 import { ingresoNeto, calcularComision } from '../core/comision.js';
 import { ventaDelSniper, cuandoVenta, horaDe, diaDe, nombreVentaPendiente } from '../core/ventas.js';
+import { composicionLotes } from '../core/grupos.js';
 
 // Un furni que llego del Sniper sin revisar: cuantas, a cuanto, cuando y desde que VPS.
 // "Confirmar" lo pasa a en mano (sin precio: el precio se pone al publicar o al vender).
@@ -171,15 +173,22 @@ function TablaPorAsignar(props) {
       }))));
 }
 
-// Lo que dice la cabecera de un bloque en cada pestana.
-function datosBloque(lotes, filtro) {
-  var und = sumar(lotes, 'cantidad');
+// Lo que dice la cabecera de un bloque en cada pestana (encabezado C, v1.8.0): la capsula
+// «lotes · und · dinero» (el costo en Comprado; la ganancia en Publicado y Vendido) y el
+// globo con el dinero de cada furni (core/grupos.js, composicionLotes).
+function resumenBloque(lotes, filtro) {
   var n = lotes.length;
-  var datos = [[fmtCr(n), filtro === 'vendido' ? (n === 1 ? 'venta' : 'ventas') : (n === 1 ? 'lote' : 'lotes')], [fmtCr(und), 'und']];
-  if (filtro === 'comprado') return datos.concat([[fmtCr(sumar(lotes, 'costo_total_cr')) + ' cr', 'costo']]);
-  var g = sumar(lotes, 'ganancia_cr');
-  return datos.concat([[(g > 0 ? '+' : '') + fmtCr(g) + ' cr', filtro === 'publicado' ? 'ganancia esperada' : 'ganancia', g > 0 ? 'pos' : g < 0 ? 'neg' : '']]);
+  var r = { n: n, nTexto: filtro === 'vendido' ? (n === 1 ? 'venta' : 'ventas') : (n === 1 ? 'lote' : 'lotes'), und: sumar(lotes, 'cantidad') };
+  r.dinero = filtro === 'comprado'
+    ? { tipo: 'costo', valor: sumar(lotes, 'costo_total_cr'), texto: 'costo' }
+    : { tipo: 'ganancia', valor: sumar(lotes, 'ganancia_cr'), texto: filtro === 'publicado' ? 'ganancia esperada' : 'ganancia', sufijo: filtro === 'publicado' ? 'esperada' : null };
+  return r;
 }
+var TEXTOS_COMPOSICION = {
+  comprado: { titulo: 'Dónde está tu inversión', pie: 'Lo que costó lo que tienes en mano en este keko, por furni.' },
+  publicado: { titulo: 'Lo que te entraría, por furni', pie: 'Lo que te entraría tras la comisión si se vende todo lo publicado en este keko.' },
+  vendido: { titulo: 'De dónde vienen tus ingresos', pie: 'Lo que entró por cada furni vendido en este keko (si fue en el mercadillo, el neto).' },
+};
 
 export function InventarioView(props) {
   var compras = props.compras;
@@ -333,11 +342,12 @@ export function InventarioView(props) {
   function bloqueDe(b) {
     var k = b.keko;
     var pendientesAqui = b.items.filter(function (l) { return l.pendiente; }).length;
-    return h(BloqueKeko, { key: k.clave, keko: k, datos: datosBloque(b.items, filtro),
+    return h(BloqueKeko, { key: k.clave, keko: k, resumen: resumenBloque(b.items, filtro), composicion: composicionLotes(b.items, filtro),
+        textos: TEXTOS_COMPOSICION[filtro],
         aviso: pendientesAqui ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), pendientesAqui + ' por revisar') : null,
         accion: filtro === 'comprado' && usaKekos && k.origen !== 'sin' && !k.desconocido
-          ? h('button', { className: 'btn btn-chico', title: 'Registrar una compra ya asignada a ' + k.nombre, onClick: function () { props.onNueva(k.nombre); } },
-              h(Ico, { name: 'plus', size: 12, sw: 2.4 }), 'Compra') : null },
+          ? h('button', { className: 'btn btn-verde btn-pil', title: 'Registrar una compra ya asignada a ' + k.nombre, onClick: function () { props.onNueva(k.nombre); } },
+              h(Ico, { name: 'plus', size: 13, sw: 2.6 }), 'Compra') : null },
       h('table', { className: 'tabla' },
         h(Columnas, { anchos: ANCHOS[filtro] }),
         h('thead', null, h('tr', null,

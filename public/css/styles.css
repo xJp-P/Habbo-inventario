@@ -321,10 +321,50 @@ input[type=number]{-moz-appearance:textfield}
 .bk-titulo{min-width:0}
 .bk-nombre{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bk-sub{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
-.bk-datos{display:flex;gap:16px;margin-left:auto;align-items:center;flex-shrink:0}
-.bk-dato{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2}
-.bk-dato b{font-size:14px}
-.bk-dato span{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px}
+.bk-datos{display:flex;gap:8px;margin-left:auto;align-items:center;flex-shrink:0}
+/* Encabezado C (v1.8.0, maqueta del 02-10-2026): dona + capsula + globo + barra de colores.
+   Al pasar el raton (o con el foco) la cabecera sube de capa: el globo queda sobre el
+   siguiente keko. Misma altura que antes: la fila de titulos fija no se mueve. */
+.bk-cab:hover,.bk-cab:focus-within{z-index:5}
+.zona{position:relative;display:flex;align-items:center;gap:8px;border-radius:99px;outline:none}
+.zona.con-globo{cursor:help}
+.zona:focus-visible .cap{border-color:var(--green);box-shadow:0 0 0 2px var(--green-bg)}
+.dona{position:relative;width:34px;height:34px;border-radius:50%;flex:none;background:var(--bg4);transition:transform .2s cubic-bezier(.32,.72,0,1)}
+.zona:hover .dona,.zona:focus .dona{transform:scale(1.08) rotate(-8deg)}
+.dona::after{content:'';position:absolute;inset:6px;border-radius:50%;background:var(--bg2)}
+.dona span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;z-index:1;color:var(--text)}
+.cap{display:inline-flex;align-items:stretch;height:32px;border-radius:99px;background:var(--bg3);border:1px solid var(--border);overflow:hidden;transition:border-color .15s}
+.zona:hover .cap{border-color:var(--border2)}
+.cap>span{display:inline-flex;align-items:center;gap:6px;padding:0 12px;font-size:12px;color:var(--text2);white-space:nowrap}
+.cap>span+span{border-left:1px solid var(--border)}
+.cap svg{color:var(--text3)}
+.cap b{color:var(--text);font-size:13.5px;font-weight:700}
+.cap .dinero{background:color-mix(in srgb,var(--gold) 10%,transparent)}
+.cap .dinero svg{color:var(--gold)}
+.cap .dinero.pos{background:var(--green-bg)}.cap .dinero.pos b,.cap .dinero.pos svg{color:var(--green)}
+.cap .dinero.neg{background:var(--red-bg)}.cap .dinero.neg b,.cap .dinero.neg svg{color:var(--red)}
+.btn-pil{height:30px;border-radius:99px;padding:0 14px 0 10px}
+.comp{position:absolute;left:1px;right:1px;bottom:0;height:3px;display:flex;gap:2px;transition:height .18s}
+.bk-cab:hover .comp{height:5px}
+.comp i{display:block;flex-basis:0;min-width:3px}
+.globo{position:absolute;right:0;top:calc(100% + 10px);width:310px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:12px 14px;opacity:0;visibility:hidden;transform:translateY(-6px) scale(.98);transform-origin:top right;pointer-events:none;z-index:30;text-align:left;cursor:default;transition:opacity .18s,transform .22s cubic-bezier(.32,.72,0,1),visibility 0s linear .22s}
+.zona:hover .globo,.zona:focus .globo{opacity:1;visibility:visible;transform:none;transition:opacity .18s,transform .22s cubic-bezier(.32,.72,0,1),visibility 0s}
+[data-theme="light"] .globo{box-shadow:0 10px 30px rgba(31,35,40,.18)}
+.globo-t{font-size:12px;font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
+.globo-t span{color:var(--text3);font-weight:600;white-space:nowrap}
+.globo-barra{display:flex;height:8px;border-radius:99px;overflow:hidden;gap:2px;margin-bottom:10px}
+.globo-barra i{display:block;flex-basis:0;min-width:3px}
+.globo-fila{display:grid;grid-template-columns:10px 22px 1fr auto 40px;align-items:center;gap:8px;font-size:12px;padding:3px 0}
+.globo-punto{width:10px;height:10px;border-radius:3px}
+.globo .furni-ico{border-radius:6px}
+.globo .furni-ico img{max-width:20px;max-height:20px}
+.globo-otros{width:22px;height:22px;border-radius:6px;background:var(--bg3);color:var(--text3);display:flex;align-items:center;justify-content:center}
+.globo-nom{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.globo-pc{text-align:right;color:var(--text3)}
+.globo-pie{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3)}
+/* Ventana angosta: la capsula deja solo los numeros (la palabra queda en el title). */
+@media (max-width:1240px){.cap-txt{display:none}.cap>span{padding:0 10px}}
+@media (prefers-reduced-motion:reduce){.dona,.comp{transition-duration:.1s}.globo,.zona:hover .globo,.zona:focus .globo{transition-duration:.12s,.12s,0s}}
 .bk-cuerpo{background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;overflow-x:auto}
 .bk-cuerpo .tabla th{background:var(--bg2)}
 .bk-cuerpo .tabla tr:last-child td:first-child{border-bottom-left-radius:11px}

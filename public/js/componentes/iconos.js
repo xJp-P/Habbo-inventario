@@ -54,7 +54,12 @@ export var ICONS = {
   tag:       'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z M7 7h.01',
   trending:  'M23 6l-9.5 9.5-5-5L1 18 M17 6h6v6',
   lock:      'M5 11h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z M7 11V7a5 5 0 0110 0v4',
-  cart:      'M9 21a1 1 0 100-2 1 1 0 000 2z M20 21a1 1 0 100-2 1 1 0 000 2z M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6'
+  cart:      'M9 21a1 1 0 100-2 1 1 0 000 2z M20 21a1 1 0 100-2 1 1 0 000 2z M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6',
+  // Encabezado C del keko (v1.8.0): lotes, unidades, creditos y ganancia a la baja.
+  capas:     'M12 3l9 5-9 5-9-5z M3 12.5l9 5 9-5 M3 16.5l9 5 9-5',
+  cubos:     'M7 3h10v7H7z M2 13h9v8H2z M13 13h9v8h-9z',
+  moneda:    'M12 20.5a8.5 8.5 0 100-17 8.5 8.5 0 000 17z M12 16.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9z',
+  bajando:   'M23 18l-9.5-9.5-5 5L1 6 M17 18h6v-6'
 };
 
 export function Ico(props){
