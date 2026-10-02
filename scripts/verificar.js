@@ -157,6 +157,35 @@ async function main() {
   assert.equal(aV[0].cuerpo, '1 × Furni A, 1 × Furni B y 3 furnis más · +50 cr de ganancia', 'una lista larga se resume');
   ok('avisos de ventas del Sniper: uno por keko y rafaga (lo vendido agrupado, LTD con su numero, ganancia o perdida; las por asignar abren la bandeja); seguidos, sin sonido');
 
+  // ── Ventas del Sniper en la interfaz (public/js/core/ventas.js) ──
+  const ventasJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'ventas.js')).href);
+  const lotesV = [
+    { id: 1, furni_id: 10, estado: 'publicado', keko: 'Ux_Data', precio_lista: 128, publicado_en: '2026-09-30T02:00:00Z' },
+    { id: 2, furni_id: 10, estado: 'publicado', keko: null, precio_lista: 128, publicado_en: '2026-09-29T02:00:00Z' },
+    { id: 3, furni_id: 10, estado: 'publicado', keko: 'Bodega', precio_lista: 128, publicado_en: '2026-09-28T02:00:00Z' },
+    { id: 4, furni_id: 10, estado: 'publicado', keko: 'ux_data', precio_lista: 140, publicado_en: '2026-09-27T02:00:00Z' },
+    { id: 5, furni_id: 11, estado: 'publicado', keko: 'Ux_Data', precio_lista: 210, numero_ltd: 1600 },
+    { id: 6, furni_id: 10, estado: 'vendido', keko: 'Ux_Data', vendido_por: 'sniper' },
+  ];
+  assert.deepEqual(ventasJs.candidatosDeVenta({ furni_id: 10, keko: 'UX_DATA', precio: 128 }, lotesV, []).map((c) => c.lote.id), [1, 4, 2],
+    'solo ese keko (sin distinguir mayusculas) o sin keko, nunca Bodega; el keko antes que lo sin keko y el mismo precio primero');
+  const ltdV = ventasJs.candidatosDeVenta({ furni_id: 11, keko: 'Ux_Data', precio: 210, numero_ltd: 1601 }, lotesV, []);
+  assert.deepEqual([ltdV.length, ltdV[0].bloqueado, ltdV[0].motivo], [1, true, 'Es el LTD #1600 y la venta fue del #1601: no puede ser este.']);
+  assert.deepEqual(ventasJs.candidatosDeVenta({ furni_id: null, sprite_id: 77, tipo: null, keko: 'Ux_Data', precio: 128 }, lotesV, [{ id: 10, sprite_id: 77, tipo: 'suelo' }]).map((c) => c.lote.id),
+    [1, 4, 2], 'sin furni_id (la app no lo tenia al llegar): por su sprite');
+  assert.deepEqual([ventasJs.kekoConVentasSniper(lotesV, [], 'UX_data'), ventasJs.kekoConVentasSniper(lotesV, [], 'Bodega'),
+    ventasJs.kekoConVentasSniper(lotesV, [{ keko: 'Bodega' }], 'bodega'), ventasJs.kekoConVentasSniper(lotesV, [], null)], [true, false, true, false],
+    'el «Vendido» a mano pregunta solo en un keko cuyo Sniper ya registra ventas (o tiene alguna por asignar)');
+  const ahoraV = new Date(2026, 9, 1, 15, 0).getTime();
+  assert.equal(ventasJs.cuandoVenta(new Date(2026, 9, 1, 4, 19).toISOString(), ahoraV), 'hoy a las 04:19');
+  assert.equal(ventasJs.cuandoVenta(new Date(2026, 8, 30, 23, 5).toISOString(), ahoraV), 'ayer a las 23:05');
+  assert.match(ventasJs.cuandoVenta(new Date(2026, 8, 28, 9, 0).toISOString(), ahoraV), /^28 .* a las 09:00$/);
+  assert.deepEqual(ventasJs.nombreVentaPendiente({ furni_id: null, sprite_id: 98765 }, []), { nombre: 'Sprite 98765', classname: null, revision: null, registrado: false });
+  assert.equal(ventasJs.nombreVentaPendiente({ furni_id: null, sprite_id: 77, tipo: 'suelo' }, [{ id: 10, sprite_id: 77, tipo: 'suelo', nombre: 'Corona' }]).nombre, 'Corona',
+    'un furni que registraste despues de la venta toma su nombre');
+  assert.equal(ventasJs.ventaDelSniper(lotesV[5]), true);
+  ok('ventas del Sniper en la interfaz: a que lotes se puede asignar una venta (su keko o sin keko, el LTD con otro numero bloqueado, en el orden de la base), cuando pregunta el «Vendido» a mano y «hoy a las 04:19»');
+
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');
   assert.equal(notif.APP_ID, paquete.build.appId, 'el AUMID de Windows es el appId que el instalador pone en el acceso directo');
@@ -1430,6 +1459,26 @@ async function main() {
     await demoT.cliente.cerrar();
     fs.rmSync(dirDemo, { recursive: true, force: true });
     ok('modo demo: «Venta» vende una unidad publicada del Sniper demo y «Venta por asignar» deja una en la bandeja, por la funcion real del Sniper');
+
+    // ── Base local (demo): una migracion que cambio despues de aplicarse se vuelve a correr ──
+    const dirHuella = fs.mkdtempSync(path.join(os.tmpdir(), 'hbi-huella-'));
+    const migsH = fs.readdirSync(path.join(__dirname, '..', 'supabase', 'migrations')).filter((x) => x.endsWith('.sql')).sort();
+    const [primeraH, penultimaH, ultimaH] = [migsH[0], migsH[migsH.length - 2], migsH[migsH.length - 1]];
+    const rehechas = async (b) => Object.fromEntries((await b.pg.query("select nombre, aplicada_en > timestamptz '2001-01-01' as r from _local.migraciones where nombre in ($1, $2, $3)",
+      [primeraH, penultimaH, ultimaH])).rows.map((x) => [x.nombre, x.r]));
+    let bh = await crearClienteLocal({ dir: dirHuella });
+    await bh.pg.query("update _local.migraciones set aplicada_en = timestamptz '2000-01-01', huella = case when nombre = $1 then 'vieja' else huella end", [penultimaH]);
+    await bh.cerrar();
+    bh = await crearClienteLocal({ dir: dirHuella });
+    assert.deepEqual(await rehechas(bh), { [primeraH]: false, [penultimaH]: true, [ultimaH]: true }, 'la que cambio se vuelve a correr, con todas las posteriores (en orden)');
+    await bh.pg.query("update _local.migraciones set aplicada_en = timestamptz '2000-01-01', huella = null");
+    await bh.cerrar();
+    bh = await crearClienteLocal({ dir: dirHuella });
+    assert.deepEqual(await rehechas(bh), { [primeraH]: false, [penultimaH]: false, [ultimaH]: true }, 'una base de antes de las huellas vuelve a correr solo la ultima');
+    assert.equal((await bh.pg.query('select count(*)::int as n from _local.migraciones where huella is null')).rows[0].n, 0, 'y desde ahi todas tienen su huella');
+    await bh.cerrar();
+    fs.rmSync(dirHuella, { recursive: true, force: true });
+    ok('base local del demo: una migracion que cambio despues de aplicarse se vuelve a correr junto con las posteriores; una base sin huellas vuelve a correr la ultima');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
     const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });

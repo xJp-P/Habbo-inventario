@@ -361,3 +361,11 @@ input[type=number]{-moz-appearance:textfield}
 .fila-error-txt{flex:1;min-width:200px;word-break:break-word}
 .fila-error-txt .mono{color:var(--text2)}
 .bloque-error{max-width:none}
+
+/* ── Ventas del Sniper (v1.7.0): marca en Vendido, pestaña «Por asignar» y asignar a un lote ── */
+.tag-sniper{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bd)}
+.chip.azul.activo{background:var(--blue-bg);border-color:var(--blue-bd);color:var(--blue)}
+.chip-num{background:var(--blue);color:#fff;border-radius:99px;padding:0 6px;font-size:11px;font-weight:700;line-height:16px}
+.chip-keko{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.motivo-venta{font-size:12px;color:var(--blue);line-height:1.4;max-width:340px}
+.lista-lotes{display:flex;flex-direction:column;gap:8px;margin:4px 0 12px}

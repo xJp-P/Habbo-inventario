@@ -24,6 +24,13 @@
 // al final lo que no tiene keko. Ningun bloque se pliega ni se recorta. Cada bloque dice
 // cuanto hay en ese keko en la pestana, y «Publicar» de una fila solo toma unidades de su
 // keko (migracion 20261014000000). Clic en un lote: su detalle.
+//
+// Ventas del Sniper (v1.7.0, migracion 20261015000000; diseño elegido en la maqueta):
+//   - en Vendido, lo que registro el Sniper lleva «Vendido · Sniper» y, bajo el nombre, la
+//     hora exacta de la venta (tambien en el detalle, con el Sniper que la registro);
+//   - la pestaña «Por asignar» (azul, solo con la migracion) lista las ventas que el Sniper
+//     envio y la base no pudo casar con un lote, con el motivo: «Asignar a un lote…» o
+//     «Descartar». Son excepcionales: por eso viven en su pestaña y no arriba.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -31,10 +38,11 @@ import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
 import { NombreFurni, IconoFurni, EtiquetaPublicado, EtiquetaLtd, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
-import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado, nombreBloque } from '../componentes/BloquesKeko.js';
+import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado, nombreBloque, AvatarKeko } from '../componentes/BloquesKeko.js';
 import { Barrera, Dibujar } from '../componentes/Barrera.js';
-import { agruparPorKeko } from '../core/kekos.js';
-import { ingresoNeto } from '../core/comision.js';
+import { agruparPorKeko, claveKeko } from '../core/kekos.js';
+import { ingresoNeto, calcularComision } from '../core/comision.js';
+import { ventaDelSniper, cuandoVenta, horaDe, diaDe, nombreVentaPendiente } from '../core/ventas.js';
 
 // Un furni que llego del Sniper sin revisar: cuantas, a cuanto, cuando y desde que VPS.
 // "Confirmar" lo pasa a en mano (sin precio: el precio se pone al publicar o al vender).
@@ -117,11 +125,51 @@ var ORIGEN = { excel: 'Excel', manual: 'Manual', sniper: 'Sniper' };
 var ANCHOS = {
   comprado: [62, null, 56, 96, 100, 124, 176],
   publicado: [62, null, 56, 96, 100, 96, 100, 68, 116, 188],
-  vendido: [62, null, 56, 96, 100, 96, 100, 68, 100, 64],
+  vendido: [62, null, 56, 96, 100, 96, 100, 68, 132, 64],
 };
 var VACIOS = { comprado: 'Sin nada en mano: ', publicado: 'Sin nada publicado: ', vendido: 'Sin ventas: ' };
 
 function sumar(lotes, campo) { return lotes.reduce(function (s, l) { return s + (l[campo] || 0); }, 0); }
+
+// El keko de una venta (su cabeza y su nombre), como en las cabeceras de los bloques.
+function ChipKeko(props) {
+  var lista = props.kekos || [];
+  var k = lista.find(function (x) { return claveKeko(x.nombre) === claveKeko(props.nombre); }) || { nombre: props.nombre, origen: 'sniper' };
+  return h('span', { className: 'chip-keko' }, h(AvatarKeko, { keko: k, tam: 18 }), h('b', null, k.nombre));
+}
+
+// Pestaña «Por asignar»: una fila por venta, con cuando, de que keko, el furni, el precio
+// (y lo que entraria neto), por que no se asigno sola y sus dos acciones.
+function TablaPorAsignar(props) {
+  var ventas = props.ventas;
+  if (!ventas.length) {
+    return h('div', { className: 'tabla-caja' }, h('div', { className: 'vacio' },
+      props.q ? 'Ninguna venta por asignar coincide.' : 'No hay ventas por asignar: todo lo que vendió el Sniper ya está en Vendido.'));
+  }
+  return h('div', { className: 'tabla-caja' },
+    h('table', { className: 'tabla' },
+      h('thead', null, h('tr', null, h('th', null, 'Cuándo'), h('th', null, 'Keko'), h('th', null, 'Furni'), h('th', { className: 'r' }, 'Precio'),
+        h('th', null, 'Por qué no se asignó'), h('th', null))),
+      h('tbody', null, ventas.map(function (v) {
+        return h(Barrera, { key: v.id, tipo: 'fila', columnas: 6, etiqueta: 'La venta por asignar Nº ' + v.id,
+            donde: 'Inventario › por asignar Nº ' + v.id, onVerErrores: props.onVerErrores },
+          h(Dibujar, { dibujar: function () {
+            var f = nombreVentaPendiente(v, props.furnis);
+            var neto = Number(v.precio) - calcularComision(Number(v.precio));
+            return h('tr', { className: 'fila' },
+              h('td', { className: 'mono', style: { whiteSpace: 'nowrap', fontSize: 12 } }, cuandoVenta(v.vendido_en)),
+              h('td', null, h(ChipKeko, { nombre: v.keko, kekos: props.kekos })),
+              h('td', null, h(NombreFurni, { furni: { nombre: f.nombre, classname: f.classname, revision: f.revision, numero_ltd: v.numero_ltd },
+                sub: f.registrado ? null : 'furni sin registrar en la app' })),
+              h('td', { className: 'r mono' }, fmtCr(v.precio), h('div', { className: 'tenue', style: { fontSize: 11 } }, fmtCr(neto) + ' netos')),
+              h('td', { className: 'motivo-venta' }, v.motivo),
+              h('td', { className: 'r', style: { whiteSpace: 'nowrap' } },
+                h('span', { style: { display: 'inline-flex', gap: 6 } },
+                  h('button', { className: 'btn btn-chico btn-verde', onClick: function () { props.onAsignar(v); } }, h(Ico, { name: 'check', size: 12, sw: 2.4 }), 'Asignar a un lote…'),
+                  h('button', { className: 'btn btn-chico', onClick: function () { props.onDescartar(v); } }, 'Descartar'))));
+          } }));
+      }))));
+}
 
 // Lo que dice la cabecera de un bloque en cada pestana.
 function datosBloque(lotes, filtro) {
@@ -142,8 +190,28 @@ export function InventarioView(props) {
   var sEnv = useState(false); var enviando = sEnv[0]; var setEnviando = sEnv[1];
   var sConf = useState(null); var confirmacion = sConf[0]; var setConfirmacion = sConf[1];
   var usaKekos = !!(props.kekos && props.kekos.disponible);
-  var alineado = useAlineado(anchoMinimo(ANCHOS[filtro]));
+  var listaKekos = usaKekos ? props.kekos.kekos : [];
+  // Ventas por asignar: null sin la migracion 20261015000000 (no hay pestaña).
+  var porAsignar = props.porAsignar && props.porAsignar.disponible ? props.porAsignar.ventas || [] : null;
+  var enBandeja = filtro === 'por_asignar' && !!porAsignar;
+  var alineado = useAlineado(anchoMinimo(ANCHOS[enBandeja ? 'vendido' : filtro] || ANCHOS.vendido));
   useEffect(function () { if (props.filtroFurni) { setQ(props.filtroFurni); setFiltro(props.filtroEstado || 'comprado'); } }, [props.filtroFurni, props.filtroEstado]);
+  // Clic en el aviso de ventas del Sniper: Vendido (en el bloque de ese keko) o la bandeja.
+  useEffect(function () {
+    var a = props.abrir;
+    if (!a) return undefined;
+    setQ('');
+    setAbierto(null);
+    setFiltro(a.filtro === 'por_asignar' ? 'por_asignar' : 'vendido');
+    if (a.filtro === 'por_asignar' || !a.keko) return undefined;
+    var t = setTimeout(function () {
+      var el = document.getElementById('bk-' + claveKeko(a.keko));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+    return function () { clearTimeout(t); };
+  }, [props.abrir && props.abrir.vez]);
+  // Sin la migracion (o si se fue la ultima venta y la pestaña se oculta), a Vendido.
+  useEffect(function () { if (filtro === 'por_asignar' && !porAsignar) setFiltro('vendido'); }, [filtro, !!porAsignar]);
 
   var cuenta = useMemo(function () {
     var c = { comprado: 0, publicado: 0, vendido: 0 };
@@ -153,10 +221,18 @@ export function InventarioView(props) {
 
   // Solo lo publicado y lo vendido tienen precio (y con el, ganancia y margen).
   var conPrecio = filtro !== 'comprado';
-  var visibles = compras.filter(function (l) {
+  var visibles = enBandeja ? [] : compras.filter(function (l) {
     return l.estado === filtro && (!q || normalizar(l.nombre).indexOf(normalizar(q)) !== -1);
   }).sort(function (a, b) { return (b.pendiente ? 1 : 0) - (a.pendiente ? 1 : 0) || b.id - a.id; });
-  var agrupado = agruparPorKeko(visibles, usaKekos ? props.kekos.kekos : [], function (l) { return l.keko; });
+  var ventasVisibles = enBandeja ? porAsignar.filter(function (v) {
+    return !q || normalizar(nombreVentaPendiente(v, props.furnis).nombre).indexOf(normalizar(q)) !== -1;
+  }) : [];
+  var agrupado = agruparPorKeko(visibles, listaKekos, function (l) { return l.keko; });
+  // El Sniper de un keko (para «Registrada por»).
+  function sniperDe(keko) {
+    var k = listaKekos.find(function (x) { return claveKeko(x.nombre) === claveKeko(keko); });
+    return k && k.snipers && k.snipers.length ? k.snipers.join(', ') : null;
+  }
 
   // Ejecuta la accion confirmada y cierra el dialogo al terminar.
   function ejecutar(accion) {
@@ -196,9 +272,10 @@ export function InventarioView(props) {
     var manual = publicado && l.publicado_por === 'manual';
     var clase = 'fila' + (abiertoEste ? ' abierta' : '') + (l.pendiente ? ' huerfana' : '') + (l.estado === 'vendido' ? ' vendida' : '') + (publicado ? ' publicada' : '');
     var g = l.ganancia_cr;
+    var delSniper = ventaDelSniper(l);
     var filas = [h('tr', { key: l.id, className: clase, onClick: function () { setAbierto(abiertoEste ? null : l.id); } },
       h('td', { className: 'mono', style: { color: l.pendiente ? 'var(--yellow)' : 'var(--text3)' } }, l.id),
-      h('td', null, h(NombreFurni, { furni: l })),
+      h('td', null, h(NombreFurni, { furni: l, sub: l.estado === 'vendido' && l.vendido_en ? 'vendida ' + cuandoVenta(l.vendido_en) : null })),
       h('td', { className: 'r mono' }, l.cantidad),
       h('td', { className: 'r mono' }, l.moneda_compra === 'lingos' ? fmtLg(l.precio_compra) + ' lg' : fmtLg(l.precio_compra)),
       h('td', { className: 'r mono' }, fmtCr(l.costo_total_cr)),
@@ -207,6 +284,8 @@ export function InventarioView(props) {
       conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)) : null,
       h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
         : publicado ? h(EtiquetaPublicado, { manual: manual })
+        : delSniper ? h('span', { className: 'tag tag-sniper', title: 'Venta registrada por el Sniper' + (sniperDe(l.keko) ? ' (' + sniperDe(l.keko) + ')' : '') },
+            h(Ico, { name: 'radar', size: 11 }), 'Vendido · Sniper')
         : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
       h('td', { className: 'r' }, publicado
         ? h('span', { style: { display: 'inline-flex', gap: 6 } },
@@ -234,7 +313,11 @@ export function InventarioView(props) {
           publicado && l.publicado_en ? h('div', null, h('div', { className: 'dato-l' }, 'Publicado'), h('div', { className: 'dato-v' }, fmtHace(l.publicado_en) + (manual ? ' · por ti' : ' · por el Sniper'))) : null,
           l.estado !== 'vendido' && l.comision_cr ? h('div', null, h('div', { className: 'dato-l' }, 'Recibes por unidad (tras comisión)'),
             h('div', { className: 'dato-v' }, fmtLg(ingresoNeto(l.precio_venta_cr, l.moneda_precio)) + ' cr', h('span', { className: 'tenue', style: { fontSize: 11 } }, ' · comisión ' + fmtCr(l.comision_cr)))) : null,
-          l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Fecha de venta'), h('div', { className: 'dato-v' }, fmtD(l.fecha_venta))) : null,
+          l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Fecha de venta'), h('div', { className: 'dato-v' },
+            l.vendido_en ? fmtD(diaDe(l.vendido_en)) + ' · ' + horaDe(l.vendido_en) : fmtD(l.fecha_venta))) : null,
+          l.estado === 'vendido' ? h('div', null, h('div', { className: 'dato-l' }, 'Registrada por'), h('div', { className: 'dato-v' },
+            delSniper ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } }, h(Ico, { name: 'radar', size: 13, color: 'var(--green)' }),
+              'El Sniper' + (sniperDe(l.keko) ? ' · ' + sniperDe(l.keko) : '')) : 'Tú')) : null,
           l.origen_id ? h('div', null, h('div', { className: 'dato-l' }, 'Dividido del lote'), h('div', { className: 'dato-v' }, 'Nº ' + l.origen_id)) : null),
         l.notas ? h('div', { className: 'suave', style: { fontSize: 12, marginBottom: 10 } }, l.notas) : null,
         publicado
@@ -282,10 +365,17 @@ export function InventarioView(props) {
             title: x[0] === 'publicado' ? AYUDA_PUBLICADO : null },
           x[0] === 'publicado' ? h(Ico, { name: 'lock', size: 12, sw: 2.2 }) : null, x[1], h('span', { className: 'mono' }, cuenta[x[0]]));
       }),
+      porAsignar ? h('button', { className: 'chip azul' + (filtro === 'por_asignar' ? ' activo' : ''), onClick: function () { setFiltro('por_asignar'); setAbierto(null); },
+          title: 'Ventas que registró el Sniper y la app no supo de qué lote salieron' },
+        h(Ico, { name: 'radar', size: 12 }), 'Por asignar',
+        porAsignar.length ? h('span', { className: 'chip-num' }, porAsignar.length) : h('span', { className: 'mono' }, 0)) : null,
       h('button', { className: 'btn', onClick: props.onVentaManual, title: 'Registrar una venta hecha fuera del Sniper: un tradeo o una venta desde otro keko' }, h(Ico, { name: 'tag', size: 14 }), 'Venta'),
       h('button', { className: 'btn btn-verde', onClick: function () { props.onNueva(); } }, h(Ico, { name: 'plus', size: 14, sw: 2.4 }), 'Compra')),
 
-    visibles.length === 0
+    enBandeja
+      ? h(TablaPorAsignar, { ventas: ventasVisibles, q: q, furnis: props.furnis, kekos: listaKekos, onVerErrores: props.onVerErrores,
+          onAsignar: props.onAsignarVenta, onDescartar: props.onDescartarVenta })
+    : visibles.length === 0
       ? h('div', { className: 'tabla-caja' }, h('div', { className: 'vacio' }, !compras.length ? 'Aún no hay compras. Registra una o importa tu Excel desde Ajustes.'
           : q ? 'Ningún lote coincide en esta pestaña.'
           : filtro === 'publicado' ? 'No hay nada publicado en el mercadillo.' : filtro === 'vendido' ? 'Aún no hay ventas.' : 'No tienes nada en mano.'))
@@ -302,5 +392,6 @@ export function InventarioView(props) {
     h('div', { className: 'tenue', style: { fontSize: 12, marginTop: 8 } }, filtro === 'comprado'
       ? 'Lo que tienes en mano no tiene precio ni ganancia: solo lo que costó. El precio se pone al publicar o al vender.'
       : filtro === 'publicado' ? 'La ganancia de lo publicado usa su precio de lista y ya descuenta la comisión del mercadillo de Habbo.es.'
+      : enBandeja ? 'Ventas que envió el Sniper sin un lote publicado con el que casar. No se pierden: quedan aquí hasta que las asignes o descartes, y se asignan solas si después llega la publicación que faltaba.'
       : 'La ganancia de lo vendido usa el precio real congelado al vender (si fue en el mercadillo, el neto que entró a tu monedero).'));
 }

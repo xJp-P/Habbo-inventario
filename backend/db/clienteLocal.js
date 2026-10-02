@@ -336,20 +336,51 @@ function archivosMigracion() {
 // antes de existir ese registro (con el esquema inicial ya puesto) se marca como tal.
 // `omitir` (solo pruebas): nombres de archivo que no se aplican, para simular una base
 // de produccion a la que le falta alguna migracion.
+//
+// HUELLA (v1.7.0): una migracion que aun no se publico puede cambiar despues de que el demo
+// la aplicara (paso con la 20261015000000: se le agrego la hora de la venta). Por nombre no
+// se notaba y el demo quedaba con la version vieja. Ahora se guarda la huella de cada
+// archivo; si cambio, se vuelve a correr ESA y todas las posteriores, en orden (son
+// idempotentes, y asi cada funcion queda en su ultima version: correr solo una vieja las
+// pisaria). Una base de antes de guardar huellas vuelve a correr solo la ultima aplicada,
+// que no tiene posteriores que pisar.
+function huellaDe(sql) { return crypto.createHash('sha1').update(sql).digest('hex'); }
+
 async function aplicarMigraciones(pg, omitir = []) {
   await pg.exec(SQL_BASE);
-  await pg.exec('create schema if not exists _local; create table if not exists _local.migraciones (nombre text primary key, aplicada_en timestamptz default now());');
-  const aplicadas = new Set((await pg.query('select nombre from _local.migraciones')).rows.map((r) => r.nombre));
+  await pg.exec('create schema if not exists _local; create table if not exists _local.migraciones (nombre text primary key, aplicada_en timestamptz default now());'
+    + ' alter table _local.migraciones add column if not exists huella text;');
+  const filas = (await pg.query('select nombre, huella from _local.migraciones')).rows;
+  const aplicadas = new Map(filas.map((r) => [r.nombre, r.huella]));
   const archivos = archivosMigracion();
   if (!aplicadas.size && (await pg.query("select to_regclass('public.compras') as t")).rows[0].t) {
     await pg.query('insert into _local.migraciones (nombre) values ($1)', [archivos[0]]);
-    aplicadas.add(archivos[0]);
+    aplicadas.set(archivos[0], null);
   }
+  const sinHuellas = filas.length > 0 && filas.every((r) => !r.huella);
+  const ultimaAplicada = archivos.filter((n) => aplicadas.has(n)).pop();
+  let rehacer = false;
   for (const nombre of archivos) {
-    if (aplicadas.has(nombre) || omitir.includes(nombre)) continue;
+    if (omitir.includes(nombre)) continue;
+    const sql = fs.readFileSync(path.join(DIR_MIGRACIONES, nombre), 'utf8');
+    const huella = huellaDe(sql);
+    if (aplicadas.has(nombre)) {
+      const guardada = aplicadas.get(nombre);
+      const cambio = guardada ? guardada !== huella : sinHuellas && nombre === ultimaAplicada;
+      if (!cambio && !rehacer) {
+        if (!guardada) await pg.query('update _local.migraciones set huella = $2 where nombre = $1', [nombre, huella]);
+        continue;
+      }
+      rehacer = true;
+      await pg.transaction(async (tx) => {
+        await tx.exec(sql);
+        await tx.query('update _local.migraciones set huella = $2, aplicada_en = now() where nombre = $1', [nombre, huella]);
+      });
+      continue;
+    }
     await pg.transaction(async (tx) => {
-      await tx.exec(fs.readFileSync(path.join(DIR_MIGRACIONES, nombre), 'utf8'));
-      await tx.query('insert into _local.migraciones (nombre) values ($1)', [nombre]);
+      await tx.exec(sql);
+      await tx.query('insert into _local.migraciones (nombre, huella) values ($1, $2)', [nombre, huella]);
     });
   }
   await pg.exec(SQL_TIEMPO_REAL);

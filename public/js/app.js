@@ -22,12 +22,17 @@
 // uno por su cuenta y cada seccion espera solo lo que usa (NECESITA). Si una parte falla,
 // solo las secciones que la usan lo dicen; las demas siguen. Ajustes no espera nada: se
 // abre siempre, aunque no llegue ningun dato.
+//
+// Ventas del Sniper (v1.7.0): las «por asignar» son una parte mas (ninguna seccion la
+// espera; su numero va en azul junto a Inventario). Llegan en vivo con un aviso que dice
+// lo vendido (y «Ver» si alguna quedo por asignar). Marcar «Vendido» a mano en un keko
+// cuyo Sniper ya registra sus ventas pregunta antes: se contaria dos veces.
 
 import { h, useState, useEffect, useCallback, useRef, createRoot } from './core/react.js';
 import { API, setErrorHandler } from './core/api.js';
-import { fmtLg } from './core/format.js';
+import { fmtLg, fmtCr } from './core/format.js';
 import { Ico } from './componentes/iconos.js';
-import { Spinner, Modal } from './componentes/base.js';
+import { Spinner, Modal, Confirmar } from './componentes/base.js';
 import { AccesoView, InstalarBase } from './vistas/Acceso.js';
 import { ResumenView } from './vistas/Resumen.js';
 import { MercadilloView } from './vistas/Mercadillo.js';
@@ -43,7 +48,9 @@ import { VentaManualModal } from './modales/VentaManualModal.js';
 import { NovedadesModal } from './componentes/NovedadesModal.js';
 import { novedadesAMostrar, previsualizacionPedida, CLAVE_VISTA } from './core/novedades.js';
 import { LtdModal } from './modales/LtdModal.js';
+import { AsignarVentaModal } from './modales/AsignarVentaModal.js';
 import { esDelKeko } from './core/kekos.js';
+import { kekoConVentasSniper, nombreVentaPendiente } from './core/ventas.js';
 import { ErroresModal } from './componentes/ErroresModal.js';
 import { Barrera } from './componentes/Barrera.js';
 import { registrarError, erroresRegistrados, alCambiarErrores, limpiarErrores, describirEquipo } from './core/errores.js';
@@ -56,6 +63,7 @@ var PARTES = {
   furnis: { ruta: '/api/furnis', nombre: 'tus furnis' },
   compras: { ruta: '/api/compras', nombre: 'tus lotes' },
   pendientes: { ruta: '/api/pendientes', nombre: 'lo «por revisar»' },
+  porAsignar: { ruta: '/api/ventas-por-asignar', nombre: 'las ventas por asignar' },
 };
 var NECESITA = {
   resumen: ['resumen'],
@@ -96,6 +104,8 @@ function App() {
   // recarga sola); el clic en una notificacion deja en `abrirAuditoria` el keko a abrir.
   var sSen = useState(0); var senalAuditoria = sSen[0]; var setSenalAuditoria = sSen[1];
   var sAbA = useState(null); var abrirAuditoria = sAbA[0]; var setAbrirAuditoria = sAbA[1];
+  // Clic en el aviso de ventas del Sniper: la pestaña del Inventario a abrir ({ filtro, keko, vez }).
+  var sAbI = useState(null); var abrirInventario = sAbI[0]; var setAbrirInventario = sAbI[1];
   // Errores de la sesion, el modal que los muestra ('carga' | 'registro') y las partes de
   // la carga que fallaron la ultima vez ({ clave: Error }).
   var sErr = useState(erroresRegistrados); var errores = sErr[0]; var setErrores = sErr[1];
@@ -106,13 +116,14 @@ function App() {
   // de una recarga que falla).
   var llegaron = useRef({});
 
-  var avisar = useCallback(function (msg, tipo) {
-    setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now() });
+  // `accion` ({ texto, fn }): un boton en el aviso (que entonces dura mas).
+  var avisar = useCallback(function (msg, tipo, accion) {
+    setToast({ msg: msg, tipo: tipo || 'ok', id: Date.now(), accion: accion || null });
   }, []);
 
   useEffect(function () {
     if (!toast) return;
-    var t = setTimeout(function () { setToast(null); }, toast.tipo === 'error' ? 8000 : 2800);
+    var t = setTimeout(function () { setToast(null); }, toast.tipo === 'error' || toast.accion ? 8000 : 2800);
     return function () { clearTimeout(t); };
   }, [toast]);
 
@@ -224,8 +235,18 @@ function App() {
       if (ev.compras) partes.push(ev.compras + (ev.compras === 1 ? ' compra' : ' compras'));
       if (ev.publicaciones) partes.push(ev.publicaciones + (ev.publicaciones === 1 ? ' publicación' : ' publicaciones'));
       if (ev.recuperaciones) partes.push(ev.recuperaciones + (ev.recuperaciones === 1 ? ' recuperación' : ' recuperaciones'));
+      if (ev.ventas) partes.push(ev.ventas + (ev.ventas === 1 ? ' venta' : ' ventas'));
       avisar('Sniper: ' + (partes.join(', ') || ev.total + ' evento(s)'), 'sniper');
       recargar();
+    });
+    // Ventas del Sniper (llega justo despues del aviso de eventos): lo vendido, por keko. Si
+    // alguna quedo por asignar, «Ver» abre la bandeja.
+    fuente.addEventListener('ventas', function (e) {
+      var ev = JSON.parse(e.data);
+      var a = (ev.avisos || [])[0];
+      if (!a) return;
+      var pendiente = (ev.avisos || []).some(function (x) { return x.por_asignar; });
+      avisar(a.titulo + ': ' + a.cuerpo, 'sniper', pendiente ? { texto: 'Ver', fn: function () { abrirPestana({ filtro: 'por_asignar' }); } } : null);
     });
     // El catalogo de Habbo.es se actualizo solo (al abrir la app) y cambio algun nombre o
     // icono de tus furnis: se recargan los datos, sin aviso.
@@ -247,12 +268,23 @@ function App() {
     var api = window.electronAPI;
     if (!api || !api.alAbrir) return;
     return api.alAbrir(function (destino) {
-      if (!destino || destino.vista !== 'auditoria') return;
+      if (!destino) return;
+      if (destino.vista === 'inventario') { abrirPestana(destino); return; }
+      if (destino.vista !== 'auditoria') return;
       setModal(null);
       setAbrirAuditoria({ keko: destino.keko || null, vez: Date.now() });
       setVista('auditoria');
     });
   }, []);
+
+  // Abre el Inventario en Vendido (en el bloque de un keko) o en «Por asignar».
+  function abrirPestana(destino) {
+    setModal(null);
+    setToast(null);
+    setFiltroFurni('');
+    setAbrirInventario({ filtro: destino.filtro || 'vendido', keko: destino.keko || null, vez: Date.now() });
+    setVista('inventario');
+  }
 
   function cambio(msg) { setModal(null); if (msg) avisar(msg); recargar(); }
 
@@ -301,9 +333,11 @@ function App() {
   var colorToast = toast && toast.tipo === 'error' ? ['var(--red-bg)', 'var(--red-bd)', 'var(--red)']
     : toast && toast.tipo === 'sniper' ? ['var(--yellow-bg)', 'var(--yellow-bd)', 'var(--yellow)']
     : ['var(--green-bg)', 'var(--green-bd)', 'var(--green)'];
-  var aviso = toast ? h('div', { key: toast.id, className: 'toast' + (toast.tipo === 'error' && lista ? ' con-accion' : ''), style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } },
+  var accionToast = toast && toast.accion ? toast.accion
+    : toast && toast.tipo === 'error' && lista ? { texto: 'Ver detalles', fn: function () { setToast(null); setVerErrores('registro'); } } : null;
+  var aviso = toast ? h('div', { key: toast.id, className: 'toast' + (accionToast ? ' con-accion' : ''), style: { background: colorToast[0], border: '1px solid ' + colorToast[1], color: colorToast[2] } },
     toast.msg,
-    toast.tipo === 'error' && lista ? h('button', { className: 'toast-accion', onClick: function () { setToast(null); setVerErrores('registro'); } }, 'Ver detalles') : null) : null;
+    accionToast ? h('button', { className: 'toast-accion', onClick: accionToast.fn }, accionToast.texto) : null) : null;
 
   if (!cuenta) return h('div', { className: 'acceso', 'data-app-lista': '1' }, h(Spinner));
   // El aviso tambien se ve en el acceso (antes sus errores no se mostraban).
@@ -311,6 +345,12 @@ function App() {
 
   var nav = NAV.find(function (n) { return n[0] === vista; });
   var huerfanos = datos.pendientes ? datos.pendientes.length : 0;
+  var ventasPendientes = datos.porAsignar && datos.porAsignar.disponible ? datos.porAsignar.ventas || [] : [];
+  // «Vendido» a mano en un keko cuyo Sniper ya registra sus ventas: primero la pregunta.
+  function venderConAviso(keko, abrir) {
+    if (kekoConVentasSniper(datos.compras, ventasPendientes, keko)) setModal({ tipo: 'aviso-sniper', keko: keko, siguiente: abrir });
+    else abrir();
+  }
   var tasa = datos.resumen ? datos.resumen.tasa : 50;
 
   function abrirErrores() { setVerErrores('registro'); }
@@ -335,7 +375,9 @@ function App() {
     furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos, onVerErrores: abrirErrores,
     onVerLotes: function (f) { verLotes(f.nombre, 'publicado'); },
     // Desde el bloque de un keko: solo lo publicado en ese keko.
-    onVender: function (f, ambito) { setModal({ tipo: 'vender-furni', furni: f, lotes: publicadosDe(f.id, false, ambito), ambito: ambito }); },
+    onVender: function (f, ambito) {
+      venderConAviso(ambito && ambito.keko, function () { setModal({ tipo: 'vender-furni', furni: f, lotes: publicadosDe(f.id, false, ambito), ambito: ambito }); });
+    },
     onRetirar: function (f, ambito) {
       var todos = publicadosDe(f.id, false, ambito);
       var manual = todos.filter(function (c) { return c.publicado_por === 'manual'; });
@@ -345,14 +387,18 @@ function App() {
   });
   else if (vista === 'inventario') contenido = h(InventarioView, {
     compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado, kekos: kekos, onVerErrores: abrirErrores,
+    furnis: datos.furnis || [], porAsignar: datos.porAsignar, abrir: abrirInventario,
     // «+ Compra» de un bloque llega con su keko ya elegido.
     onNueva: function (keko) { setModal({ tipo: 'compra', keko: keko || null }); },
     // Lo publicado se vende en el mercadillo (con comision); lo que esta en mano, con la
     // venta manual (tradeo u otro keko).
     onVender: function (l) {
-      if (l.estado === 'publicado') setModal({ tipo: 'vender', lote: l, furni: furniDe(l.furni_id) });
+      if (l.estado === 'publicado') venderConAviso(l.keko, function () { setModal({ tipo: 'vender', lote: l, furni: furniDe(l.furni_id) }); });
       else setModal({ tipo: 'venta-manual', furni: furniDe(l.furni_id), lote: l });
     },
+    // Pestaña «Por asignar».
+    onAsignarVenta: function (v) { setModal({ tipo: 'asignar-venta', venta: v }); },
+    onDescartarVenta: function (v) { setModal({ tipo: 'descartar-venta', venta: v }); },
     onVentaManual: function () { setModal({ tipo: 'venta-manual' }); },
     onLtd: function (l) { setModal({ tipo: 'ltd', lote: l }); },
     // «Publicar» de una fila: las unidades en mano de ese furni en SU keko.
@@ -392,6 +438,7 @@ function App() {
           h(Ico, { name: n[1], size: 18, color: vista === n[0] ? 'var(--green)' : 'var(--text3)' }),
           h('span', { style: { flex: 1 } }, n[2]),
           n[0] === 'inventario' && huerfanos ? h('span', { className: 'tag tag-ambar', title: 'Furnis del Sniper por revisar' }, huerfanos) : null,
+          n[0] === 'inventario' && ventasPendientes.length ? h('span', { className: 'tag tag-azul', title: 'Ventas del Sniper por asignar' }, ventasPendientes.length) : null,
           n[0] === 'auditoria' && resAuditoria && resAuditoria.pendientes ? h('span', { className: 'tag tag-azul', title: 'Diferencias con el inventario de Habbo' }, resAuditoria.pendientes) : null);
       })),
       h('div', { className: 'sidebar-footer' },
@@ -425,6 +472,25 @@ function App() {
     modal && modal.tipo === 'retirar-furni' ? h(RetirarFurniModal, { furni: modal.furni, lotes: modal.lotes, unidadesSniper: modal.unidadesSniper, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender' ? h(VenderModal, { lote: modal.lote, furni: modal.furni, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'aviso-sniper' ? h(Confirmar, { titulo: 'El Sniper registra las ventas de ' + modal.keko, peligro: true, icono: 'radar', textoBoton: 'Registrar a mano igual',
+      mensaje: 'Las ventas de este keko las registra el Sniper solo. Si anotas esta a mano y el Sniper también la envía, se contará dos veces. Hazlo solo si el Sniper estaba apagado o no registró esta venta.',
+      onClose: function () { setModal(null); }, onConfirmar: function () { modal.siguiente(); } }) : null,
+    modal && modal.tipo === 'asignar-venta' ? h(AsignarVentaModal, { venta: modal.venta, compras: datos.compras || [], furnis: datos.furnis || [],
+      onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); },
+      onDescartar: function (v) { setModal({ tipo: 'descartar-venta', venta: v }); } }) : null,
+    modal && modal.tipo === 'descartar-venta' ? h(Confirmar, { titulo: 'Descartar la venta', peligro: true, icono: 'trash', textoBoton: 'Descartar', enviando: !!modal.enviando,
+      mensaje: h('span', null, '¿Descartar la venta de ', h('b', null, nombreVentaPendiente(modal.venta, datos.furnis).nombre),
+        ' a ' + fmtCr(modal.venta.precio) + ' cr en ' + modal.venta.keko + '? No se registra en ningún lote y sale de la bandeja. El Sniper la conserva en su registro.'),
+      onClose: function () { setModal(null); },
+      onConfirmar: function () {
+        if (modal.enviando) return;
+        var v = modal.venta;
+        setModal(Object.assign({}, modal, { enviando: true }));
+        API.post('/api/ventas-por-asignar/' + v.id + '/descartar', {}).then(function (r) {
+          if (r) cambio('Venta descartada: no se registró en ningún lote');
+          else setModal(null);
+        });
+      } }) : null,
 
     modal && modal.tipo === 'instalar' ? h(Modal, { titulo: 'Instalar migraciones', ancho: 580, onClose: function () { setModal(null); revisarMigraciones(); } },
       h('div', { className: 'card-sub', style: { lineHeight: 1.5, marginTop: -4 } }, 'Copia cada archivo en el SQL Editor de tu proyecto y pulsa Run, en orden. La lista se actualiza sola.'),

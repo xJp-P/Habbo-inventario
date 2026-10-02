@@ -9,8 +9,9 @@
 // quedo en mano sin keko, que ensuciaba las auditorias de los snipers.
 //
 // Notificaciones (v1.4.0): que avisos quieres cuando la app esta minimizada o en segundo
-// plano. Los decide el proceso principal (electron/notificaciones.js); aqui solo se leen y
-// cambian las preferencias y se pide uno de prueba. En Mac el aviso es el Dock.
+// plano (Auditoria, catalogo y, desde la 1.7.0, las ventas del Sniper). Los decide el
+// proceso principal (electron/notificaciones.js); aqui solo se leen y cambian las
+// preferencias y se pide uno de prueba. En Mac el aviso es el Dock.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -132,6 +133,9 @@ function Notificaciones(props) {
         ? 'Cuando el inventario que envía tu Sniper deja de cuadrar. El globo desaparece al volver a la app.'
         : 'Cuando el inventario que envía tu Sniper deja de cuadrar. Al hacer clic se abre la Auditoría de ese keko.'),
       fila('catalogo', 'Furnis nuevos en el catálogo', 'Cuando Habbo.es agrega furnis nuevos al catálogo.'),
+      fila('ventas', 'Ventas del Sniper', mac
+        ? 'Cuando tu Sniper registra ventas del mercadillo. Varias seguidas cuentan como un solo aviso. El globo desaparece al volver a la app.'
+        : 'Cuando tu Sniper registra ventas del mercadillo. Varias seguidas llegan en un solo aviso. Al hacer clic se abre Vendido de ese keko, o «Por asignar» si alguna no se pudo asignar.'),
       faltaMigracion ? h('div', { key: 'f' }, faltaMigracion) : null,
       h('div', { key: 'p', className: 'fila-aviso', style: { alignItems: 'center', flexWrap: 'wrap' } },
         vivo,
