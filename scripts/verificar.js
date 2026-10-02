@@ -252,6 +252,9 @@ async function main() {
   const cortes = gruposJs.cortesDona(cMerc.partes, ['verde', 'azul'], 0.6, 'fondo');
   assert.equal(cortes, 'verde 0% 62.68%, fondo 62.68% 63.28%, azul 63.28% 99.4%, fondo 99.4% 100%', 'cortes de la dona con un hueco fino entre porciones');
   assert.equal(gruposJs.cortesDona([{ porcentaje: 1, indice: 0 }], ['verde']), 'verde 0% 100%', 'una sola porcion: el aro entero');
+  const raroG = gruposJs.composicionLotes([cmp({ id: 60, furni_id: 9, nombre: { raro: true }, classname: { x: 1 }, cantidad: 1, precio_compra_cr: 10, costo_total_cr: 10 })], 'comprado');
+  assert.deepEqual([raroG.partes[0].nombre, raroG.partes[0].classname, raroG.partes[0].valor], [null, null, 10],
+    'un nombre con otro formato no llega al globo (tumbaria el bloque entero; la fila del lote tiene su barrera)');
   // Los furnis abiertos, en este equipo.
   const memG = { d: {}, getItem(k) { return k in this.d ? this.d[k] : null; }, setItem(k, v) { this.d[k] = v; } };
   let abiertosG = gruposJs.alternarAbierto([], gruposJs.claveGrupo('XJP ', 'comprado', 1), true);

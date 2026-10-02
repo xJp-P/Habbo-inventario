@@ -43,12 +43,13 @@ export function Fld(props) {
 }
 
 // Icono oficial del furni (servido y guardado en cache por el backend). Si no hay
-// icono (furni sin vincular o sin internet) muestra una caja.
+// icono (furni sin vincular o sin internet) muestra una caja. `pila`: dibujado como una
+// pila de cartas (un furni con varios lotes, en el Inventario agrupado).
 export function IconoFurni(props) {
   var s = useState(false); var fallo = s[0]; var setFallo = s[1];
   var url = iconoUrl(props.classname, props.revision);
   var tam = props.size || 36;
-  return h('div', { className: 'furni-ico', style: { width: tam, height: tam } },
+  return h('div', { className: 'furni-ico' + (props.pila ? ' pila' : ''), style: { width: tam, height: tam } },
     url && !fallo
       ? h('img', { src: url, alt: '', loading: 'lazy', onError: function () { setFallo(true); } })
       : h(Ico, { name: 'box', size: Math.round(tam / 2), color: 'var(--text3)' }));

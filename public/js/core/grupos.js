@@ -168,7 +168,13 @@ export function composicion(items, op) {
     var clave = String(f.id !== undefined && f.id !== null ? f.id : f.nombre);
     distintos[clave] = true;
     var v = num(op.valor(x));
-    if (!porFurni[clave]) { porFurni[clave] = { furni_id: f.id === undefined ? null : f.id, nombre: f.nombre, classname: f.classname, revision: f.revision, valor: 0 }; orden.push(clave); }
+    // Solo texto: el globo dibuja estos datos en la cabecera del bloque, y un nombre con otro
+    // formato tumbaria el bloque entero en vez de solo la fila de ese lote (que tiene su barrera).
+    if (!porFurni[clave]) {
+      porFurni[clave] = { furni_id: f.id === undefined ? null : f.id, nombre: typeof f.nombre === 'string' ? f.nombre : null,
+        classname: typeof f.classname === 'string' ? f.classname : null, revision: f.revision, valor: 0 };
+      orden.push(clave);
+    }
     porFurni[clave].valor += v;
   });
   var lista = orden.map(function (c) { return porFurni[c]; }).filter(function (p) { return p.valor > 0; })

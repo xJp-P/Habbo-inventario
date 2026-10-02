@@ -364,12 +364,66 @@ input[type=number]{-moz-appearance:textfield}
 .globo-pie{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3)}
 /* Ventana angosta: la capsula deja solo los numeros (la palabra queda en el title). */
 @media (max-width:1240px){.cap-txt{display:none}.cap>span{padding:0 10px}}
+/* Inventario agrupado por furni (v1.8.0, maqueta del 02-10-2026): la fila del furni, el
+   desplegable con la curva del acordeon de «Llegaron del Sniper», los lotes en cascada
+   colgando de una rama y la franja de precios. La tabla interna repite las columnas. */
+.tabla tbody tr.fila-grupo{cursor:pointer;transition:background .15s}
+.tabla tbody tr.fila-grupo:hover,.tabla tbody tr.fila-grupo.abierto{background:var(--bg3)}
+.fila-grupo td:first-child{transition:box-shadow .25s}
+.fila-grupo.abierto td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+.fila-grupo.con-revisar td:first-child{box-shadow:inset 3px 0 0 var(--yellow)}
+.tabla tbody tr.fila-grupo.abierto td{border-bottom-color:transparent}
+.g-cel{display:flex;align-items:center;gap:6px}
+.g-flecha{width:22px;height:22px;border-radius:7px;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none;padding:0;transition:transform .32s cubic-bezier(.32,.72,0,1),background .15s,color .15s,border-color .15s}
+.fila-grupo:hover .g-flecha{color:var(--text);border-color:var(--text3)}
+.g-flecha:focus-visible{outline:2px solid var(--green);outline-offset:1px}
+.fila-grupo.abierto .g-flecha{transform:rotate(90deg);background:var(--green-bg);border-color:var(--green-bd);color:var(--green)}
+.g-n{font-size:11px;font-weight:700;color:var(--text3)}
+.furni-ico.pila{overflow:visible;position:relative;box-shadow:3px -3px 0 -1px var(--bg2),3px -3px 0 0 var(--border2),6px -6px 0 -1px var(--bg2),6px -6px 0 0 var(--border)}
+.fila-grupo:hover .furni-ico.pila,.fila-grupo.abierto .furni-ico.pila{box-shadow:3px -3px 0 -1px var(--bg3),3px -3px 0 0 var(--border2),6px -6px 0 -1px var(--bg3),6px -6px 0 0 var(--border)}
+.furni-ico.pila img{position:relative}
+.furni-sub{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prom{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;line-height:1}
+.tabla tbody tr.fila-lotes>td{padding:0;border-bottom:1px solid var(--border)}
+.tabla tbody tr.fila-lotes:not(.abierto)>td,.tabla tbody tr.fila-lotes:last-child>td{border-bottom-color:transparent}
+.tabla tbody tr.fila-grupo:nth-last-child(2) td{border-bottom-color:transparent}
+.desp{display:grid;grid-template-rows:0fr;transition:grid-template-rows .38s cubic-bezier(.32,.72,0,1)}
+.fila-lotes.abierto .desp{grid-template-rows:1fr}
+.desp-in{min-height:0;overflow:hidden}
+.desp-marco{background:linear-gradient(180deg,var(--bg3),color-mix(in srgb,var(--bg3) 35%,var(--bg2)) 70%);border-top:1px dashed var(--border)}
+.tabla.sub{table-layout:fixed}
+.tabla.sub td{border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent)}
+.tabla.sub tr.lote:hover,.tabla.sub tr.lote.resalta,.tabla.sub tr.lote.abierta{background:color-mix(in srgb,var(--bg4) 55%,transparent)}
+.tabla.sub tr.lote.huerfana{background:var(--yellow-bg)}
+.fila-lotes.animar .tabla.sub tr.lote{animation:entra-lote .42s cubic-bezier(.32,.72,0,1) both;animation-delay:calc(var(--i,0) * 32ms + 60ms)}
+@keyframes entra-lote{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.tabla.sub td.rama{position:relative;padding-left:40px}
+.tabla.sub td.rama::before{content:'';position:absolute;left:22px;top:0;bottom:0;border-left:1.5px solid var(--border2)}
+.tabla.sub tr.ultimo td.rama::before{bottom:50%}
+.tabla.sub td.rama::after{content:'';position:absolute;left:22px;top:50%;width:11px;border-top:1.5px solid var(--border2)}
+.tabla.sub tr.lote.resalta td.rama::before,.tabla.sub tr.lote.resalta td.rama::after{border-color:var(--green)}
+.lote-nombre{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden}
+.lote-titulo{overflow:hidden;text-overflow:ellipsis}
+.lote-sub{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.primero{font-size:10px;font-weight:700;color:var(--green);border:1px solid var(--green-bd);background:var(--green-bg);border-radius:99px;padding:0 7px;line-height:16px;white-space:nowrap}
+.franja{display:flex;align-items:center;gap:12px;padding:12px 14px 8px 40px;font-size:11.5px;color:var(--text3);white-space:nowrap}
+.franja b{color:var(--text)}
+.eje{position:relative;flex:1;max-width:380px;min-width:120px;height:22px}
+.eje::before{content:'';position:absolute;left:0;right:0;top:50%;border-top:2px solid var(--bg4);border-radius:2px}
+.eje .pt{position:absolute;top:50%;transform:translate(-50%,-50%);border-radius:50%;background:color-mix(in srgb,var(--green) 70%,transparent);border:2px solid var(--bg2);cursor:pointer;transition:transform .15s,background .15s}
+.eje .pt.pend{background:var(--yellow)}
+.eje .pt:hover,.eje .pt.resalta{transform:translate(-50%,-50%) scale(1.35);background:var(--green)}
+.eje .media{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;background:var(--gold);border-radius:2px}
+.eje .media::after{content:'prom.';position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--gold);font-weight:700;letter-spacing:.3px}
+@media (prefers-reduced-motion:reduce){.desp{transition-duration:.2s}.g-flecha{transition-duration:.16s}.fila-lotes.animar .tabla.sub tr.lote{animation-duration:.2s;animation-delay:calc(var(--i,0) * 12ms)}}
 @media (prefers-reduced-motion:reduce){.dona,.comp{transition-duration:.1s}.globo,.zona:hover .globo,.zona:focus .globo{transition-duration:.12s,.12s,0s}}
 .bk-cuerpo{background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;overflow-x:auto}
 .bk-cuerpo .tabla th{background:var(--bg2)}
 .bk-cuerpo .tabla tr:last-child td:first-child{border-bottom-left-radius:11px}
 .bk-cuerpo .tabla tr:last-child td:last-child{border-bottom-right-radius:11px}
-.bk.sin .bk-cab::after,.bk.sin .bk-cuerpo{border-style:dashed}
+/* Sin keko: borde punteado (en el cuerpo, sin reactivar el borde superior que se quito). */
+.bk.sin .bk-cab::after{border-style:dashed}
+.bk.sin .bk-cuerpo{border-style:none dashed dashed}
 /* Con sitio para todas las columnas (.alineado, lo mide la vista): anchos fijos, todos los
    bloques alineados, y la fila de titulos tambien se queda fija bajo la cabecera. Con poco
    ancho (la ventana admite 1000px): anchos automaticos y desplazamiento lateral dentro del

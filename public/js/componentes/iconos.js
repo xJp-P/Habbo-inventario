@@ -59,7 +59,10 @@ export var ICONS = {
   capas:     'M12 3l9 5-9 5-9-5z M3 12.5l9 5 9-5 M3 16.5l9 5 9-5',
   cubos:     'M7 3h10v7H7z M2 13h9v8H2z M13 13h9v8h-9z',
   moneda:    'M12 20.5a8.5 8.5 0 100-17 8.5 8.5 0 000 17z M12 16.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9z',
-  bajando:   'M23 18l-9.5-9.5-5 5L1 6 M17 18h6v-6'
+  bajando:   'M23 18l-9.5-9.5-5 5L1 6 M17 18h6v-6',
+  // Inventario agrupado (v1.8.0): abrir y cerrar todos los furnis.
+  expandir:  'M7 15l5 5 5-5 M7 9l5-5 5 5',
+  contraer:  'M7 20l5-5 5 5 M7 4l5 5 5-5'
 };
 
 export function Ico(props){

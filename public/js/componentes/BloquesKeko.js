@@ -60,7 +60,7 @@ function Subtitulo(props) {
 export var COLORES_COMPOSICION = ['var(--green)', 'var(--blue)', 'var(--purple)', 'var(--gold)', 'var(--text3)'];
 
 function porcentaje(p) { var x = p * 100; return x > 0 && x < 1 ? '<1%' : Math.round(x) + '%'; }
-function nombreParte(p) { return p.otros ? 'Otros ' + p.otros + (p.otros === 1 ? ' furni' : ' furnis') : p.nombre; }
+function nombreParte(p) { return p.otros ? 'Otros ' + p.otros + (p.otros === 1 ? ' furni' : ' furnis') : p.nombre || 'Furni sin nombre'; }
 function textoDinero(d) { return (d.tipo === 'ganancia' && d.valor > 0 ? '+' : '') + fmtCr(d.valor) + ' cr'; }
 
 // La dona: cuantos furnis distintos hay y como se reparte el dinero entre ellos.
