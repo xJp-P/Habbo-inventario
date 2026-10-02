@@ -8,6 +8,56 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
+## [1.8.0] - 2026-10-02
+
+### Añadido
+
+- **Inventario agrupado por furni**. En Comprado, Publicado y Vendido, dentro de cada keko,
+  los lotes del mismo furni se juntan en una sola fila con sus totales: unidades, costo,
+  compra c/u promedio y el rango de precios («11 lotes · de 21 a 30 c/u»). En Publicado
+  muestra los precios de lista, la ganancia y el margen; en Vendido, lo que entró y la
+  última venta. Un furni con un solo lote se ve como antes.
+- **Desplegable**: al hacer clic en la fila del furni (o en su flecha), sus lotes se abren
+  con una animación suave, colgando de una rama y con las mismas columnas. Van en el orden
+  en que la base los toma: en Comprado y Publicado, del más antiguo al más nuevo, con la
+  marca **«1º en salir»**; en Vendido, la última venta arriba. El detalle de cada lote se
+  abre como antes.
+- **Franja de precios de compra** (Comprado): cada lote es un punto en el rango de precios
+  (más grande cuantas más unidades tiene) y una marca dorada señala el promedio. Al pasar
+  el ratón por un punto se ilumina su fila, y al revés.
+- **«Abrir todo / Cerrar todo»** en la barra. Al buscar, los furnis que coinciden se abren
+  solos. Los furnis que dejas abiertos se recuerdan en ese equipo.
+- **Botones del furni**: en Comprado, «Publicar todo» (las unidades en mano de ese keko, de
+  la más antigua a la más nueva) y «Vender» (la venta manual con el furni y el keko ya
+  elegidos); en Publicado, «Vendido» y «Retirar» en ese keko, como en el Mercadillo y con
+  la misma pregunta si el Sniper registra las ventas de ese keko.
+- **«Publicar» un solo lote**: dentro de su furni, cada lote publica solo ese lote. Si se
+  publica una parte, el lote se divide y la parte publicada conserva su keko; los demás
+  lotes del furni no se tocan.
+- **Encabezado nuevo de cada keko**, en el Inventario y en el Mercadillo: una dona con los
+  furnis del keko, una cápsula con «lotes · und · dinero» (el costo en Comprado; la
+  ganancia en Publicado, Vendido y el Mercadillo) y, al pasar el ratón o con el teclado, un
+  globo con el dinero de cada furni: dónde está tu inversión, lo que te entraría o de dónde
+  vienen tus ingresos. La misma composición pinta una barra de colores en el borde inferior
+  de la cabecera. En el Mercadillo, el globo reparte el mismo neto que muestra el detalle de
+  cada fila. Con la ventana angosta, la cápsula deja solo los números.
+
+### Cambiado
+
+- La columna de acciones del Inventario es un poco más ancha (210 px en Comprado y 206 en
+  Publicado) para que quepan dos botones. Con la ventana angosta, el Inventario mantiene los
+  anchos fijos y la tarjeta se desplaza de lado, para que las columnas de los lotes
+  coincidan con las del furni.
+
+### Corregido
+
+- En los bloques «Sin keko», el borde punteado dibujaba una línea blanca de 3 px bajo la
+  cabecera (desde la 1.6.0).
+
+### Migraciones de Supabase
+
+- Ninguna: esta versión no cambia la base de datos.
+
 ## [1.7.0] - 2026-10-02
 
 ### Añadido
@@ -432,6 +482,7 @@ Primera versión pública. Funciona solo con el hotel **Habbo.es**.
 Instalación nueva: ejecutar en orden todos los archivos de `supabase/migrations/`, de
 `20260927000000_esquema_inicial.sql` a `20261006000000_numero_ltd.sql`.
 
+[1.8.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/xJp-P/Habbo-inventario/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/xJp-P/Habbo-inventario/compare/v1.5.2...v1.6.0

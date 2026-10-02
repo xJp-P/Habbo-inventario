@@ -13,6 +13,14 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.8.0': [
+    'Tu Inventario se ve mucho más limpio: si compraste el mismo furni varias veces, ahora aparece en una sola fila con el total de unidades, lo que te costó y el rango de precios. Haz clic en ella y se despliegan todos sus lotes.',
+    'Al abrir un furni, sus lotes van del más antiguo al más nuevo, y el que se publica primero lleva la marca «1º en salir».',
+    'En Comprado verás una franja con el precio de cada compra: cada punto es un lote y la marca dorada es el promedio. Pasa el ratón por un punto y se ilumina su lote.',
+    'Con «Abrir todo» y «Cerrar todo» despliegas o recoges todos los furnis de una vez. Al buscar, los que coinciden se abren solos, y la app recuerda cuáles dejaste abiertos.',
+    'La fila de cada furni trae sus botones: «Publicar todo» y «Vender» en Comprado, «Vendido» y «Retirar» en Publicado. Y dentro, cada lote puede publicarse por separado: si publicas solo una parte, el lote se divide solo.',
+    'Cada keko estrena encabezado: una dona y una barra de colores te muestran dónde está tu dinero, furni por furni. Pasa el ratón por encima para ver el detalle. También en el Mercadillo.',
+  ],
   '1.7.0': [
     'Tu Sniper ahora anota tus ventas solo: cuando alguien compra uno de tus furnis en el mercadillo, la venta aparece en Vendido del keko correcto, con lo que te entró y la ganancia. Ya no tienes que marcarla a mano.',
     'En Vendido, lo que anotó el Sniper lleva la etiqueta «Vendido · Sniper» y la hora exacta de la venta.',
