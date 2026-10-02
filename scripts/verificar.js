@@ -186,6 +186,90 @@ async function main() {
   assert.equal(ventasJs.ventaDelSniper(lotesV[5]), true);
   ok('ventas del Sniper en la interfaz: a que lotes se puede asignar una venta (su keko o sin keko, el LTD con otro numero bloqueado, en el orden de la base), cuando pregunta el «Vendido» a mano y «hoy a las 04:19»');
 
+  // ── Inventario agrupado por furni y encabezado C (public/js/core/grupos.js, v1.8.0) ──
+  const gruposJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'grupos.js')).href);
+  const comG = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'comision.js')).href);
+  const cmp = (o) => Object.assign({ nombre: 'Cara con Cicatrices', furni_id: 1, estado: 'comprado' }, o);
+  const compradosG = [
+    cmp({ id: 11, cantidad: 3, precio_compra_cr: 25, costo_total_cr: 75, fecha_compra: '2026-09-20', pendiente: true }),
+    cmp({ id: 12, cantidad: 6, precio_compra_cr: 22, costo_total_cr: 132, fecha_compra: '2026-09-10' }),
+    cmp({ id: 9, cantidad: 4, precio_compra_cr: 30, costo_total_cr: 120, fecha_compra: '2026-09-10' }),
+    cmp({ id: 14, cantidad: 2, moneda_compra: 'lingos', precio_compra: 0.5, precio_compra_cr: 25, costo_total_cr: 50, fecha_compra: null }),
+    cmp({ id: 13, furni_id: 2, nombre: 'Pato HC', cantidad: 1, precio_compra_cr: 100, costo_total_cr: 100, fecha_compra: '2026-09-25', numero_ltd: 7 }),
+    cmp({ id: 15, furni_id: 2, nombre: 'Pato HC', cantidad: 1, precio_compra_cr: 120, costo_total_cr: 120, fecha_compra: '2026-09-26', numero_ltd: 9 }),
+    cmp({ id: 16, furni_id: 3, nombre: 'Trono', cantidad: '2', precio_compra_cr: '480', costo_total_cr: '960', fecha_compra: '2026-09-30' }),
+  ];
+  const gC = gruposJs.agruparPorFurni(compradosG, 'comprado');
+  assert.deepEqual(gC.map((g) => [g.nombre, g.lotes.map((l) => l.id)]), [['Cara con Cicatrices', [14, 9, 12, 11]], ['Trono', [16]], ['Pato HC', [13, 15]]],
+    'grupos: el que tiene algo por revisar primero, luego el mas reciente; lotes en el orden de publicar_furni (sin fecha primero, mismo dia por id)');
+  const caraG = gC[0];
+  assert.deepEqual([caraG.unidades, caraG.costo, Math.round(caraG.compraProm * 100) / 100, caraG.compraMin, caraG.compraMax, caraG.porRevisar, caraG.unidadesPorRevisar, caraG.primero],
+    [15, 377, 25.13, 22, 30, 1, 3, 14], 'totales en creditos (el lote en lingos ya convertido); «1º en salir» = el mas antiguo');
+  assert.deepEqual([gC[1].unidades, gC[1].costo, gC[2].ltds, gC[2].primero], [2, 960, [7, 9], 13], 'numeros que llegan como texto y los LTD del grupo');
+  assert.equal(gruposJs.agruparPorFurni([cmp({ id: 20, cantidad: 1, precio_compra_cr: 5, fecha_compra: '2026-09-01', pendiente: true }),
+    cmp({ id: 21, cantidad: 1, precio_compra_cr: 5, fecha_compra: '2026-09-05' })], 'comprado')[0].primero, 21, 'lo por revisar nunca es el 1º en salir (publicar_furni no lo toca)');
+  const franjaG = gruposJs.franjaPrecios(caraG);
+  assert.deepEqual([franjaG.min, franjaG.max, Math.round(franjaG.posPromedio * 10) / 10, franjaG.puntos.map((p) => [p.id, p.pos, p.tam, p.pendiente])],
+    [22, 30, 39.2, [[14, 37.5, 11, false], [9, 100, 15, false], [12, 0, 18, false], [11, 37.5, 13, true]]], 'franja: cada lote en su precio (mas unidades, punto mas grande) y el promedio');
+  assert.equal(gruposJs.franjaPrecios(gC[1]), null, 'un solo precio: sin franja');
+  const pub = (o) => Object.assign({ nombre: 'Cara con Cicatrices', furni_id: 1, estado: 'publicado', moneda_lista: 'creditos' }, o);
+  const publicadosG = [
+    pub({ id: 31, cantidad: 2, precio_compra_cr: 22, costo_total_cr: 44, precio_lista_cr: 45, publicado_en: '2026-10-01T10:00:00Z', ganancia_cr: 44 }),
+    pub({ id: 30, cantidad: 3, precio_compra_cr: 24, costo_total_cr: 72, precio_lista_cr: 45, publicado_en: '2026-10-01T10:00:00Z', ganancia_cr: 60 }),
+    pub({ id: 32, cantidad: 1, precio_compra_cr: 26, costo_total_cr: 26, precio_lista_cr: 49, publicado_en: null, ganancia_cr: 22 }),
+    pub({ id: 33, cantidad: 1, precio_compra_cr: 25, costo_total_cr: 25, moneda_lista: 'lingos', precio_lista: 1, precio_lista_cr: 50, publicado_en: '2026-10-02T01:00:00Z', ganancia_cr: 25 }),
+  ];
+  const gP = gruposJs.agruparPorFurni(publicadosG, 'publicado')[0];
+  assert.deepEqual([gP.lotes.map((l) => l.id), gP.listas, gP.neto, gP.ganancia, Math.round(gP.margen * 1000) / 1000, gP.primero],
+    [[32, 30, 31, 33], [45, 49, 50], 318, 151, 0.904, null], 'publicado: orden de vender_furni, precios de lista, lo que entraria (el lingo sin comision), ganancia y margen');
+  assert.equal(gP.neto, comG.resumenPublicado(publicadosG).neto, 'lo que entraria = el neto de resumenPublicado (el del Mercadillo)');
+  const ven = (o) => Object.assign({ nombre: 'Cara con Cicatrices', furni_id: 1, estado: 'vendido' }, o);
+  const vendidosG = [
+    ven({ id: 40, cantidad: 1, precio_compra_cr: 22, costo_total_cr: 22, precio_venta_cr: 44, ganancia_cr: 22, vendido_en: '2026-10-01T20:00:00Z', vendido_por: 'sniper' }),
+    ven({ id: 42, cantidad: 2, precio_compra_cr: 25, costo_total_cr: 50, precio_venta_cr: 40, ganancia_cr: 30, vendido_en: null, fecha_venta: '2026-09-28', vendido_por: 'manual' }),
+    ven({ id: 41, cantidad: 1, precio_compra_cr: 21, costo_total_cr: 21, precio_venta_cr: 44, ganancia_cr: 23, vendido_en: '2026-10-02T03:10:00Z', vendido_por: 'sniper' }),
+    ven({ id: 43, furni_id: 2, nombre: 'Pato HC', cantidad: 1, precio_compra_cr: 95, costo_total_cr: 95, precio_venta_cr: 130, ganancia_cr: 35, fecha_venta: '2026-09-30' }),
+  ];
+  const gV = gruposJs.agruparPorFurni(vendidosG, 'vendido');
+  assert.deepEqual(gV.map((g) => [g.nombre, g.lotes.map((l) => l.id)]), [['Cara con Cicatrices', [41, 40, 42]], ['Pato HC', [43]]], 'vendido: la ultima venta primero');
+  assert.deepEqual([gV[0].ingreso, gV[0].ventaProm, gV[0].ultimaVenta, gV[0].todasSniper, gV[0].ganancia, Math.round(gV[0].margen * 1000) / 1000],
+    [168, 42, '2026-10-02T03:10:00Z', false, 75, 0.806], 'vendido: lo que entro, venta c/u promedio, ultima venta y si todas las registro el Sniper');
+  // Composicion (dona, globo y barra del encabezado C).
+  const cC = gruposJs.composicionLotes(compradosG, 'comprado');
+  assert.deepEqual([cC.total, cC.furnis, cC.partes.map((p) => [p.nombre, p.valor, p.indice])], [1557, 3, [['Trono', 960, 0], ['Cara con Cicatrices', 377, 1], ['Pato HC', 220, 2]]],
+    'composicion de Comprado: el costo por furni, de mayor a menor');
+  const muchos = [700, 600, 500, 400, 300, 200, 100, 0, -50].map((v, i) => ({ f: { id: i + 1, nombre: 'F' + (i + 1) }, r: { neto: v } }));
+  const cM = gruposJs.composicionMercadillo(muchos);
+  assert.deepEqual([cM.total, cM.furnis, cM.partes.length, cM.partes[4].otros, cM.partes[4].valor, cM.partes[4].nombre],
+    [2800, 9, 5, 3, 600, null], 'con mas de 5 furnis: los 4 primeros y «Otros» (lo que no suma no entra en la dona, pero cuenta como furni)');
+  assert.equal(Math.round(cM.partes.reduce((s, p) => s + p.porcentaje, 0) * 1e9) / 1e9, 1, 'los porcentajes suman 100%');
+  assert.equal(gruposJs.composicionMercadillo(muchos.slice(0, 5)).partes.filter((p) => p.otros).length, 0, 'con 5 furnis, todos por su nombre');
+  const filasMerc = [{ f: { id: 1, nombre: 'Cara con Cicatrices' }, r: comG.resumenPublicado(publicadosG) },
+    { f: { id: 2, nombre: 'Pato HC' }, r: comG.resumenPublicado([pub({ id: 50, furni_id: 2, cantidad: 4, precio_compra_cr: 92, precio_lista_cr: 140 })]) }];
+  const cMerc = gruposJs.composicionMercadillo(filasMerc);
+  assert.deepEqual(cMerc.partes.map((p) => [p.nombre, p.valor]), [['Pato HC', 548], ['Cara con Cicatrices', 318]], 'Mercadillo: cada furni con su «Te entraria al venderse (neto)»');
+  assert.equal(cMerc.total, filasMerc[0].r.neto + filasMerc[1].r.neto, 'el total del globo = la suma de los netos de las filas (tambien con un lote en lingos)');
+  const cortes = gruposJs.cortesDona(cMerc.partes, ['verde', 'azul'], 0.6, 'fondo');
+  assert.equal(cortes, 'verde 0% 62.68%, fondo 62.68% 63.28%, azul 63.28% 99.4%, fondo 99.4% 100%', 'cortes de la dona con un hueco fino entre porciones');
+  assert.equal(gruposJs.cortesDona([{ porcentaje: 1, indice: 0 }], ['verde']), 'verde 0% 100%', 'una sola porcion: el aro entero');
+  // Los furnis abiertos, en este equipo.
+  const memG = { d: {}, getItem(k) { return k in this.d ? this.d[k] : null; }, setItem(k, v) { this.d[k] = v; } };
+  let abiertosG = gruposJs.alternarAbierto([], gruposJs.claveGrupo('XJP ', 'comprado', 1), true);
+  abiertosG = gruposJs.alternarAbierto(abiertosG, gruposJs.claveGrupo(null, 'publicado', 2), true);
+  gruposJs.guardarAbiertos(abiertosG, memG);
+  assert.deepEqual(gruposJs.leerAbiertos(memG), ['xjp|comprado|1', '(sin keko)|publicado|2'], 'se recuerdan (el keko sin distinguir mayusculas)');
+  assert.deepEqual(gruposJs.alternarAbierto(abiertosG, 'xjp|comprado|1', false), ['(sin keko)|publicado|2'], 'cerrar lo quita');
+  gruposJs.guardarAbiertos(Array.from({ length: 350 }, (_, i) => 'k|comprado|' + i), memG);
+  const leidosG = gruposJs.leerAbiertos(memG);
+  assert.deepEqual([leidosG.length, leidosG[0], leidosG[299]], [300, 'k|comprado|50', 'k|comprado|349'], 'tope de 300: se olvidan los mas viejos');
+  const rotoG = { getItem() { throw new Error('bloqueado'); }, setItem() { throw new Error('bloqueado'); } };
+  assert.deepEqual(gruposJs.leerAbiertos(rotoG), [], 'sin almacenamiento: ninguno abierto');
+  gruposJs.guardarAbiertos(['x'], rotoG);
+  assert.deepEqual(gruposJs.leerAbiertos({ getItem: () => '{"a":1}' }), [], 'un dato raro no rompe nada');
+  assert.deepEqual(gruposJs.leerAbiertos({ getItem: () => '[1,"k|vendido|3"]' }), ['k|vendido|3']);
+  assert.deepEqual(gruposJs.leerAbiertos(), [], 'sin navegador (aqui, en Node): ninguno');
+  ok('inventario agrupado: una fila por furni con sus totales, lotes en el orden de la base y «1º en salir»; franja de precios; composicion del encabezado (Inventario y Mercadillo, el mismo neto); furnis abiertos recordados con tope y sin romperse');
+
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');
   assert.equal(notif.APP_ID, paquete.build.appId, 'el AUMID de Windows es el appId que el instalador pone en el acceso directo');
@@ -1221,6 +1305,52 @@ async function main() {
     assert.deepEqual(agr.vacios, ['Vacio']);
     assert.deepEqual([kekosJs.ambitoDe(agr.bloques[0].keko), kekosJs.ambitoDe(agr.bloques[4].keko)], [{ keko: 'xJp' }, { sin_keko: true }]);
     ok('inventario por keko: publicar, vender y retirar desde un bloque solo tocan ese keko (o lo sin keko); las partes de un lote conservan su keko; la migracion devuelve el keko a lo publicado y vendido; bloques en el orden del dueno');
+
+    // ── Inventario agrupado (v1.8.0): «1º en salir» es el lote que la base toma de verdad ──
+    const gr = await crearClienteLocal();
+    await gr.crearUsuario('gr@prueba.local', 'clave-gr');
+    await gr.auth.signInWithPassword({ email: 'gr@prueba.local', password: 'clave-gr' });
+    const conexGr = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: gr });
+    await conexGr.iniciar();
+    const negGr = crearServicioNegocio({ conexion: conexGr, furnidata });
+    await negGr.crearKeko('xJp');
+    const grA = await negGr.crearCompra({ nombre: 'Cara con Cicatrices', cantidad: 2, precio_compra: 24, keko: 'xJp', fecha_compra: '2026-09-20' });
+    const grF = grA.furni_id;
+    const grB = await negGr.crearCompra({ furni_id: grF, cantidad: 1, precio_compra: 22, keko: 'xJp', fecha_compra: '2026-09-05' });
+    const grC = await negGr.crearCompra({ furni_id: grF, cantidad: 3, precio_compra: 21, keko: 'xJp', fecha_compra: '2026-09-05' });
+    const grD = await negGr.crearCompra({ furni_id: grF, cantidad: 1, precio_compra: 30, keko: 'xJp', fecha_compra: '2026-09-25' });
+    assert.equal((await gr.from('compras').update({ fecha_compra: null }).eq('id', grD.id)).error, null);
+    const grP = await negGr.crearCompra({ furni_id: grF, cantidad: 2, precio_compra: 26, keko: 'xJp', fecha_compra: '2026-08-01' });
+    assert.equal((await gr.from('compras').update({ pendiente: true }).eq('id', grP.id)).error, null);
+    await negGr.crearCompra({ furni_id: grF, cantidad: 4, precio_compra: 20, fecha_compra: '2026-07-01' });   // sin keko: es otro bloque
+    const bloqueGr = async (estado) => (await negGr.listarCompras()).filter((l) => l.furni_id === grF && l.estado === estado && l.keko === 'xJp');
+    const tomadosGr = [];
+    for (let i = 0; i < 7; i++) {
+      const grupo = gruposJs.agruparPorFurni(await bloqueGr('comprado'), 'comprado')[0];
+      const r = await negGr.publicarFurni(grF, { cantidad: 1, precio_lista: 150, keko: 'xJp' });
+      const tomado = r.lotes[0].dividido ? r.lotes[0].origen_id : r.lotes[0].lote_id;
+      assert.equal(tomado, grupo.primero, `publicacion ${i + 1}: la base toma el lote marcado «1º en salir»`);
+      tomadosGr.push(tomado);
+    }
+    assert.deepEqual(tomadosGr, [grD.id, grB.id, grC.id, grC.id, grC.id, grA.id, grA.id], 'sin fecha primero, mismo dia por id; nunca lo por revisar ni lo de otro bloque');
+    assert.deepEqual((await bloqueGr('comprado')).map((l) => [l.id, l.pendiente]), [[grP.id, true]], 'en mano solo queda lo por revisar');
+    // Publicado: el orden de vender_furni (publicado_en asc nulls first, id asc).
+    const pubGr = await bloqueGr('publicado');
+    assert.equal(pubGr.length, 7);
+    assert.equal((await gr.from('compras').update({ publicado_en: null }).eq('id', pubGr[4].id)).error, null);
+    for (let i = 0; i < 3; i++) {
+      const grupo = gruposJs.agruparPorFurni(await bloqueGr('publicado'), 'publicado')[0];
+      const r = await negGr.venderFurni(grF, { cantidad: 1, keko: 'xJp' });
+      assert.equal(r.ventas[0].lote_id, grupo.lotes[0].id, `venta ${i + 1}: la base vende el primero del grupo publicado`);
+      if (i === 0) assert.equal(r.ventas[0].lote_id, pubGr[4].id, 'lo publicado sin fecha sale primero');
+    }
+    const bloquePubGr = await bloqueGr('publicado');
+    assert.equal(gruposJs.composicionLotes(bloquePubGr, 'publicado').total, comision.resumenPublicado(bloquePubGr).neto,
+      'con lotes reales de la base, la dona del Inventario y el Mercadillo dan el mismo neto');
+    const gVenGr = gruposJs.agruparPorFurni(await bloqueGr('vendido'), 'vendido')[0];
+    assert.deepEqual([gVenGr.unidades, gVenGr.lotes.length], [3, 3], 'las 3 ventas quedan en un solo grupo de Vendido');
+    await gr.cerrar();
+    ok('inventario agrupado contra la base: en cada publicacion, publicar_furni toma el lote marcado «1º en salir» (sin fecha primero, mismo dia por id, nunca lo por revisar ni otro keko) y vender_furni vende el primero del grupo publicado');
 
     // ── Ventas del Sniper (migracion 20261015000000) ──
     const vs = await crearClienteLocal();
