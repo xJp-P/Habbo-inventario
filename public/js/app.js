@@ -309,6 +309,18 @@ function App() {
   function publicadosDe(furniId, soloManual, ambito) {
     return (datos.compras || []).filter(function (c) { return c.furni_id === furniId && c.estado === 'publicado' && (!soloManual || c.publicado_por === 'manual') && delAmbito(c, ambito); });
   }
+  // «Vendido» y «Retirar» de un furni en un keko: desde el Mercadillo y, desde la v1.8.0,
+  // desde la fila del furni en Inventario › Publicado. «Vendido» pregunta antes si ese keko
+  // ya tiene ventas registradas por el Sniper (venderConAviso).
+  function venderFurniDeKeko(f, ambito) {
+    venderConAviso(ambito && ambito.keko, function () { setModal({ tipo: 'vender-furni', furni: f, lotes: publicadosDe(f.id, false, ambito), ambito: ambito }); });
+  }
+  function retirarFurniDeKeko(f, ambito) {
+    var todos = publicadosDe(f.id, false, ambito);
+    var manual = todos.filter(function (c) { return c.publicado_por === 'manual'; });
+    var sniper = todos.reduce(function (s, c) { return s + (c.publicado_por === 'manual' ? 0 : c.cantidad); }, 0);
+    setModal({ tipo: 'retirar-furni', furni: f, lotes: manual, unidadesSniper: sniper, ambito: ambito });
+  }
   // Abre el Inventario en una pestana, filtrado por el nombre del furni.
   function verLotes(nombre, estado) { setFiltroFurni(nombre); setFiltroEstado(estado); setVista('inventario'); }
   // Desde el Resumen: si el furni esta publicado, al Mercadillo; si no, a sus lotes en mano.
@@ -375,15 +387,8 @@ function App() {
     furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos, onVerErrores: abrirErrores,
     onVerLotes: function (f) { verLotes(f.nombre, 'publicado'); },
     // Desde el bloque de un keko: solo lo publicado en ese keko.
-    onVender: function (f, ambito) {
-      venderConAviso(ambito && ambito.keko, function () { setModal({ tipo: 'vender-furni', furni: f, lotes: publicadosDe(f.id, false, ambito), ambito: ambito }); });
-    },
-    onRetirar: function (f, ambito) {
-      var todos = publicadosDe(f.id, false, ambito);
-      var manual = todos.filter(function (c) { return c.publicado_por === 'manual'; });
-      var sniper = todos.reduce(function (s, c) { return s + (c.publicado_por === 'manual' ? 0 : c.cantidad); }, 0);
-      setModal({ tipo: 'retirar-furni', furni: f, lotes: manual, unidadesSniper: sniper, ambito: ambito });
-    },
+    onVender: venderFurniDeKeko,
+    onRetirar: retirarFurniDeKeko,
   });
   else if (vista === 'inventario') contenido = h(InventarioView, {
     compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado, kekos: kekos, onVerErrores: abrirErrores,
@@ -401,11 +406,20 @@ function App() {
     onDescartarVenta: function (v) { setModal({ tipo: 'descartar-venta', venta: v }); },
     onVentaManual: function () { setModal({ tipo: 'venta-manual' }); },
     onLtd: function (l) { setModal({ tipo: 'ltd', lote: l }); },
-    // «Publicar» de una fila: las unidades en mano de ese furni en SU keko.
+    // «Publicar» de una fila (y «Publicar todo» de un furni): las unidades en mano de ese
+    // furni en SU keko.
     onPublicar: function (l) {
       var ambito = ambitoDeLote(l);
       setModal({ tipo: 'publicar', furni: furniDe(l.furni_id), lotes: enManoFifo(l.furni_id, ambito), ambito: ambito });
     },
+    // Inventario agrupado (v1.8.0). «Publicar» de un lote dentro de su furni: solo ese lote
+    // (o una parte: el lote se divide).
+    onPublicarLote: function (l) { setModal({ tipo: 'publicar', furni: furniDe(l.furni_id), lote: l, ambito: ambitoDeLote(l) }); },
+    // «Vender» de un furni en Comprado: la venta manual con ese furni y su keko ya elegidos.
+    onVenderEnMano: function (l) { setModal({ tipo: 'venta-manual', furni: furniDe(l.furni_id), ambito: ambitoDeLote(l) }); },
+    // «Vendido» y «Retirar» de un furni en Publicado: como en el Mercadillo, en su keko.
+    onVenderFurni: function (l) { var f = furniDe(l.furni_id); if (f) venderFurniDeKeko(f, ambitoDeLote(l)); },
+    onRetirarFurni: function (l) { var f = furniDe(l.furni_id); if (f) retirarFurniDeKeko(f, ambitoDeLote(l)); },
     onCambio: cambio,
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
@@ -467,10 +481,10 @@ function App() {
     novedades ? h(NovedadesModal, { version: novedades.version, items: novedades.items, onClose: function () { setNovedades(null); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, keko: modal.keko, propios: datos.furnis || [], kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
-    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis || [], compras: datos.compras || [], furni: modal.furni, lote: modal.lote, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis || [], compras: datos.compras || [], furni: modal.furni, lote: modal.lote, ambito: modal.ambito, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender-furni' ? h(VenderFurniModal, { furni: modal.furni, lotes: modal.lotes, ambito: modal.ambito, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'retirar-furni' ? h(RetirarFurniModal, { furni: modal.furni, lotes: modal.lotes, unidadesSniper: modal.unidadesSniper, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
-    modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'publicar' ? h(PublicarModal, { furni: modal.furni, lotes: modal.lotes, lote: modal.lote, ambito: modal.ambito, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender' ? h(VenderModal, { lote: modal.lote, furni: modal.furni, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'aviso-sniper' ? h(Confirmar, { titulo: 'El Sniper registra las ventas de ' + modal.keko, peligro: true, icono: 'radar', textoBoton: 'Registrar a mano igual',
       mensaje: 'Las ventas de este keko las registra el Sniper solo. Si anotas esta a mano y el Sniper también la envía, se contará dos veces. Hazlo solo si el Sniper estaba apagado o no registró esta venta.',

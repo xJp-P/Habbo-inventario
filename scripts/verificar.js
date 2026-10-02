@@ -1352,8 +1352,19 @@ async function main() {
       'con lotes reales de la base, la dona del Inventario y el Mercadillo dan el mismo neto');
     const gVenGr = gruposJs.agruparPorFurni(await bloqueGr('vendido'), 'vendido')[0];
     assert.deepEqual([gVenGr.unidades, gVenGr.lotes.length], [3, 3], 'las 3 ventas quedan en un solo grupo de Vendido');
+    // «Publicar» de UN lote dentro de su furni (fase 4): publicar_lote toca solo ese lote.
+    const plA = await negGr.crearCompra({ nombre: 'Pato HC', cantidad: 4, precio_compra: 90, keko: 'xJp', fecha_compra: '2026-09-01' });
+    const plB = await negGr.crearCompra({ furni_id: plA.furni_id, cantidad: 5, precio_compra: 95, keko: 'xJp', fecha_compra: '2026-09-10' });
+    const plC = await negGr.crearCompra({ furni_id: plA.furni_id, cantidad: 2, precio_compra: 99, keko: 'xJp', fecha_compra: '2026-09-20' });
+    const parte = await negGr.publicarLote(plB.id, { cantidad: 2, precio_lista: 140 });
+    assert.deepEqual([parte.dividida, parte.publicado.cantidad, parte.publicado.estado, parte.publicado.keko, parte.publicado.origen_id, parte.original.cantidad, parte.original.estado],
+      [true, 2, 'publicado', 'xJp', plB.id, 3, 'comprado'], 'una parte del lote: se divide, la parte publicada conserva su keko y el resto sigue en Comprado');
+    const entero = await negGr.publicarLote(plC.id, { precio_lista: 150 });
+    assert.deepEqual([entero.dividida, entero.publicado.id, entero.publicado.cantidad, entero.publicado.estado], [false, plC.id, 2, 'publicado'], 'el lote entero: pasa a Publicado sin dividirse');
+    const intacto = (await negGr.listarCompras()).find((l) => l.id === plA.id);
+    assert.deepEqual([intacto.estado, intacto.cantidad], ['comprado', 4], 'el lote mas antiguo del furni no se toca (no es FIFO: es ese lote)');
     await gr.cerrar();
-    ok('inventario agrupado contra la base: en cada publicacion, publicar_furni toma el lote marcado «1º en salir» (sin fecha primero, mismo dia por id, nunca lo por revisar ni otro keko) y vender_furni vende el primero del grupo publicado');
+    ok('inventario agrupado contra la base: en cada publicacion, publicar_furni toma el lote marcado «1º en salir» (sin fecha primero, mismo dia por id, nunca lo por revisar ni otro keko) y vender_furni vende el primero del grupo publicado; «Publicar» de un lote toca solo ese lote (dividido si es una parte, con su keko)');
 
     // ── Ventas del Sniper (migracion 20261015000000) ──
     const vs = await crearClienteLocal();

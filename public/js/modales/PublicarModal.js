@@ -13,6 +13,11 @@
 // y se calcula el precio de lista (el menor que deja ese neto tras la comision). Siempre
 // se ven los dos: lo que paga el comprador y lo que entra a tu monedero, y la ganancia.
 // Lo publicado a mano se retira desde su fila.
+//
+// Un solo lote (props.lote, v1.8.0: «Publicar» de un lote dentro de su furni en el
+// Inventario agrupado): publica ese lote o una parte (funcion publicar_lote); si es una
+// parte, el lote se divide y la parte publicada conserva su keko. Los demas lotes del furni
+// no se tocan.
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -21,14 +26,15 @@ import { leerNumero, fmtCr, fmtLg } from '../core/format.js';
 import { Modal, Fld, NombreFurni } from '../componentes/base.js';
 import { Ico } from '../componentes/iconos.js';
 import { calcularComision, calcularGananciaNeta, calcularPrecioLista } from '../core/comision.js';
-import { repartirFifo } from '../core/lotes.js';
+import { repartirFifo, etiquetaLote } from '../core/lotes.js';
 import { textoAmbito } from '../core/kekos.js';
 
 function texto(n) { return String(n).replace('.', ','); }
 
 export function PublicarModal(props) {
   var furni = props.furni || {};
-  var lotes = props.lotes || [];
+  var unLote = props.lote || null;
+  var lotes = unLote ? [unLote] : props.lotes || [];
   var donde = textoAmbito(props.ambito);
   var total = lotes.reduce(function (s, l) { return s + l.cantidad; }, 0);
   var costoTotal = lotes.reduce(function (s, l) { return s + l.precio_compra_cr * l.cantidad; }, 0);
@@ -69,6 +75,12 @@ export function PublicarModal(props) {
       return;
     }
     _submitGuard(enviando, setEnviando, function () {
+      if (unLote) {
+        return API.post('/api/compras/' + unLote.id + '/publicar', { cantidad: q, precio_lista: p }).then(function (r) {
+          if (r) props.onGuardado(r, q + ' und del lote Nº ' + unLote.id + ' de ' + furni.nombre + ' publicadas a ' + fmtCr(p) + ' cr'
+            + (r.dividida ? ' · el lote se dividió: quedan ' + (total - q) + ' en Comprado' : ' · el lote salió de Comprado'));
+        });
+      }
       return API.post('/api/furnis/' + furni.id + '/publicar', Object.assign({ cantidad: q, precio_lista: p }, props.ambito))
         .then(function (r) {
           if (r) props.onGuardado(r, r.cantidad + ' und de ' + furni.nombre + ' publicadas a ' + fmtCr(p) + ' cr' + (r.en_mano ? ' · quedan ' + r.en_mano + ' en Comprado' + donde : ' · el furni salió de Comprado' + donde));
@@ -76,8 +88,10 @@ export function PublicarModal(props) {
     });
   }
 
-  return h(Modal, { titulo: 'Publicar en el mercadillo', onClose: props.onClose },
-    h(NombreFurni, { furni: furni, sub: total + ' und en mano' + donde + ' en ' + lotes.length + (lotes.length === 1 ? ' lote' : ' lotes') + ' · costo promedio ' + fmtLg(total ? costoTotal / total : 0) + ' cr' }),
+  return h(Modal, { titulo: unLote ? 'Publicar un lote en el mercadillo' : 'Publicar en el mercadillo', onClose: props.onClose },
+    h(NombreFurni, { furni: unLote ? Object.assign({}, furni, { numero_ltd: unLote.numero_ltd }) : furni, sub: unLote
+      ? 'Lote ' + etiquetaLote(unLote) + ' · ' + total + ' und' + donde + ' · compra ' + fmtLg(unLote.precio_compra_cr) + ' cr c/u'
+      : total + ' und en mano' + donde + ' en ' + lotes.length + (lotes.length === 1 ? ' lote' : ' lotes') + ' · costo promedio ' + fmtLg(total ? costoTotal / total : 0) + ' cr' }),
     h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
       h(Ico, { name: 'store', size: 14 }), 'Úsalo para lo que ya pusiste tú en el mercadillo de Habbo. Lo que publica el Sniper llega solo.'),
     h(Fld, { label: '¿Cuántas publicaste?' },
@@ -101,7 +115,13 @@ export function PublicarModal(props) {
         h('div', { className: 'par-valor mono pos' }, pValido ? fmtCr(netoU) + ' cr' : '-')),
       h('div', { className: 'par-nota suave' }, pValido ? 'Comisión de Habbo: ' + fmtCr(p - netoU) + ' cr por unidad' : 'Por unidad, en créditos')),
     qValida ? h('div', { className: 'aviso' },
-      q === total
+      unLote
+        ? (q === total
+          ? h('div', null, 'Las ', h('b', { className: 'mono' }, total), ' und del lote Nº ' + unLote.id + ' pasan a ',
+              h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Publicado'), '. Los demás lotes del furni no se tocan.')
+          : h('div', null, 'Se publican ', h('b', { className: 'mono' }, q), ' und y el lote Nº ' + unLote.id + ' se divide: quedan ',
+              h('b', { className: 'mono' }, total - q), ' en Comprado' + donde + '. Los demás lotes del furni no se tocan.'))
+      : q === total
         ? h('div', null, 'Las ', h('b', { className: 'mono' }, total), ' und pasan a ',
             h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Publicado'), ' y el furni sale de Comprado' + donde + '.')
         : h('div', null, 'Se publican ', h('b', { className: 'mono' }, q), ' und de los lotes más antiguos y quedan ', h('b', { className: 'mono' }, total - q), ' en Comprado' + donde,
@@ -110,7 +130,7 @@ export function PublicarModal(props) {
         h('b', { className: 'mono' }, fmtCr(netoU * q) + ' cr'), ' · ganancia ',
         h('b', { className: 'mono ' + (ganancia > 0 ? 'pos' : ganancia < 0 ? 'neg' : '') }, (ganancia > 0 ? '+' : '') + fmtCr(ganancia) + ' cr')) : null,
       pValido && netoU * q < costoTomado ? h('div', { className: 'neg', style: { marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' } }, h(Ico, { name: 'alert', size: 14 }), 'Tras la comisión no cubre lo que costaron') : null) : null,
-    furni.unidades_pendientes > 0 ? h('div', { className: 'suave', style: { fontSize: 12 } },
+    !unLote && furni.unidades_pendientes > 0 ? h('div', { className: 'suave', style: { fontSize: 12 } },
       'Las ' + furni.unidades_pendientes + ' und «por revisar» del Sniper no se incluyen: esas las publica el Sniper.') : null,
     error ? h('div', { className: 'aviso aviso-rojo' }, error) : null,
     h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 } },

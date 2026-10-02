@@ -19,6 +19,11 @@
 // y lotes de ese keko (vender_en_mano con p_keko). Asi una venta desde la bodega no
 // descuenta unidades de un keko con Sniper y no descuadra su auditoria. Desde "Vender" en
 // un lote, el keko es el de ese lote. Sin la migracion 20261008000000 no hay selector.
+//
+// Desde «Vender» en la fila de un furni del Inventario agrupado (v1.8.0; props.furni +
+// props.ambito): ese furni y su keko ya elegidos, y «Automatico» toma sus lotes mas
+// antiguos. En «Sin keko» no hay automatico (vender_en_mano sin keko tomaria de todos los
+// kekos): se elige el lote, empezando por el mas antiguo.
 
 import { h, useState, useMemo } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -29,6 +34,7 @@ import { SelectorKeko, ultimoKeko, recordarKeko } from '../componentes/SelectorK
 import { Ico } from '../componentes/iconos.js';
 import { calcularComision } from '../core/comision.js';
 import { repartirFifo, etiquetaLote } from '../core/lotes.js';
+import { claveKeko } from '../core/kekos.js';
 
 // Lotes en mano de un furni, en el orden en que los toma vender_en_mano.
 function enMano(compras, furniId) {
@@ -48,25 +54,35 @@ export function VentaManualModal(props) {
   var todas = props.compras || [];
   var tasa = props.tasa || 50;
   var fijo = !!props.lote;
+  // Desde la fila de un furni: su furni y su keko, sin selector.
+  var desdeFurni = !fijo && !!props.furni && !!props.ambito;
   var disponible = !!(props.kekos && props.kekos.disponible);
-  var usaKekos = !fijo && disponible;
+  var usaKekos = !fijo && !desdeFurni && disponible;
   var listaKekos = usaKekos ? props.kekos.kekos : [];
   var sK = useState(function () { return ultimoKeko(listaKekos); }); var keko = sK[0]; var setKeko = sK[1];
-  // Desde un lote, el keko es el suyo (null = sin keko); undefined = sin filtro (base vieja).
-  var kekoFijo = fijo && disponible ? (props.lote.keko || null) : undefined;
-  // Un lote sin keko se vende solo: «Automatico» (vender_en_mano sin keko) tomaria de todos.
-  var soloEseLote = fijo && disponible && !props.lote.keko;
+  // Desde un lote o un furni, el keko es el suyo (null = sin keko); undefined = sin filtro (base vieja).
+  var kekoFijo = !disponible ? undefined
+    : fijo ? (props.lote.keko || null)
+    : desdeFurni ? (props.ambito.sin_keko ? null : props.ambito.keko || null) : undefined;
+  // El keko que se nombra bajo el furni (aunque la base no conozca los kekos).
+  var kekoMostrado = fijo ? props.lote.keko || null : desdeFurni ? (props.ambito.sin_keko ? null : props.ambito.keko || null) : null;
+  // Sin keko no hay «Automatico» (vender_en_mano sin keko tomaria de todos): se elige el lote.
+  var soloEseLote = disponible && (fijo || desdeFurni) && !kekoFijo;
   // Solo cuenta lo del keko elegido (con selector y sin keko elegido, nada).
   var compras = useMemo(function () {
     if (usaKekos) return todas.filter(function (c) { return c.keko === keko; });
-    if (kekoFijo !== undefined) return todas.filter(function (c) { return (c.keko || null) === kekoFijo; });
+    if (kekoFijo !== undefined) return todas.filter(function (c) { return claveKeko(c.keko) === claveKeko(kekoFijo); });
     return todas;
   }, [todas, usaKekos, keko, kekoFijo]);
   var sinKeko = usaKekos ? todas.reduce(function (s, c) { return s + (c.estado === 'comprado' && !c.keko ? c.cantidad : 0); }, 0) : 0;
   var inicial = props.furni || null;
   var sF = useState(inicial ? inicial.id : null); var furniId = sF[0]; var setFurniId = sF[1];
   var sB = useState(''); var busqueda = sB[0]; var setBusqueda = sB[1];
-  var sL = useState(props.lote ? String(props.lote.id) : 'fifo'); var loteSel = sL[0]; var setLoteSel = sL[1];
+  var sL = useState(function () {
+    if (props.lote) return String(props.lote.id);
+    if (desdeFurni && soloEseLote) { var ls = enMano(compras, props.furni.id); return ls.length ? String(ls[0].id) : 'fifo'; }
+    return 'fifo';
+  }); var loteSel = sL[0]; var setLoteSel = sL[1];
   var sQ = useState(props.lote ? String(props.lote.cantidad) : '1'); var cant = sQ[0]; var setCant = sQ[1];
   var sD = useState('tradeo'); var donde = sD[0]; var setDonde = sD[1];
   var sM = useState('creditos'); var moneda = sM[0]; var setMoneda = sM[1];
@@ -142,8 +158,8 @@ export function VentaManualModal(props) {
     furni
       ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('div', { style: { flex: 1, minWidth: 0 } }, h(NombreFurni, { furni: furni, sub: total + ' und en mano en ' + lotes.length + (lotes.length === 1 ? ' lote' : ' lotes') +
-            (fijo ? ' · ' + (props.lote.keko ? 'keko ' + props.lote.keko : 'sin keko') : usaKekos && keko ? ' · keko ' + keko : '') })),
-          fijo ? null : h('button', { className: 'btn btn-chico', onClick: function () { setFurniId(null); setBusqueda(''); } }, 'Cambiar'))
+            (fijo || desdeFurni ? ' · ' + (kekoMostrado ? 'keko ' + kekoMostrado : 'sin keko') : usaKekos && keko ? ' · keko ' + keko : '') })),
+          fijo || desdeFurni ? null : h('button', { className: 'btn btn-chico', onClick: function () { setFurniId(null); setBusqueda(''); } }, 'Cambiar'))
       : h(Fld, { label: '¿Qué furni vendiste?' },
           h('input', { className: 'inp', autoFocus: !usaKekos || !!keko, disabled: usaKekos && !keko, value: busqueda,
             placeholder: usaKekos && !keko ? 'Elige primero el keko' : conStock.length ? 'Busca entre lo que tienes en mano…' : usaKekos ? 'Ese keko no tiene nada en mano' : 'No tienes nada en mano',

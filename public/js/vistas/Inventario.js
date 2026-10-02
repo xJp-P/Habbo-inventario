@@ -34,8 +34,10 @@
 // salir»; Vendido, la ultima venta arriba). En Comprado, la franja de precios de compra
 // (cada punto es un lote: al pasar el raton se ilumina su fila, y al reves). «Abrir todo /
 // Cerrar todo» en la barra; al buscar, los furnis que coinciden se abren solos; los que
-// dejas abiertos se recuerdan en este equipo. Los botones del furni llegan en la fase 4:
-// por ahora, cada lote conserva los suyos.
+// dejas abiertos se recuerdan en este equipo. Botones (decision 4): en la fila del furni,
+// «Publicar todo» y «Vender» (Comprado; las unidades en mano de ese keko, de la mas antigua
+// a la mas nueva) o «Vendido» y «Retirar» (Publicado; como en el Mercadillo, con la pregunta
+// del Sniper); en cada lote, «Publicar» publica SOLO ese lote (o una parte: se divide).
 //
 // Ventas del Sniper (v1.7.0, migracion 20261015000000; diseño elegido en la maqueta):
 //   - en Vendido, lo que registro el Sniper lleva «Vendido · Sniper» y, bajo el nombre, la
@@ -232,7 +234,7 @@ function EncabezadoLote(props) {
   return h('div', { style: { minWidth: 0 } },
     h('div', { className: 'lote-nombre' }, h('span', { className: 'lote-titulo' }, titulo),
       l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : null,
-      props.primero ? h('span', { className: 'primero', title: '«Publicar» empieza por este lote: es el más antiguo que tienes en mano' }, '1º en salir') : null),
+      props.primero ? h('span', { className: 'primero', title: '«Publicar todo» empieza por este lote: es el más antiguo que tienes en mano' }, '1º en salir') : null),
     sub ? h('div', { className: 'lote-sub' }, sub) : null);
 }
 
@@ -283,6 +285,21 @@ function GrupoFurni(props) {
     : h('span', { className: 'tag tag-verde' }, 'Vendido');
   var prom = h('div', { className: 'prom' }, 'prom.');
   function alternar(e) { if (e) e.stopPropagation(); props.onAlternar(); }
+  // Los botones del furni (decision 4 de la maqueta). No pliegan la fila.
+  var acc = props.acciones || {};
+  function boton(clase, icono, texto, titulo, accion) {
+    return h('button', { key: texto, className: 'btn btn-chico' + (clase ? ' ' + clase : ''), title: titulo, onClick: function (e) { e.stopPropagation(); accion(g); } },
+      icono ? h(Ico, { name: icono, size: icono === 'lock' ? 11 : 12 }) : null, texto);
+  }
+  var enManoLibres = g.unidades - g.unidadesPorRevisar;
+  var hayManual = g.lotes.some(function (l) { return l.publicado_por === 'manual'; });
+  var botones = filtro === 'comprado'
+    ? [enManoLibres > 0 ? boton('btn-morado', 'store', 'Publicar todo', 'Ya lo pusiste en el mercadillo de Habbo: pasan a Publicado las ' + enManoLibres + ' und en mano de este furni en este keko, de la más antigua a la más nueva', acc.publicarTodo) : null,
+       boton('', null, 'Vender', 'Lo vendiste fuera del Sniper (tradeo o venta desde otro keko): salen de este keko, de los lotes más antiguos o del que elijas', acc.vender)]
+    : filtro === 'publicado'
+    ? [boton('', 'lock', 'Vendido', 'Registrar la venta de lo publicado de este furni en este keko (eliges el precio de lista y cuántas)', acc.vendido),
+       hayManual ? boton('', 'undo', 'Retirar', 'Lo quitaste del mercadillo: lo que publicaste tú vuelve a Comprado', acc.retirar) : null]
+    : [];
   return [
     h('tr', { key: 'g', className: 'fila-grupo' + (abierto ? ' abierto' : '') + (g.porRevisar ? ' con-revisar' : ''), onClick: alternar },
       h('td', null, h('div', { className: 'g-cel' },
@@ -307,7 +324,7 @@ function GrupoFurni(props) {
       conPrecio ? h('td', { className: 'r mono ' + claseGan }, gan === null ? '-' : h('b', null, (gan > 0 ? '+' : '') + fmtCr(gan))) : null,
       conPrecio ? h('td', { className: 'r mono ' + claseGan }, g.margen === null ? '-' : fmtPct(g.margen)) : null,
       h('td', null, estado),
-      h('td', { className: 'r' })),
+      h('td', { className: 'r' }, botones.some(Boolean) ? h('span', { style: { display: 'inline-flex', gap: 6 } }, botones.filter(Boolean)) : null)),
     h('tr', { key: 'l', className: 'fila-lotes' + (abierto ? ' abierto' : '') + (props.animar ? ' animar' : '') },
       h('td', { colSpan: props.columnas },
         h('div', { className: 'desp' },
@@ -387,6 +404,15 @@ export function InventarioView(props) {
     var k = listaKekos.find(function (x) { return claveKeko(x.nombre) === claveKeko(keko); });
     return k && k.snipers && k.snipers.length ? k.snipers.join(', ') : null;
   }
+
+  // Los botones de la fila de un furni (Inventario agrupado). Todos los lotes del grupo son
+  // del mismo furni y del mismo keko: el primero basta para saber cuales.
+  var accionesFurni = {
+    publicarTodo: function (g) { var l = g.lotes.find(function (x) { return !x.pendiente; }); if (l) props.onPublicar(l); },
+    vender: function (g) { props.onVenderEnMano(g.lotes[0]); },
+    vendido: function (g) { props.onVenderFurni(g.lotes[0]); },
+    retirar: function (g) { props.onRetirarFurni(g.lotes[0]); },
+  };
 
   // ── Furnis abiertos ──
   function claveDe(keko, g) { return claveGrupo(keko.nombre, filtro, g.furni_id !== null && g.furni_id !== undefined ? g.furni_id : g.clave); }
@@ -491,7 +517,10 @@ export function InventarioView(props) {
             manual ? h('button', { className: 'btn btn-chico', title: 'Lo quitaste del mercadillo: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)
         : l.estado === 'comprado'
         ? h('span', { style: { display: 'inline-flex', gap: 6 } },
-            l.pendiente ? null : h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pasa a Publicado (todas sus unidades en mano)', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
+            l.pendiente ? null : op.dentro
+              // Dentro de su furni: solo este lote (o una parte, que se divide).
+              ? h('button', { className: 'btn btn-chico btn-morado', title: 'Ya pusiste este lote en el mercadillo de Habbo: pasa a Publicado solo este lote (si publicas menos unidades, el lote se divide)', onClick: function (e) { e.stopPropagation(); props.onPublicarLote(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar')
+              : h('button', { className: 'btn btn-chico btn-morado', title: 'Ya lo pusiste en el mercadillo de Habbo: pasa a Publicado (todas sus unidades en mano)', onClick: function (e) { e.stopPropagation(); props.onPublicar(l); } }, h(Ico, { name: 'store', size: 12 }), 'Publicar'),
             h('button', { className: 'btn btn-chico', title: 'Lo vendiste fuera del Sniper: tradeo o venta desde otro keko', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, 'Vender'))
         : h('button', { className: 'btn btn-chico', title: 'Deshacer la venta', onClick: function (e) { e.stopPropagation(); revertir(l); } }, h(Ico, { name: 'undo', size: 12 }))))];
     if (abiertoEste) {
@@ -564,7 +593,7 @@ export function InventarioView(props) {
             h(Dibujar, { dibujar: function () {
               return h(GrupoFurni, { grupo: gr, filtro: filtro, abierto: grupoAbierto(clave), animar: seAnima(clave),
                 onAlternar: function () { alternarGrupo(clave); }, filasLote: filasLote, columnas: columnas, anchos: ANCHOS[filtro],
-                onVerErrores: props.onVerErrores });
+                acciones: accionesFurni, onVerErrores: props.onVerErrores });
             } }));
         }))));
   }
