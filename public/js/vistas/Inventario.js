@@ -45,6 +45,9 @@
 //   - la pestaña «Por asignar» (azul, solo con la migracion) lista las ventas que el Sniper
 //     envio y la base no pudo casar con un lote, con el motivo: «Asignar a un lote…» o
 //     «Descartar». Son excepcionales: por eso viven en su pestaña y no arriba.
+//
+// Desde el Historial de ventas (v1.9.0), «Ver en el Inventario» abre Vendido con ese lote
+// abierto (y su furni desplegado), y lo ilumina un momento.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -368,18 +371,30 @@ export function InventarioView(props) {
   var alineado = useAlineado(anchoMinimo(ANCHOS[enBandeja ? 'vendido' : filtro] || ANCHOS.vendido));
   useEffect(function () { if (props.filtroFurni) { setQ(props.filtroFurni); setFiltro(props.filtroEstado || 'comprado'); } }, [props.filtroFurni, props.filtroEstado]);
   // Clic en el aviso de ventas del Sniper: Vendido (en el bloque de ese keko) o la bandeja.
+  // Desde el Historial («Ver en el Inventario») llega tambien `lote`: se abre su detalle (y su
+  // furni, si tiene varios lotes) y se baja hasta el, iluminado un momento.
+  var sDest = useState(null); var destacado = sDest[0]; var setDestacado = sDest[1];
   useEffect(function () {
     var a = props.abrir;
     if (!a) return undefined;
     setQ('');
-    setAbierto(null);
+    setAbierto(a.lote || null);
     setFiltro(a.filtro === 'por_asignar' ? 'por_asignar' : 'vendido');
-    if (a.filtro === 'por_asignar' || !a.keko) return undefined;
+    if (a.filtro === 'por_asignar' || (!a.keko && !a.lote)) return undefined;
+    var l = a.lote ? compras.find(function (x) { return x.id === a.lote; }) : null;
+    if (l) {
+      var clave = claveGrupo(l.keko, 'vendido', l.furni_id);
+      var hermanos = compras.filter(function (x) { return x.estado === 'vendido' && x.furni_id === l.furni_id && claveKeko(x.keko) === claveKeko(l.keko); }).length;
+      if (hermanos > 1 && abiertos.indexOf(clave) === -1) guardar(alternarAbierto(abiertos, clave, true));
+      setDestacado(l.id);
+    }
     var t = setTimeout(function () {
-      var el = document.getElementById('bk-' + claveKeko(a.keko));
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 150);
-    return function () { clearTimeout(t); };
+      var el = l ? document.getElementById('lote-' + l.id) : null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      else if (a.keko) { el = document.getElementById('bk-' + claveKeko(a.keko)); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }, l ? 450 : 150);
+    var t2 = l ? setTimeout(function () { setDestacado(null); }, 2600) : null;
+    return function () { clearTimeout(t); if (t2) clearTimeout(t2); };
   }, [props.abrir && props.abrir.vez]);
   // Sin la migracion (o si se fue la ultima venta y la pestaña se oculta), a Vendido.
   useEffect(function () { if (filtro === 'por_asignar' && !porAsignar) setFiltro('vendido'); }, [filtro, !!porAsignar]);
@@ -492,7 +507,7 @@ export function InventarioView(props) {
       + (op.dentro ? ' lote' + (op.ultimo ? ' ultimo' : '') + (op.resaltado ? ' resalta' : '') : '');
     var g = l.ganancia_cr;
     var delSniper = ventaDelSniper(l);
-    var filas = [h('tr', { key: l.id, className: clase, onClick: function () { setAbierto(abiertoEste ? null : l.id); },
+    var filas = [h('tr', { key: l.id, id: 'lote-' + l.id, className: clase + (destacado === l.id ? ' destacada' : ''), onClick: function () { setAbierto(abiertoEste ? null : l.id); },
         style: op.dentro ? { '--i': op.indice } : undefined,
         onMouseEnter: op.onResaltar ? function () { op.onResaltar(l.id); } : undefined,
         onMouseLeave: op.onResaltar ? function () { op.onResaltar(null); } : undefined },

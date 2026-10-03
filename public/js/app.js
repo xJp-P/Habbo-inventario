@@ -27,6 +27,10 @@
 // espera; su numero va en azul junto a Inventario). Llegan en vivo con un aviso que dice
 // lo vendido (y «Ver» si alguna quedo por asignar). Marcar «Vendido» a mano en un keko
 // cuyo Sniper ya registra sus ventas pregunta antes: se contaria dos veces.
+//
+// Historial de ventas (v1.9.0): una seccion mas (vistas/Historial.js) hecha con los lotes
+// que ya se cargan. «Ver en el Inventario» de una venta abre Vendido en su keko, con el
+// lote abierto (abrirPestana con `lote`).
 
 import { h, useState, useEffect, useCallback, useRef, createRoot } from './core/react.js';
 import { API, setErrorHandler } from './core/api.js';
@@ -37,6 +41,7 @@ import { AccesoView, InstalarBase } from './vistas/Acceso.js';
 import { ResumenView } from './vistas/Resumen.js';
 import { MercadilloView } from './vistas/Mercadillo.js';
 import { InventarioView } from './vistas/Inventario.js';
+import { HistorialView } from './vistas/Historial.js';
 import { AjustesView } from './vistas/Ajustes.js';
 import { AuditoriaView } from './vistas/Auditoria.js';
 import { CompraModal } from './modales/CompraModal.js';
@@ -69,6 +74,7 @@ var NECESITA = {
   resumen: ['resumen'],
   mercadillo: ['furnis', 'compras'],
   inventario: ['compras', 'pendientes'],
+  historial: ['compras'],
   auditoria: ['furnis', 'compras'],
   ajustes: [],
 };
@@ -78,6 +84,7 @@ var NAV = [
   ['resumen', 'dashboard', 'Resumen'],
   ['mercadillo', 'store', 'Mercadillo'],
   ['inventario', 'box', 'Inventario'],
+  ['historial', 'reloj', 'Historial'],
   ['auditoria', 'audit', 'Auditoría'],
   ['ajustes', 'plug', 'Ajustes'],
 ];
@@ -277,12 +284,13 @@ function App() {
     });
   }, []);
 
-  // Abre el Inventario en Vendido (en el bloque de un keko) o en «Por asignar».
+  // Abre el Inventario en Vendido (en el bloque de un keko; con `lote`, ese lote abierto) o
+  // en «Por asignar».
   function abrirPestana(destino) {
     setModal(null);
     setToast(null);
     setFiltroFurni('');
-    setAbrirInventario({ filtro: destino.filtro || 'vendido', keko: destino.keko || null, vez: Date.now() });
+    setAbrirInventario({ filtro: destino.filtro || 'vendido', keko: destino.keko || null, lote: destino.lote || null, vez: Date.now() });
     setVista('inventario');
   }
 
@@ -421,6 +429,11 @@ function App() {
     onVenderFurni: function (l) { var f = furniDe(l.furni_id); if (f) venderFurniDeKeko(f, ambitoDeLote(l)); },
     onRetirarFurni: function (l) { var f = furniDe(l.furni_id); if (f) retirarFurniDeKeko(f, ambitoDeLote(l)); },
     onCambio: cambio,
+  });
+  else if (vista === 'historial') contenido = h(HistorialView, {
+    compras: datos.compras, furnis: datos.furnis || [], kekos: kekos, onVerErrores: abrirErrores, onCambio: cambio,
+    // «Ver en el Inventario» del detalle de una venta: Vendido, en su keko, con el lote abierto.
+    onVerEnInventario: function (l) { abrirPestana({ filtro: 'vendido', keko: l.keko, lote: l.id }); },
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
     furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio, onRecargar: recargar,

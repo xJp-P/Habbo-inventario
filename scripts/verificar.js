@@ -387,6 +387,20 @@ async function main() {
   assert.ok(raroH.includes(`;"'=HYPERLINK(""x"")";`), 'un keko que empieza con = no se ejecuta como formula');
   assert.ok(raroH.includes(';22;22,5;-0,5;;'), 'coma decimal y negativos como numero');
   assert.equal(hist.nombreCsv(ahoraH), 'historial-ventas-2026-10-03.csv');
+  // Los textos del libro y los chips de los filtros activos.
+  assert.deepEqual([hist.tituloDia('2026-10-03', ahoraH), hist.tituloDia('2026-10-02', ahoraH), hist.tituloDia('2026-10-01', ahoraH), hist.tituloDia('2025-12-31', ahoraH), hist.tituloDia(null, ahoraH)],
+    ['Hoy · sábado 3 de oct', 'Ayer · viernes 2 de oct', 'Jueves 1 de oct', 'Miércoles 31 de dic de 2025', 'Sin fecha']);
+  assert.deepEqual([hist.diaCorto('2026-09-28', ahoraH), hist.diaCorto('2025-09-28', ahoraH)], ['28 sept', '28 sept 2025']);
+  assert.deepEqual([30000, 25 * 60000, 5 * 3600000, 47 * 3600000, 3 * 86400000, 30 * 3600000].map(hist.duracion), ['1 min', '25 min', '5 h', '47 h', '3 días', '30 h']);
+  assert.deepEqual([hist.duracion(null), hist.duracion(-5)], ['', '']);
+  const filtrosChips = { ...hist.FILTROS_INICIALES, periodo: { desde: '2026-10-02', hasta: '2026-10-02' }, q: ' pato ', kekos: ['bodega uno', ''], origen: 'sniper', perdida: true };
+  assert.deepEqual(hist.activos(filtrosChips, (c) => ({ 'bodega uno': 'Bodega Uno' })[c], ahoraH).map((c) => [c.clave, c.texto]),
+    [['periodo', 'Día: Ayer · viernes 2 de oct'], ['q', 'Furni: «pato»'], ['keko:bodega uno', 'Keko: Bodega Uno'], ['keko:', 'Keko: Sin keko'], ['origen', 'Solo del Sniper'], ['perdida', 'Con pérdida']]);
+  assert.equal(hist.activos({ ...hist.FILTROS_INICIALES, periodo: { desde: '2026-09-28', hasta: '2026-10-04' } }, null, ahoraH)[0].texto, 'Del 28 sept al 4 oct', 'una semana del grafico');
+  assert.deepEqual(hist.activos(hist.FILTROS_INICIALES, null, ahoraH), [], 'el rango no es un chip: ya se ve en su boton');
+  assert.deepEqual(hist.quitarFiltro(filtrosChips, 'keko:').kekos, ['bodega uno']);
+  assert.deepEqual([hist.quitarFiltro(filtrosChips, 'periodo').periodo, hist.quitarFiltro(filtrosChips, 'origen').origen, hist.quitarFiltro(filtrosChips, 'q').q], [null, 'todas', '']);
+  assert.deepEqual(hist.quitarFiltro({ ...filtrosChips, rango: '7', orden: 'ganancia' }, 'todo'), { ...hist.FILTROS_INICIALES, rango: '7', orden: 'ganancia' }, '«Limpiar» deja el rango y el orden');
   // Los filtros se recuerdan en este equipo (no la busqueda ni el dia del grafico).
   const memH = { datos: {}, getItem(k) { return this.datos[k] ?? null; }, setItem(k, v) { this.datos[k] = v; } };
   assert.deepEqual(hist.leerFiltros(memH), hist.FILTROS_INICIALES, 'la primera vez: 30 dias, todos los kekos, todas');
@@ -398,7 +412,7 @@ async function main() {
   assert.deepEqual(hist.leerFiltros(rotoG), hist.FILTROS_INICIALES, 'sin almacenamiento: los de siempre');
   hist.guardarFiltros(hist.FILTROS_INICIALES, rotoG);
   assert.deepEqual(hist.leerFiltros({ getItem: () => '[1,2]' }), hist.FILTROS_INICIALES);
-  ok('historial de ventas: una fila por venta (lo que pago el comprador, lo que entro y la ganancia de la base; el dia del reloj del usuario; quien la registro); filtros por fechas, dia del grafico, texto sin tildes, keko, origen y perdida; orden y subtotales por dia; metricas sin las por asignar; grafico por dia, semana o mes; CSV para Excel; filtros recordados');
+  ok('historial de ventas: una fila por venta (lo que pago el comprador, lo que entro y la ganancia de la base; el dia del reloj del usuario; quien la registro); filtros por fechas, dia del grafico, texto sin tildes, keko, origen y perdida, con sus chips; orden y subtotales por dia; metricas sin las por asignar; grafico por dia, semana o mes; CSV para Excel; filtros recordados');
 
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');

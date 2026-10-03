@@ -301,6 +301,68 @@ function siguienteDe(clave, por) {
   return sumarDias(clave, por === 'semana' ? 7 : 1);
 }
 
+// ── Textos del libro ──
+var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+// «3 oct» (con el año si no es el actual).
+export function diaCorto(clave, ahora) {
+  if (!esDia(clave)) return '';
+  var d = fechaDe(clave);
+  return d.getDate() + ' ' + MESES[d.getMonth()] + (clave.slice(0, 4) !== hoyDe(ahora).slice(0, 4) ? ' ' + clave.slice(0, 4) : '');
+}
+// El encabezado de un dia: «Hoy · sábado 3 de oct», «Ayer · viernes 2 de oct», «Jueves 1 de oct».
+export function tituloDia(clave, ahora) {
+  if (!esDia(clave)) return 'Sin fecha';
+  var hoy = hoyDe(ahora);
+  var d = fechaDe(clave);
+  var largo = DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES[d.getMonth()] + (clave.slice(0, 4) !== hoy.slice(0, 4) ? ' de ' + clave.slice(0, 4) : '');
+  if (clave === hoy) return 'Hoy · ' + largo;
+  if (clave === sumarDias(hoy, -1)) return 'Ayer · ' + largo;
+  return largo.charAt(0).toUpperCase() + largo.slice(1);
+}
+// Cuanto estuvo publicado: «25 min», «5 h», «3 días».
+export function duracion(ms) {
+  if (ms === null || ms === undefined || !isFinite(ms) || ms < 0) return '';
+  var min = Math.max(1, Math.round(ms / 60000));
+  if (min < 60) return min + ' min';
+  var horas = Math.round(ms / 3600000);
+  if (horas < 48) return horas + ' h';
+  var dias = Math.round(ms / 86400000);
+  return dias + (dias === 1 ? ' día' : ' días');
+}
+
+// Los filtros activos como chips («Keko: xJp ✕»). El rango no: ya se ve en su botón.
+// nombreKeko(clave): como se muestra un keko (sus claves van en minusculas).
+export function activos(filtros, nombreKeko, ahora) {
+  var f = filtros || {};
+  var a = [];
+  if (f.periodo && esDia(f.periodo.desde) && esDia(f.periodo.hasta)) {
+    a.push({ clave: 'periodo', texto: f.periodo.desde === f.periodo.hasta ? 'Día: ' + tituloDia(f.periodo.desde, ahora)
+      : 'Del ' + diaCorto(f.periodo.desde, ahora) + ' al ' + diaCorto(f.periodo.hasta, ahora) });
+  }
+  if (f.q && String(f.q).trim()) a.push({ clave: 'q', texto: 'Furni: «' + String(f.q).trim() + '»' });
+  (f.kekos || []).forEach(function (k) {
+    a.push({ clave: 'keko:' + k, texto: 'Keko: ' + (k ? (nombreKeko ? nombreKeko(k) : k) : 'Sin keko') });
+  });
+  if (f.origen === 'sniper' || f.origen === 'manual') a.push({ clave: 'origen', texto: f.origen === 'sniper' ? 'Solo del Sniper' : 'Solo manuales' });
+  if (f.perdida) a.push({ clave: 'perdida', texto: 'Con pérdida' });
+  return a;
+}
+// Quita un chip ('todo' = todos; el rango y el orden se quedan).
+export function quitarFiltro(filtros, clave) {
+  var f = Object.assign({}, filtros);
+  if (clave === 'todo') return Object.assign(f, { periodo: null, q: '', kekos: [], origen: 'todas', perdida: false });
+  if (clave === 'periodo') f.periodo = null;
+  else if (clave === 'q') f.q = '';
+  else if (clave === 'origen') f.origen = 'todas';
+  else if (clave === 'perdida') f.perdida = false;
+  else if (String(clave).indexOf('keko:') === 0) {
+    var k = String(clave).slice(5);
+    f.kekos = (f.kekos || []).filter(function (x) { return x !== k; });
+  }
+  return f;
+}
+
 // ── CSV para Excel ──
 // «;» y coma decimal (Excel en español), BOM para los acentos, una venta por linea en el
 // orden recibido. Un texto que empieza con = + - @ va con un apostrofo delante: Excel no lo
