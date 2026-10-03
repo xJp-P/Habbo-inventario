@@ -273,6 +273,133 @@ async function main() {
   assert.deepEqual(gruposJs.leerAbiertos(), [], 'sin navegador (aqui, en Node): ninguno');
   ok('inventario agrupado: una fila por furni con sus totales, lotes en el orden de la base y «1º en salir»; franja de precios; composicion del encabezado (Inventario y Mercadillo, el mismo neto); furnis abiertos recordados con tope y sin romperse');
 
+  // ── Historial de ventas (public/js/core/historial.js, v1.9.0) ──
+  const hist = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'historial.js')).href);
+  const comH = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'comision.js')).href);
+  // Fechas en hora local (el dia de una venta con hora es el del reloj del usuario).
+  const enH = (d, hh, mm = 0) => new Date(2026, 9, d, hh, mm).toISOString();
+  const ahoraH = new Date(2026, 9, 3, 15, 0).getTime();                 // sabado 3 de octubre, 15:00
+  const venH = (x) => ({ estado: 'vendido', cantidad: 1, moneda_venta_real: 'creditos', comision_venta: null, comision_pagada_cr: null,
+    vendido_por: null, vendido_en: null, fecha_venta: null, fuente: 'manual', keko: null, numero_ltd: null, publicado_en: null, ...x });
+  const comprasH = [
+    // Sniper, hoy 14:10, LTD #1475: 45 de lista -> 42 netos + 3; costo 23.
+    venH({ id: 1, furni_id: 10, nombre: 'Cara con Cicatrices', classname: 'clothing_r26_scarface', keko: 'Claudio4.8', precio_venta_real: 42, comision_venta: 3, comision_pagada_cr: 3,
+      precio_venta_cr: 42, costo_total_cr: 23, ganancia_cr: 19, vendido_por: 'sniper', vendido_en: enH(3, 14, 10), fecha_venta: '2026-10-03', numero_ltd: 1475, publicado_en: enH(3, 10, 10) }),
+    // A mano desde la 1.9.0 (hoy 09:00): tradeo de 2 a 150 c/u; costo 95 c/u.
+    venH({ id: 2, furni_id: 11, nombre: 'Pato HC', keko: 'Bodega Uno', cantidad: 2, precio_venta_real: 150, precio_venta_cr: 150, costo_total_cr: 190, ganancia_cr: 110,
+      vendido_por: 'manual', vendido_en: enH(3, 9), fecha_venta: '2026-10-03' }),
+    // A mano antes de la 1.9.0 (sin hora), hoy: tradeo de 4 lingos (200 cr a la tasa de 50).
+    venH({ id: 3, furni_id: 11, nombre: 'Pato HC', keko: 'bodega uno', precio_venta_real: 4, moneda_venta_real: 'lingos', precio_venta_cr: 200, costo_total_cr: 95, ganancia_cr: 105, fecha_venta: '2026-10-03' }),
+    // Sniper, ayer 23:30 (en UTC ya era el 3: fecha_venta dice 3, pero para el usuario fue el 2), con perdida.
+    venH({ id: 4, furni_id: 12, nombre: 'Alas Brillantes', keko: 'Claudio4.8', precio_venta_real: 15, comision_venta: 1, comision_pagada_cr: 1, precio_venta_cr: 15, costo_total_cr: 18, ganancia_cr: -3,
+      vendido_por: 'sniper', vendido_en: enH(2, 23, 30), fecha_venta: '2026-10-03' }),
+    // Del Excel: sin dia ni marca.
+    venH({ id: 5, furni_id: 13, nombre: 'Trono HC', fuente: 'excel', precio_venta_real: 500, precio_venta_cr: 500, costo_total_cr: 400, ganancia_cr: 100 }),
+    { id: 6, estado: 'comprado', furni_id: 13, nombre: 'Trono HC', cantidad: 3, costo_total_cr: 1200 },
+    // A mano antes de la 1.9.0, hace 40 dias.
+    venH({ id: 7, furni_id: 14, nombre: 'Dragón Hanami', keko: 'xJp', precio_venta_real: 650, precio_venta_cr: 650, costo_total_cr: 450, ganancia_cr: 200, fecha_venta: '2026-08-24' }),
+  ];
+  const pendH = [{ id: 9, keko: 'Claudio4.8', sprite_id: 4306, tipo: null, furni_id: null, precio: 320, numero_ltd: null, vendido_en: enH(3, 11),
+    causa: 'espacio', motivo: 'Hay dos furnis con ese sprite.', catalogo: { nombre: 'Fontana Monstruo Punzante', classname: 'mnstr_waterfall', revision: 1 } }];
+  const filasH = hist.filasHistorial(comprasH, pendH, []);
+  const fH = (clave, lista = filasH) => lista.find((x) => x.clave === clave);
+  const claves = (l) => l.map((x) => x.clave);
+  assert.equal(filasH.length, 7, 'una fila por lote vendido y por venta por asignar (lo en mano no)');
+  const f1 = fH('l1');
+  assert.deepEqual([f1.origen, f1.registro, f1.conHora, f1.dia, f1.precio, f1.comision, f1.entro, f1.ganancia, f1.publicadoMs, f1.numero_ltd],
+    ['sniper', 'sniper', true, '2026-10-03', 45, 3, 42, 19, 4 * 3600000, 1475], 'el precio c/u es lo que pago el comprador (neto + comision)');
+  assert.ok(Math.abs(f1.margen - 19 / 23) < 1e-12);
+  assert.equal(fH('l4').dia, '2026-10-02', 'el dia de una venta con hora es el del reloj del usuario, no el UTC');
+  assert.deepEqual([fH('l2').entro, fH('l2').comision, fH('l2').registro], [300, 0, 'manual'], 'tradeo: sin comision');
+  assert.deepEqual([fH('l3').precio, fH('l3').moneda, fH('l3').entro, fH('l3').conHora, fH('l3').registro, fH('l3').origen], [4, 'lingos', 200, false, 'antigua', 'manual']);
+  assert.deepEqual([fH('l5').dia, fH('l5').registro, fH('l5').origen], [null, 'excel', 'manual']);
+  const p9 = fH('p9');
+  assert.deepEqual([p9.origen, p9.nombre, p9.precio, p9.comision, p9.entro, p9.ganancia, p9.costo, p9.dia],
+    ['por_asignar', 'Fontana Monstruo Punzante', 320, comH.calcularComision(320), 320 - comH.calcularComision(320), null, null, '2026-10-03']);
+  // Filtros: rango, periodo del grafico, busqueda, kekos, origen y perdida.
+  const filt = (f) => claves(hist.filtrar(filasH, { ...hist.FILTROS_INICIALES, ...f }, ahoraH)).sort();
+  assert.deepEqual(filt({}), ['l1', 'l2', 'l3', 'l4', 'p9'], '30 dias por defecto: sin la de hace 40 dias ni la del Excel (sin dia)');
+  assert.deepEqual(filt({ rango: 'hoy' }), ['l1', 'l2', 'l3', 'p9']);
+  assert.deepEqual(filt({ rango: 'todo' }), ['l1', 'l2', 'l3', 'l4', 'l5', 'l7', 'p9'], 'Todo: tambien lo sin dia');
+  assert.deepEqual(filt({ rango: 'mes' }), ['l1', 'l2', 'l3', 'l4', 'p9']);
+  assert.deepEqual(filt({ rango: 'propio', desde: '2026-10-02', hasta: '2026-08-01' }), ['l4', 'l7'], 'fechas al reves: se ordenan');
+  assert.deepEqual(filt({ rango: 'propio', desde: '2026-10-03' }), ['l1', 'l2', 'l3', 'p9'], 'solo «desde»');
+  assert.deepEqual(filt({ rango: 'todo', periodo: { desde: '2026-10-02', hasta: '2026-10-02' } }), ['l4'], 'el dia elegido en el grafico manda');
+  assert.deepEqual(filt({ rango: 'todo', q: '  PATO ' }), ['l2', 'l3']);
+  assert.deepEqual(filt({ rango: 'todo', q: 'dragon' }), ['l7'], 'la busqueda no distingue tildes');
+  assert.deepEqual(filt({ rango: 'todo', q: 'fontana' }), ['p9']);
+  assert.deepEqual(filt({ rango: 'todo', q: '#1475' }), ['l1'], 'busca por numero LTD');
+  assert.deepEqual(filt({ rango: 'todo', q: 'scarface' }), ['l1'], 'y por classname');
+  assert.deepEqual(filt({ rango: 'todo', kekos: ['Bodega Uno'] }), ['l2', 'l3'], 'kekos sin distinguir mayusculas');
+  assert.deepEqual(filt({ rango: 'todo', kekos: [''] }), ['l5'], '«Sin keko»');
+  assert.deepEqual(filt({ rango: 'todo', origen: 'sniper' }), ['l1', 'l4', 'p9'], 'Sniper incluye sus ventas por asignar');
+  assert.deepEqual(filt({ rango: 'todo', origen: 'manual' }), ['l2', 'l3', 'l5', 'l7'], 'Manual: lo tuyo, lo de antes de la 1.9.0 y lo del Excel');
+  assert.deepEqual(filt({ rango: 'todo', perdida: true }), ['l4']);
+  // Orden y dias del libro.
+  const todoH = hist.filtrar(filasH, { ...hist.FILTROS_INICIALES, rango: 'todo' }, ahoraH);
+  const porFecha = hist.ordenar(todoH, 'fecha');
+  assert.deepEqual(claves(porFecha), ['l1', 'p9', 'l2', 'l3', 'l4', 'l7', 'l5'], 'el dia mas reciente primero; con hora de la nueva a la vieja, luego «sin hora»; lo sin dia al final');
+  assert.deepEqual(claves(hist.ordenar(todoH, 'ganancia')), ['l7', 'l2', 'l3', 'l5', 'l1', 'l4', 'p9'], 'por ganancia; las por asignar (sin ganancia) al final');
+  assert.deepEqual(claves(hist.ordenar(todoH, 'entro')), ['l7', 'l5', 'p9', 'l2', 'l3', 'l1', 'l4']);
+  const diasH = hist.porDia(porFecha);
+  assert.deepEqual(diasH.map((d) => [d.dia, d.ventas, d.porAsignar, d.unidades, d.entro, d.ganancia]),
+    [['2026-10-03', 3, 1, 4, 542, 234], ['2026-10-02', 1, 0, 1, 15, -3], ['2026-08-24', 1, 0, 1, 650, 200], [null, 1, 0, 1, 500, 100]]);
+  // Metricas: las por asignar se cuentan aparte, sin dinero; mejor furni = la suma de sus ventas.
+  const mH = hist.metricas(todoH);
+  assert.deepEqual([mH.ventas, mH.unidades, mH.furnis, mH.entro, mH.comision, mH.costo, mH.ganancia, mH.porAsignar, mH.sniper, mH.manual],
+    [6, 7, 5, 1707, 4, 1176, 531, 1, { ventas: 2, ganancia: 16 }, { ventas: 4, ganancia: 515 }]);
+  assert.equal(mH.entro - mH.costo, mH.ganancia, 'entro - costo = ganancia');
+  assert.ok(Math.abs(mH.margen - 531 / 1176) < 1e-12);
+  assert.deepEqual([mH.mejor.nombre, mH.mejor.ganancia, mH.mejor.ventas, mH.mejor.unidades], ['Pato HC', 215, 2, 3], 'Pato HC (110 + 105) gana a Dragón Hanami (200)');
+  assert.deepEqual(hist.metricas([]), { ventas: 0, unidades: 0, furnis: 0, entro: 0, comision: 0, costo: 0, ganancia: 0, margen: null,
+    sniper: { ventas: 0, ganancia: 0 }, manual: { ventas: 0, ganancia: 0 }, mejor: null, porAsignar: 0 });
+  assert.deepEqual(hist.kekosDe(filasH).map((k) => [k.clave, k.nombre, k.ventas]),
+    [['claudio4.8', 'Claudio4.8', 3], ['bodega uno', 'Bodega Uno', 2], ['xjp', 'xJp', 1], ['', null, 1]], 'el menu de kekos: de mas a menos ventas, «Sin keko» al final');
+  // El grafico: un punto por dia; por semana (de lunes) o por mes en rangos largos.
+  const s7 = hist.serieDiaria(hist.filtrar(filasH, { ...hist.FILTROS_INICIALES, rango: '7' }, ahoraH), { rango: '7' }, ahoraH);
+  assert.deepEqual([s7.por, s7.puntos.length, s7.desde, s7.hasta, s7.total], ['dia', 7, '2026-09-27', '2026-10-03', { ventas: 4, ganancia: 231, porAsignar: 1 }]);
+  const hoyP = s7.puntos[6];
+  assert.deepEqual([hoyP.clave, hoyP.desde, hoyP.hasta, hoyP.ventas, hoyP.porAsignar, hoyP.sniper, hoyP.manual, hoyP.ganancia, hoyP.entro], ['2026-10-03', '2026-10-03', '2026-10-03', 3, 1, 19, 215, 234, 542]);
+  assert.deepEqual([s7.puntos[5].sniper, s7.puntos[0].ventas], [-3, 0], 'el dia con perdida y los dias sin ventas');
+  const sTodo = hist.serieDiaria(todoH, { rango: 'todo' }, ahoraH);
+  assert.deepEqual([sTodo.por, sTodo.desde, sTodo.puntos.length, sTodo.total.ganancia], ['dia', '2026-08-24', 41, 431], 'Todo: desde la primera venta con dia (la del Excel no entra al grafico)');
+  const viejaH = (id, dia, g) => ({ ...fH('l7'), clave: 'l' + id, id, dia, momento: new Date(dia + 'T12:00:00').getTime(), ganancia: g });
+  const sSem = hist.serieDiaria([...todoH, viejaH(20, '2026-04-15', 7)], { rango: 'todo' }, ahoraH);
+  assert.equal(sSem.por, 'semana');
+  assert.ok(sSem.puntos.every((p) => new Date(p.clave + 'T12:00:00').getDay() === 1), 'las semanas empiezan en lunes');
+  assert.deepEqual([sSem.puntos[0].desde, sSem.puntos[sSem.puntos.length - 1].hasta, sSem.total.ganancia], ['2026-04-15', '2026-10-03', 438], 'el primer y el ultimo punto se recortan al rango');
+  assert.equal(sSem.puntos.reduce((s, p) => s + p.ganancia, 0), 438);
+  assert.deepEqual(claves(hist.filtrar([viejaH(30, '2026-09-04', 1), viejaH(31, '2026-09-03', 1)], hist.FILTROS_INICIALES, ahoraH)), ['l30'], '«30 dias» = hoy y los 29 anteriores');
+  const sMes = hist.serieDiaria([...todoH, viejaH(21, '2024-06-20', 1)], { rango: 'todo' }, ahoraH);
+  assert.deepEqual([sMes.por, sMes.puntos[0].clave, sMes.puntos[0].desde, sMes.puntos.length], ['mes', '2024-06-01', '2024-06-20', 29], 'mas de 62 semanas: por mes');
+  assert.equal(hist.serieDiaria([], { rango: 'todo' }, ahoraH).puntos.length, 1, 'sin ventas: solo hoy');
+  assert.deepEqual([hist.sumarDias('2026-10-01', -1), hist.sumarDias('2026-12-31', 1), hist.hoyDe(ahoraH)], ['2026-09-30', '2027-01-01', '2026-10-03']);
+  // CSV para Excel.
+  const csvH = hist.csv(hist.ordenar(hist.filtrar(filasH, { ...hist.FILTROS_INICIALES, rango: 'hoy' }, ahoraH), 'fecha'));
+  const lineasCsv = csvH.split('\r\n');
+  assert.ok(csvH.startsWith('﻿') && csvH.endsWith('\r\n'), 'BOM y fin de linea de Windows');
+  assert.equal(lineasCsv[0], '﻿Fecha;Hora;Furni;LTD;Keko;Cantidad;Precio c/u;Moneda;Comisión (cr);Entró (cr);Costo (cr);Ganancia (cr);Margen;Origen;Registrada por;Lote');
+  assert.equal(lineasCsv[1], '2026-10-03;14:10;Cara con Cicatrices;1475;Claudio4.8;1;45;Créditos;3;42;23;19;82,61%;Sniper;El Sniper;1');
+  assert.equal(lineasCsv[2], '2026-10-03;11:00;Fontana Monstruo Punzante;;Claudio4.8;1;320;Créditos;7;313;;;;Por asignar;El Sniper;', 'la por asignar: sin costo, ganancia ni lote');
+  assert.equal(lineasCsv[4], '2026-10-03;;Pato HC;;bodega uno;1;4;Lingos;0;200;95;105;110,53%;Manual;Tú (antes de la 1.9.0);3', 'sin hora; lingos');
+  const raroH = hist.csv([{ ...f1, nombre: 'Sofá "Rey"; edición', keko: '=HYPERLINK("x")', costo: 22.5, ganancia: -0.5, margen: null, entro: 22 }]).split('\r\n')[1];
+  assert.equal(raroH.split(';')[2] + ';' + raroH.split(';')[3], '"Sofá ""Rey""; edición"', 'comillas y «;» dentro de un texto');
+  assert.ok(raroH.includes(`;"'=HYPERLINK(""x"")";`), 'un keko que empieza con = no se ejecuta como formula');
+  assert.ok(raroH.includes(';22;22,5;-0,5;;'), 'coma decimal y negativos como numero');
+  assert.equal(hist.nombreCsv(ahoraH), 'historial-ventas-2026-10-03.csv');
+  // Los filtros se recuerdan en este equipo (no la busqueda ni el dia del grafico).
+  const memH = { datos: {}, getItem(k) { return this.datos[k] ?? null; }, setItem(k, v) { this.datos[k] = v; } };
+  assert.deepEqual(hist.leerFiltros(memH), hist.FILTROS_INICIALES, 'la primera vez: 30 dias, todos los kekos, todas');
+  hist.guardarFiltros({ ...hist.FILTROS_INICIALES, q: 'pato', periodo: { desde: '2026-10-02', hasta: '2026-10-02' }, rango: 'propio', desde: '2026-09-01', hasta: '2026-09-30',
+    kekos: ['Bodega Uno', ''], origen: 'manual', perdida: true, orden: 'ganancia' }, memH);
+  assert.deepEqual(hist.leerFiltros(memH), { ...hist.FILTROS_INICIALES, rango: 'propio', desde: '2026-09-01', hasta: '2026-09-30', kekos: ['bodega uno', ''], origen: 'manual', perdida: true, orden: 'ganancia' });
+  assert.deepEqual(hist.leerFiltros({ getItem: () => '{"rango":"siempre","desde":"ayer","kekos":[3,"A","a"],"origen":"x","perdida":"si","orden":"precio"}' }),
+    { ...hist.FILTROS_INICIALES, kekos: ['a'] }, 'lo raro se descarta y lo bueno se salva');
+  assert.deepEqual(hist.leerFiltros(rotoG), hist.FILTROS_INICIALES, 'sin almacenamiento: los de siempre');
+  hist.guardarFiltros(hist.FILTROS_INICIALES, rotoG);
+  assert.deepEqual(hist.leerFiltros({ getItem: () => '[1,2]' }), hist.FILTROS_INICIALES);
+  ok('historial de ventas: una fila por venta (lo que pago el comprador, lo que entro y la ganancia de la base; el dia del reloj del usuario; quien la registro); filtros por fechas, dia del grafico, texto sin tildes, keko, origen y perdida; orden y subtotales por dia; metricas sin las por asignar; grafico por dia, semana o mes; CSV para Excel; filtros recordados');
+
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');
   assert.equal(notif.APP_ID, paquete.build.appId, 'el AUMID de Windows es el appId que el instalador pone en el acceso directo');
@@ -1665,6 +1792,76 @@ async function main() {
     assert.equal(firmas, 3, 'una sola firma de cada funcion (las viejas se borran)');
     await h19.cerrar();
     ok('ventas manuales: guardan «manual» y, si son de hoy, la hora en que se registran (de otro dia, sin hora; una hora futura queda en la de la base; cambiar el dia la quita; revertir limpia); sin la migracion 20 se venden igual, sin hora y sin perder el keko; la migracion entra (dos veces) sobre una base con la 19');
+
+    // ── Historial contra la base: cada venta gana lo mismo que en el Inventario y los totales son los del Resumen ──
+    const hb = await crearClienteLocal();
+    await hb.crearUsuario('hb@prueba.local', 'clave-hb');
+    await hb.auth.signInWithPassword({ email: 'hb@prueba.local', password: 'clave-hb' });
+    const conexHb = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: hb });
+    await conexHb.iniciar();
+    const negHb = crearServicioNegocio({ conexion: conexHb, furnidata });
+    const tkHb = await negHb.crearToken('VPS Historial');
+    assert.equal((await hb.comoAnon().rpc('auditar_inventario', { token_sniper: tkHb.token, keko: 'Ux_Data', hotel: 'es', inventario: [] })).error, null);
+    const evHb = async (eventos) => (await hb.comoAnon().rpc('registrar_eventos_sniper', { token_sniper: tkHb.token, eventos })).data;
+    // El Sniper: compra 3 a 115, publica a 128 y vende 2 (a 128 y a 140); una venta de un furni sin registrar queda por asignar.
+    assert.equal((await evHb([compraVs('hb_c1', S1, 3, 115), publicarVs('hb_p1', S1, 3, 128, T0)])).procesados, 2);
+    assert.equal((await evHb([ventaVs('hb_v1', S1, 128, T0 + H), ventaVs('hb_v2', S1, 140, T0 + 2 * H), ventaVs('hb_v3', 990777, 50, T0 + H)])).por_asignar, 1);
+    // A mano, en Bodega (costo con decimales): «Vendido» del Mercadillo hoy, un tradeo en lingos y una venta de otro dia.
+    await negHb.crearKeko('Bodega');
+    const tHb = await negHb.crearCompra({ nombre: 'Trono HC', cantidad: 5, precio_compra: 22.5, keko: 'Bodega', fecha_compra: '2026-09-01' });
+    await negHb.publicarFurni(tHb.furni_id, { cantidad: 2, precio_lista: 61, keko: 'Bodega' });
+    const vfHb = await negHb.venderFurni(tHb.furni_id, { cantidad: 2, keko: 'Bodega' });
+    const vlHb = await negHb.venderEnMano(tHb.furni_id, { cantidad: 2, precio: 3, moneda: 'lingos', keko: 'Bodega' });
+    const voHb = await negHb.venderEnMano(tHb.furni_id, { cantidad: 1, precio: 40, keko: 'Bodega', fecha: '2026-09-20' });
+    // Lo del Excel: vendido, sin dia ni marca.
+    const exHb = (await hb.pg.query("insert into public.compras (propietario, furni_id, estado, cantidad, moneda_compra, precio_compra, moneda_venta, precio_venta, fuente) select propietario, furni_id, 'vendido', 1, 'creditos', 22.5, 'creditos', 70, 'excel' from public.compras where id = $1 returning id", [tHb.id])).rows[0].id;
+    const historialHb = async () => {
+      const [compras, pend, furnis, resumen] = await Promise.all([negHb.listarCompras(), negHb.ventasPorAsignar(), negHb.listarFurnis(), negHb.resumen()]);
+      return { compras, furnis, resumen, filas: hist.filasHistorial(compras, pend.ventas, furnis) };
+    };
+    const cuadra = async (cuando) => {
+      const { compras, furnis, resumen, filas } = await historialHb();
+      const casi = (a, b, que) => assert.ok(Math.abs(Number(a) - Number(b)) < 1e-9, `${cuando}: ${que} (${a} vs ${b})`);
+      for (const x of filas.filter((y) => y.tipo === 'lote')) {
+        casi(x.ganancia, compras.find((l) => l.id === x.id).ganancia_cr, `la ganancia del lote ${x.id} es la del Inventario`);
+        casi(x.entro - x.costo, x.ganancia, `entro - costo = ganancia en el lote ${x.id}`);
+      }
+      for (const f of furnis) casi(filas.filter((x) => x.furni_id === f.id && x.tipo === 'lote').reduce((s, x) => s + x.ganancia, 0), f.ganancia_realizada_cr, `la ganancia de ${f.nombre} es la del Mercadillo`);
+      const m = hist.metricas(hist.filtrar(filas, { ...hist.FILTROS_INICIALES, rango: 'todo' }));
+      const v = resumen.vendido;
+      casi(m.entro, v.retorno_cr, 'lo que entro = el retorno de las ventas del Resumen');
+      casi(m.ganancia, v.ganancia_cr, 'la ganancia = la del Resumen');
+      casi(m.costo, v.costo_cr, 'el costo = el del Resumen');
+      casi(m.comision, v.comision_cr, 'la comision pagada = la del Resumen');
+      assert.deepEqual([m.ventas, m.unidades], [v.lotes, v.unidades], `${cuando}: ventas y unidades`);
+      return { filas, m };
+    };
+    let { filas: filasHb, m: mHb } = await cuadra('al registrar');
+    assert.deepEqual([mHb.ventas, mHb.porAsignar, mHb.sniper.ventas, mHb.manual.ventas], [6, 1, 2, 4]);
+    const loteHb = (id) => filasHb.find((x) => x.tipo === 'lote' && x.id === id);
+    const s128 = filasHb.find((x) => x.origen === 'sniper' && x.precio === 128);
+    assert.deepEqual([s128.conHora, s128.momento, s128.comision, s128.entro, s128.ganancia, s128.keko], [true, T0 + H, 3, 125, 10, 'Ux_Data'], 'la del Sniper: su hora, 128 pagados, 125 netos');
+    const mf = loteHb(vfHb.ventas[0].venta_id);
+    const com61 = comH.calcularComision(61);
+    assert.deepEqual([mf.registro, mf.conHora, mf.dia, mf.cantidad, mf.precio, mf.comision, mf.entro, mf.ganancia], ['manual', true, hoyStr(), 2, 61, 2 * com61, 2 * (61 - com61), 2 * (61 - com61 - 22.5)],
+      '«Vendido» a mano de hoy (2 und): con hora; el precio c/u es el de lista que pago el comprador; la comision, de las dos');
+    const ml = loteHb(vlHb.ventas[0].venta_id);
+    assert.deepEqual([ml.moneda, ml.precio, ml.cantidad, ml.entro, ml.costo, ml.ganancia, ml.mercadillo], ['lingos', 3, 2, 300, 45, 255, false], 'tradeo en lingos a la tasa de 50');
+    const mo = loteHb(voHb.ventas[0].venta_id);
+    assert.deepEqual([mo.registro, mo.conHora, mo.dia], ['manual', false, '2026-09-20'], 'de otro dia: sin hora');
+    assert.deepEqual([loteHb(exHb).registro, loteHb(exHb).dia], ['excel', null]);
+    const pHb = filasHb.find((x) => x.tipo === 'por_asignar');
+    assert.deepEqual([pHb.origen, pHb.precio, pHb.ganancia, pHb.keko], ['por_asignar', 50, null, 'Ux_Data']);
+    assert.ok(!hist.filtrar(filasHb, hist.FILTROS_INICIALES, Date.now()).some((x) => x.id === exHb && x.tipo === 'lote'), 'lo del Excel (sin dia) no entra en «30 dias»');
+    // Con otra tasa del Lingo, el tradeo vale otra cosa en creditos y todo sigue cuadrando; deshacer una venta la saca.
+    await negHb.fijarTasa(60);
+    ({ filas: filasHb } = await cuadra('con la tasa en 60'));
+    assert.equal(loteHb(vlHb.ventas[0].venta_id).entro, 360);
+    await negHb.revertirVenta(vfHb.ventas[0].venta_id);
+    ({ filas: filasHb, m: mHb } = await cuadra('tras deshacer una venta'));
+    assert.deepEqual([loteHb(vfHb.ventas[0].venta_id), mHb.ventas], [undefined, 5]);
+    await hb.cerrar();
+    ok('historial contra la base: cada venta (Sniper, a mano de hoy y de otro dia, tradeo en lingos, Excel) gana lo mismo que en el Inventario y el Mercadillo, y los totales son los del Resumen al centimo, tambien con otra tasa y tras deshacer una venta; las por asignar aparte');
 
     // ── Modo demo: «Venta» y «Venta por asignar» pasan por la funcion real del Sniper ──
     const { crearDemo } = require('../backend/services/demo');
