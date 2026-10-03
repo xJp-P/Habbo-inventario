@@ -8,21 +8,60 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
-## [Sin publicar]
+## [1.9.0] - 2026-10-03
 
 ### Añadido
 
-- **La hora de las ventas que registras a mano** (la base del Historial de ventas; la
-  sección llega en las próximas fases). «Vendido» en el Mercadillo o en Publicado y la
-  venta manual guardan la hora en que las registras, si la venta es del día de hoy; una
-  venta de otro día queda solo con su fecha, sin inventar la hora. Además quedan marcadas
-  como manuales, para distinguirlas de las del Sniper. Las ventas anteriores no cambian.
-  Si cambias la fecha de una venta, pierde la hora de aquel día.
+- **Historial de ventas**: una sección nueva del menú, debajo de Inventario, con todas las
+  ventas de la cuenta en orden cronológico, sin importar el keko: un libro mayor para
+  auditar. No reemplaza Inventario › Vendido, que sigue por keko.
+- **Cuatro tarjetas** que siguen los filtros: Ventas (unidades, furnis distintos y reparto
+  entre el Sniper y lo manual), Entró (lo neto, con la comisión pagada y el costo),
+  Ganancia (margen y reparto) y Mejor furni (el que más ganó sumando todas sus ventas).
+  Con «Todo», los totales son los mismos de «Ventas realizadas» del Resumen.
+- **Filtros** en una barra que se queda fija al bajar: buscar un furni (sin importar las
+  tildes; también «#número» de un LTD), rango de fechas (Hoy, 7 días, 30 días, Este mes,
+  Todo o fechas propias), uno o varios kekos (menú con casillas, la cara y las ventas de
+  cada uno), origen (Todas, Sniper o Manual) y «Con pérdida». Los filtros activos se ven
+  como chips con ✕ y «Limpiar». La app recuerda en ese equipo el rango, los kekos, el
+  origen, «Con pérdida» y el orden; la búsqueda no.
+- **El libro**, agrupado por día: cada día con su subtotal (ventas, lo que entró y la
+  ganancia) en un encabezado que se queda fijo bajo los filtros. Columnas: hora, furni
+  (con su LTD y cómo se vendió), keko, cantidad, precio c/u (lo que pagó el comprador, en
+  lingos si fue un tradeo en lingos), lo que entró, ganancia con margen y origen. Se
+  ordena por hora, por lo que entró o por ganancia con un clic en el título; «Ver 60 más».
+  Lo que se registró a mano antes de esta versión va «sin hora», al final de su día; lo
+  importado del Excel, en «Sin fecha». Con la ventana angosta se ocultan las columnas Keko
+  y Precio c/u (el keko pasa bajo el nombre del furni) y las tarjetas van de 2 en 2.
+- **Detalle de cada venta**: lote, precio, comisión, lo que entró, costo, ganancia, cuánto
+  estuvo publicado, quién la registró y cuándo. **«Ver en el Inventario»** abre Vendido en
+  el bloque de ese keko, con el furni desplegado y el lote abierto e iluminado.
+  **«Deshacer venta»** pide confirmación (y, si la registró el Sniper, avisa que no la
+  vuelve a enviar).
+- **Gráfico de ganancia por día** (por semana o por mes en rangos largos): verde lo del
+  Sniper, azul lo manual y una barra roja si el día dejó pérdida. Al pasar el ratón, el
+  globo del día; con un clic, el libro muestra solo ese día (chip «Día: …»). Si hay
+  ventas sin fecha, el gráfico dice que no entran en sus barras.
+- **Exportar CSV** de lo que se ve filtrado, para Excel (separado por «;», con coma decimal
+  y los acentos correctos). En la app de escritorio abre el «Guardar como» del sistema y
+  después ofrece «Mostrar» el archivo; en el navegador se descarga.
+- **Ventas por asignar en el historial**: las ventas del Sniper que no casaron con un lote
+  van en azul, sin ganancia y sin sumar en los totales, con el motivo y «Asignar a un
+  lote…» (el mismo diálogo del Inventario).
+- **En vivo**: cuando el Sniper registra ventas, el historial se pone al día solo y las
+  ventas nuevas se iluminan un momento.
+- **La hora de las ventas que registras a mano**: «Vendido» en el Mercadillo o en
+  Publicado y la venta manual guardan la hora en que las registras, si la venta es del día
+  de hoy; una venta de otro día queda solo con su fecha, sin inventar la hora. Además
+  quedan marcadas como manuales, para distinguirlas de las del Sniper. Las ventas
+  anteriores no cambian. Si cambias la fecha de una venta, pierde la hora de aquel día. En
+  Vendido, esas ventas muestran «vendida hoy a las HH:MM», como las del Sniper.
 
 ### Migraciones de Supabase
 
-- `20261016000000_hora_ventas_manuales.sql` (requiere la `20261015000000`). Sin ella, la
-  app sigue vendiendo como en la 1.8.0: las ventas manuales quedan sin hora.
+- `20261016000000_hora_ventas_manuales.sql` (requiere la `20261015000000`). Hay que
+  correrla antes de publicar el Release. Sin ella, la app funciona igual (también el
+  Historial), pero las ventas que registras a mano quedan sin hora, como en la 1.8.0.
 
 ## [1.8.0] - 2026-10-02
 

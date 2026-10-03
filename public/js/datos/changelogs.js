@@ -13,6 +13,15 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.9.0': [
+    'Nueva sección «Historial» en el menú: todas tus ventas en un solo lugar, de la más reciente a la más antigua, sin importar el keko. Cada día lleva su total de lo que entró y lo que ganaste.',
+    'Arriba ves cuántas ventas hiciste, cuánto te entró, cuánto ganaste y tu mejor furni. Todo se ajusta a lo que elijas: busca un furni, cambia las fechas (hoy, 7 días, 30 días, este mes o las que quieras), elige uno o varios kekos, solo lo del Sniper o solo lo tuyo, o solo las ventas con pérdida. La app recuerda lo que elegiste.',
+    'Un gráfico te muestra la ganancia de cada día: verde lo que vendió el Sniper, azul lo que vendiste tú y rojo los días con pérdida. Haz clic en un día y verás solo sus ventas.',
+    'Haz clic en una venta para ver su detalle: lo que pagó el comprador, la comisión, lo que te costó y cuánto estuvo publicada. Desde ahí saltas a ese lote en el Inventario o deshaces la venta.',
+    'Con «Exportar CSV» guardas las ventas que estás viendo en un archivo que se abre en Excel.',
+    'Las ventas que anotas a mano ahora guardan la hora en que las registras (si son del día), así quedan en su lugar exacto. Las ventas del Sniper que aún no tienen lote también aparecen, en azul, para asignarlas desde ahí.',
+    'El historial se pone al día solo cuando el Sniper vende algo: las ventas nuevas se iluminan un momento.',
+  ],
   '1.8.0': [
     'Tu Inventario se ve mucho más limpio: si compraste el mismo furni varias veces, ahora aparece en una sola fila con el total de unidades, lo que te costó y el rango de precios. Haz clic en ella y se despliegan todos sus lotes.',
     'Al abrir un furni, sus lotes van del más antiguo al más nuevo, y el que se publica primero lleva la marca «1º en salir».',
