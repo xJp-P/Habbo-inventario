@@ -15,6 +15,15 @@
 //     keko pasa bajo el nombre del furni).
 //   - Clic en una venta: su detalle, con «Ver en el Inventario» (Vendido, en el bloque de su
 //     keko y con el lote abierto) y «Deshacer venta» (decision 6).
+//   - El grafico de ganancia por dia (decision 4; por semana o por mes en rangos largos): una
+//     barra por dia, verde Sniper y azul manual, roja si ese dia dejo perdida. Al pasar el
+//     raton, el globo del dia; con un clic, el libro muestra solo ese dia (chip «Día: …»).
+//   - «Exportar CSV» de lo filtrado (decision 7): en la app de escritorio, el «Guardar como»
+//     del sistema (electron/archivos.js) y «Mostrar»; en el navegador, una descarga.
+//   - Las ventas «por asignar» del Sniper van en el libro, en azul, sin ganancia (no se sabe de
+//     que lote salieron) y con «Asignar a un lote…» (decision 3). No suman dinero.
+//   - En vivo: cuando el Sniper envia ventas, app.js recarga los datos y el libro se pone al
+//     dia solo; las ventas nuevas se iluminan un momento.
 //
 // Toda la logica (filas, filtros, orden, dias, metricas) vive en core/historial.js, probada
 // contra la base: lo que se ve aqui cuadra al centimo con el Inventario y el Resumen.
@@ -32,7 +41,7 @@ import { claveKeko } from '../core/kekos.js';
 import { horaDe } from '../core/ventas.js';
 import {
   filasHistorial, filtrar, ordenar, porDia, metricas, kekosDe, leerFiltros, guardarFiltros,
-  tituloDia, duracion, activos, quitarFiltro, hoyDe, sumarDias,
+  tituloDia, diaCorto, duracion, activos, quitarFiltro, hoyDe, sumarDias, serieDiaria, csv, nombreCsv,
 } from '../core/historial.js';
 
 var RANGOS = [['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['mes', 'Este mes'], ['todo', 'Todo'], ['propio', 'Fechas…']];
@@ -44,6 +53,7 @@ var PAGINA = 60;
 var COLUMNAS = [['hora', 'Hora', 78, 'fecha'], ['furni', 'Furni', null], ['keko', 'Keko', 150], ['cant', 'Cant.', 58],
   ['precio', 'Precio c/u', 96], ['entro', 'Entró', 100, 'entro'], ['ganancia', 'Ganancia', 108, 'ganancia'], ['origen', 'Origen', 112]];
 var MINIMO_COMPLETO = 920;
+var SIN_VENTAS = [];
 
 function signo(n) { return (n > 0 ? '+' : n < 0 ? '−' : '') + fmtCr(Math.abs(n)); }
 function claseSigno(n) { return n > 0 ? 'pos' : n < 0 ? 'neg' : ''; }
@@ -56,7 +66,8 @@ function Tarjetas(props) {
     h('div', { className: 'h-kpi' },
       h('div', { className: 'h-kpi-l' }, h(Ico, { name: 'recibo', size: 12 }), 'Ventas'),
       h('div', { className: 'h-kpi-v' }, fmtCr(m.ventas)),
-      h('div', { className: 'h-kpi-s' }, fmtCr(m.unidades) + ' und · ' + m.furnis + (m.furnis === 1 ? ' furni' : ' furnis distintos')),
+      h('div', { className: 'h-kpi-s' }, fmtCr(m.unidades) + ' und · ' + m.furnis + (m.furnis === 1 ? ' furni' : ' furnis distintos'),
+        m.porAsignar ? h('span', { className: 'txt-azul', title: 'Ventas del Sniper que aún no tienen lote: no suman en los totales' }, ' · ' + m.porAsignar + ' por asignar') : null),
       h('div', { className: 'h-reparto', title: m.sniper.ventas + ' del Sniper · ' + m.manual.ventas + ' manuales' },
         h('i', { style: { flexGrow: m.sniper.ventas, background: 'var(--green)' } }), h('i', { style: { flexGrow: m.manual.ventas, background: 'var(--blue)' } })),
       h('div', { className: 'h-reparto-ley' }, h('span', { className: 's' }, h('b', null, m.sniper.ventas), ' Sniper'), h('span', { className: 'm' }, h('b', null, m.manual.ventas), ' manuales')),
@@ -86,6 +97,78 @@ function Tarjetas(props) {
       h('span', { className: 'h-kpi-fondo' }, h(Ico, { name: 'trofeo', size: 64, sw: 1.5 })))));
 }
 
+// ── El grafico de ganancia por dia (decision 4) ──
+var TITULO_GRAFICO = { dia: 'Ganancia por día', semana: 'Ganancia por semana', mes: 'Ganancia por mes' };
+var MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function tituloPunto(p, por, ahora) {
+  if (por === 'dia') return tituloDia(p.desde, ahora);
+  if (por === 'mes') { var m = MESES_LARGOS[Number(p.clave.slice(5, 7)) - 1]; return m.charAt(0).toUpperCase() + m.slice(1) + ' de ' + p.clave.slice(0, 4); }
+  return 'Del ' + diaCorto(p.desde, ahora) + ' al ' + diaCorto(p.hasta, ahora);
+}
+var ALTO_BARRAS = 84;
+function Grafico(props) {
+  var s = props.serie;
+  var por = s.por;
+  var sT = useState(null); var tip = sT[0]; var setTip = sT[1];
+  var periodo = props.periodo;
+  // Escala: lo mas que gano un dia, arriba; lo mas que perdio, debajo de la linea base.
+  var max = Math.max(1, Math.max.apply(null, s.puntos.map(function (p) { return Math.max(0, p.ganancia); })));
+  var minNeg = Math.min(0, Math.min.apply(null, s.puntos.map(function (p) { return p.ganancia; })));
+  var escala = ALTO_BARRAS / (max - minNeg || 1);
+  var base = -minNeg * escala;
+  function elegido(p) { return !!periodo && periodo.desde === p.desde && periodo.hasta === p.hasta; }
+  // El globo, al costado de la barra y a media altura del grafico (no tapa las tarjetas de
+  // arriba ni el dia que miras): a la derecha de la barra o, en la mitad derecha, a su izquierda.
+  function mostrarTip(p, e) {
+    var r = e.currentTarget.getBoundingClientRect();
+    var c = e.currentTarget.parentNode.getBoundingClientRect();
+    var izq = r.left + r.width / 2 > c.left + c.width / 2;
+    setTip({ p: p, izq: izq, x: izq ? r.left - 8 : r.right + 8, y: c.top + c.height / 2 });
+  }
+  var p0 = s.puntos[0];
+  var pN = s.puntos[s.puntos.length - 1];
+  return h('div', { className: 'h-grafico' },
+    h('div', { className: 'h-grafico-cab' },
+      h('b', null, TITULO_GRAFICO[por]),
+      h('span', { className: 'mono ' + claseSigno(s.total.ganancia) }, signo(s.total.ganancia) + ' cr'),
+      h('span', null, '· clic en ' + (por === 'dia' ? 'un día para ver solo ese día' : por === 'semana' ? 'una semana para ver solo esa semana' : 'un mes para ver solo ese mes')),
+      // Lo importado del Excel no tiene dia: no cabe en ninguna barra (las tarjetas si lo cuentan).
+      s.total.sinDia ? h('span', { title: 'Las ventas importadas del Excel no tienen fecha: cuentan en las tarjetas y en el libro, pero no en el gráfico' },
+        '· ' + s.total.sinDia + (s.total.sinDia === 1 ? ' venta sin fecha no entra' : ' ventas sin fecha no entran')) : null,
+      h('span', { className: 'h-ley' }, h('span', { className: 's' }, 'Sniper'), h('span', { className: 'm' }, 'Manual'), h('span', { className: 'n' }, 'Pérdida'))),
+    h('div', { className: 'h-barras' + (periodo ? ' con-sel' : ''), onMouseLeave: function () { setTip(null); } },
+      h('div', { className: 'h-base', style: { bottom: base } }),
+      s.puntos.map(function (p) {
+        var vacio = !p.ventas && !p.porAsignar;
+        var g = p.ganancia;
+        // Un dia que gano: la barra mide lo que gano, repartida entre Sniper y manual; uno que
+        // perdio: una barra roja hacia abajo.
+        var positivos = Math.max(0, p.sniper) + Math.max(0, p.manual);
+        var hs = g > 0 && positivos ? g * escala * Math.max(0, p.sniper) / positivos : 0;
+        var hm = g > 0 && positivos ? g * escala * Math.max(0, p.manual) / positivos : 0;
+        var hn = g < 0 ? -g * escala : 0;
+        var etiqueta = tituloPunto(p, por, props.ahora) + ': ' + (vacio ? 'sin ventas' : signo(g) + ' cr en ' + p.ventas + (p.ventas === 1 ? ' venta' : ' ventas'));
+        return h('button', { key: p.clave, type: 'button', className: 'h-barra' + (vacio ? ' vacia' : '') + (elegido(p) ? ' sel' : ''), disabled: vacio,
+            style: { paddingBottom: base, '--base': base + 'px' }, 'aria-label': etiqueta, 'aria-pressed': elegido(p),
+            onClick: function () { setTip(null); props.onElegir(elegido(p) ? null : { desde: p.desde, hasta: p.hasta }); },
+            onMouseEnter: function (e) { mostrarTip(p, e); }, onFocus: function (e) { mostrarTip(p, e); }, onBlur: function () { setTip(null); } },
+          hm ? h('div', { className: 'm tope', style: { height: hm } }) : null,
+          hs ? h('div', { className: 's' + (hm ? '' : ' tope'), style: { height: hs } }) : null,
+          hn ? h('div', { className: 'n', style: { bottom: base - hn, height: hn } }) : null);
+      })),
+    h('div', { className: 'h-ejes' }, h('span', null, p0 ? diaCorto(p0.desde, props.ahora) : ''), h('span', null, pN ? diaCorto(pN.hasta, props.ahora) : '')),
+    tip ? h('div', { className: 'h-tip' + (tip.izq ? ' izq' : ''), role: 'tooltip', style: { left: tip.x, top: tip.y } },
+      h('b', null, tituloPunto(tip.p, por, props.ahora)),
+      tip.p.ventas ? [
+        h('div', { key: 'v', className: 'fila' }, h('span', null, tip.p.ventas + (tip.p.ventas === 1 ? ' venta' : ' ventas')),
+          h('span', { className: 'mono ' + claseSigno(tip.p.ganancia) }, signo(tip.p.ganancia) + ' cr')),
+        h('div', { key: 's', className: 'fila tenue' }, h('span', null, 'Sniper'), h('span', { className: 'mono' }, signo(tip.p.sniper))),
+        h('div', { key: 'm', className: 'fila tenue' }, h('span', null, 'Manual'), h('span', { className: 'mono' }, signo(tip.p.manual))),
+        h('div', { key: 'e', className: 'fila tenue' }, h('span', null, 'Entró'), h('span', { className: 'mono' }, fmtCr(tip.p.entro) + ' cr')),
+      ] : h('div', { className: 'tenue' }, 'Sin ventas'),
+      tip.p.porAsignar ? h('div', { className: 'fila txt-azul' }, h('span', null, 'Por asignar'), h('span', { className: 'mono' }, tip.p.porAsignar)) : null) : null);
+}
+
 export function HistorialView(props) {
   var compras = props.compras || [];
   var listaKekos = props.kekos && props.kekos.disponible ? props.kekos.kekos || [] : [];
@@ -98,6 +181,9 @@ export function HistorialView(props) {
   var sH = useState(56); var altoFiltros = sH[0]; var setAltoFiltros = sH[1];
   var refFiltros = useRef(null);
   var refMenu = useRef(null);
+  // En vivo: las ventas que aparecen mientras miras se iluminan un momento.
+  var vistas = useRef(null);
+  var sN = useState(null); var nuevas = sN[0]; var setNuevas = sN[1];
   var ancho = useAlineado(MINIMO_COMPLETO);
   var compacto = !ancho.alineado;
   var ahora = Date.now();
@@ -125,8 +211,28 @@ export function HistorialView(props) {
     return function () { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', tecla); };
   }, [menuKekos]);
 
-  var filas = useMemo(function () { return filasHistorial(compras, [], props.furnis || []); }, [compras, props.furnis]);
+  // Las ventas por asignar: solo con la migracion 20261015000000 (si no, ninguna).
+  var porAsignar = props.porAsignar && props.porAsignar.disponible ? props.porAsignar.ventas || [] : SIN_VENTAS;
+  var filas = useMemo(function () { return filasHistorial(compras, porAsignar, props.furnis || []); }, [compras, porAsignar, props.furnis]);
   var filtradas = useMemo(function () { return filtrar(filas, filtros, Date.now()); }, [filas, filtros]);
+  // El grafico ve todos los dias del rango (sin el dia elegido en el, para poder cambiarlo).
+  var serie = useMemo(function () {
+    var sinPeriodo = Object.assign({}, filtros, { periodo: null });
+    return serieDiaria(filtrar(filas, sinPeriodo, Date.now()), sinPeriodo, Date.now());
+  }, [filas, filtros]);
+  useEffect(function () {
+    var actuales = filas.map(function (x) { return x.clave; });
+    if (vistas.current) {
+      var llegaron = actuales.filter(function (c) { return !vistas.current.has(c); });
+      if (llegaron.length) setNuevas(new Set(llegaron));
+    }
+    vistas.current = new Set(actuales);
+  }, [filas]);
+  useEffect(function () {
+    if (!nuevas) return undefined;
+    var t = setTimeout(function () { setNuevas(null); }, 3000);
+    return function () { clearTimeout(t); };
+  }, [nuevas]);
   var ordenadas = useMemo(function () { return ordenar(filtradas, filtros.orden); }, [filtradas, filtros.orden]);
   var m = useMemo(function () { return metricas(filtradas); }, [filtradas]);
   var kekosLista = useMemo(function () { return kekosDe(filas); }, [filas]);
@@ -174,6 +280,28 @@ export function HistorialView(props) {
         });
       } });
   }
+  // «Exportar CSV» de lo filtrado, en el orden del libro.
+  function exportar() {
+    var texto = csv(ordenadas);
+    var nombre = nombreCsv();
+    var n = ordenadas.length + (ordenadas.length === 1 ? ' venta' : ' ventas');
+    var api = window.electronAPI;
+    if (api && api.guardarCsv) {
+      api.guardarCsv(nombre, texto).then(function (r) {
+        if (r) props.onAviso('Guardado ' + r.nombre + ' con ' + n, { texto: 'Mostrar', fn: function () { api.mostrarArchivo(r.ruta); } });
+      }).catch(function (e) { props.onError('No se pudo guardar el CSV: ' + (e && e.message ? e.message : e)); });
+      return;
+    }
+    var url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    props.onAviso('Descargado ' + nombre + ' con ' + n + ' (lo que ves filtrado)');
+  }
   function ejecutar(accion) {
     _submitGuard(enviando, setEnviando, function () { return accion().then(function () { setConfirmacion(null); }); });
   }
@@ -185,7 +313,9 @@ export function HistorialView(props) {
   function filasVenta(x) {
     var abiertaEsta = abierta === x.clave;
     var k = kekoDe(x.keko);
-    var sub = x.moneda === 'lingos' ? 'tradeo en lingos' : x.mercadillo ? 'mercadillo · comisión ' + fmtCr(x.cantidad ? x.comision / x.cantidad : 0) + ' c/u' : 'tradeo o venta directa';
+    var asignar = x.tipo === 'por_asignar';
+    var sub = asignar ? 'sin lote: no se sabe lo que costó'
+      : x.moneda === 'lingos' ? 'tradeo en lingos' : x.mercadillo ? 'mercadillo · comisión ' + fmtCr(x.cantidad ? x.comision / x.cantidad : 0) + ' c/u' : 'tradeo o venta directa';
     var celdas = {
       hora: h('td', { key: 'hora' }, x.conHora ? h('span', { className: 'h-hora' }, horaDe(x.momento))
         : h('span', { className: 'h-hora sin', title: x.registro === 'excel' ? 'Importada del Excel: sin fecha ni hora' : 'Registrada a mano antes de la 1.9.0: solo se sabe el día' }, 'sin hora')),
@@ -197,16 +327,19 @@ export function HistorialView(props) {
       keko: h('td', { key: 'keko' }, h('span', { className: 'h-keko' }, h(AvatarKeko, { keko: k, tam: 20 }), h('span', null, k.origen === 'sin' ? 'Sin keko' : k.nombre))),
       cant: h('td', { key: 'cant', className: 'r mono' }, x.cantidad),
       precio: h('td', { key: 'precio', className: 'r mono' }, x.precio === null ? '-' : fmtLg(x.precio), x.moneda === 'lingos' ? h('span', { className: 'tenue' }, ' lg') : null),
-      entro: h('td', { key: 'entro', className: 'r mono' }, fmtCr(x.entro)),
+      entro: h('td', { key: 'entro', className: 'r mono' + (asignar ? ' tenue' : ''), title: asignar ? 'Lo que entró, pero sin lote todavía: no suma en los totales' : null }, fmtCr(x.entro)),
       ganancia: h('td', { key: 'ganancia', className: 'r mono ' + claseSigno(x.ganancia) }, x.ganancia === null ? h('span', { className: 'tenue' }, '—')
         : [h('b', { key: 'g' }, signo(x.ganancia)), x.margen !== null ? h('div', { key: 'm', className: 'h-margen' }, fmtPct(x.margen)) : null]),
-      origen: h('td', { key: 'origen' }, x.origen === 'sniper'
+      origen: h('td', { key: 'origen' }, asignar
+        ? h('span', { className: 'tag tag-asignar', title: 'Venta del Sniper que aún no tiene lote' }, h(Ico, { name: 'radar', size: 11 }), 'Por asignar')
+        : x.origen === 'sniper'
         ? h('span', { className: 'tag tag-sniper' }, h(Ico, { name: 'radar', size: 11 }), 'Sniper')
         : h('span', { className: 'tag tag-manual' }, h(Ico, { name: 'user', size: 11 }), 'Manual')),
     };
-    var tr = [h('tr', { key: x.clave, className: 'fila venta' + (abiertaEsta ? ' abierta' : ''), onClick: function () { setAbierta(abiertaEsta ? null : x.clave); } },
+    var tr = [h('tr', { key: x.clave, className: 'fila venta' + (asignar ? ' asignar' : '') + (abiertaEsta ? ' abierta' : '') + (nuevas && nuevas.has(x.clave) ? ' nueva' : ''),
+        onClick: function () { setAbierta(abiertaEsta ? null : x.clave); } },
       columnas.map(function (c) { return celdas[c[0]]; }))];
-    if (abiertaEsta) tr.push(h('tr', { key: x.clave + '-d' }, h('td', { colSpan: nCol, className: 'detalle' }, detalleVenta(x, k))));
+    if (abiertaEsta) tr.push(h('tr', { key: x.clave + '-d' }, h('td', { colSpan: nCol, className: 'detalle' + (asignar ? ' asignar' : '') }, asignar ? detallePorAsignar(x, k) : detalleVenta(x, k))));
     return tr;
   }
 
@@ -240,6 +373,25 @@ export function HistorialView(props) {
     ];
   }
 
+  // Una venta del Sniper sin lote: lo que se sabe de ella y «Asignar a un lote…» (el mismo
+  // modal de Inventario › Por asignar; si no hay lote posible, alli se puede descartar).
+  function detallePorAsignar(x, k) {
+    return [
+      h('div', { key: 'g', className: 'detalle-grid' },
+        dato('Vendido a', fmtCr(x.precio) + ' cr (precio de lista)'),
+        dato('Entró', fmtCr(x.entro) + ' cr · comisión ' + fmtCr(x.comision)),
+        compacto ? dato('Keko', k.nombre || 'Sin keko') : null,
+        dato('Registrada por', h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } }, h(Ico, { name: 'radar', size: 13, color: 'var(--blue)' }),
+          'El Sniper' + (sniperDe(x.keko) ? ' · ' + sniperDe(x.keko) : ''))),
+        dato('Cuándo', x.dia ? tituloDia(x.dia, ahora) + ' · ' + horaDe(x.momento) : 'Sin fecha')),
+      h('div', { key: 'm', className: 'aviso h-motivo' }, h(Ico, { name: 'radar', size: 14 }),
+        h('span', null, h('b', null, 'Por qué no se asignó: '), x.motivo || 'No se encontró un lote publicado con el que casar.')),
+      h('div', { key: 'b', style: { display: 'flex', gap: 8 } },
+        h('button', { className: 'btn btn-chico btn-verde', onClick: function (e) { e.stopPropagation(); props.onAsignarVenta(x.venta); } },
+          h(Ico, { name: 'check', size: 12, sw: 2.4 }), 'Asignar a un lote…')),
+    ];
+  }
+
   // ── El libro ──
   var visibles = ordenadas.slice(0, mostrar);
   var faltan = ordenadas.length - visibles.length;
@@ -258,18 +410,19 @@ export function HistorialView(props) {
               h('div', { className: 'h-dia-in' },
                 h('b', null, d.dia ? tituloDia(d.dia, ahora) : 'Sin fecha · importadas del Excel'),
                 h('span', { className: 'h-dia-tot' },
+                  d.porAsignar ? h('span', { className: 'txt-azul' }, d.porAsignar + ' por asignar') : null,
                   h('span', null, d.ventas + (d.ventas === 1 ? ' venta' : ' ventas')),
                   h('span', null, 'entró ', h('span', { className: 'mono' }, fmtCr(d.entro))),
                   h('span', null, 'ganancia ', h('span', { className: 'mono ' + claseSigno(d.ganancia) }, signo(d.ganancia)))))))]
             .concat(aqui.map(function (x) {
-              return h(Barrera, { key: x.clave, tipo: 'fila', columnas: nCol, etiqueta: 'La venta del lote Nº ' + x.id, donde: 'Historial › venta Nº ' + x.id, onVerErrores: props.onVerErrores },
+              return h(Barrera, { key: x.clave, tipo: 'fila', columnas: nCol, etiqueta: x.tipo === 'por_asignar' ? 'La venta por asignar Nº ' + x.id : 'La venta del lote Nº ' + x.id, donde: 'Historial › ' + (x.tipo === 'por_asignar' ? 'por asignar' : 'venta') + ' Nº ' + x.id, onVerErrores: props.onVerErrores },
                 h(Dibujar, { dibujar: function () { return filasVenta(x); } }));
             }));
         } })));
     });
   } else {
     cuerpo = visibles.map(function (x) {
-      return h(Barrera, { key: x.clave, tipo: 'fila', columnas: nCol, etiqueta: 'La venta del lote Nº ' + x.id, donde: 'Historial › venta Nº ' + x.id, onVerErrores: props.onVerErrores },
+      return h(Barrera, { key: x.clave, tipo: 'fila', columnas: nCol, etiqueta: x.tipo === 'por_asignar' ? 'La venta por asignar Nº ' + x.id : 'La venta del lote Nº ' + x.id, donde: 'Historial › ' + (x.tipo === 'por_asignar' ? 'por asignar' : 'venta') + ' Nº ' + x.id, onVerErrores: props.onVerErrores },
         h(Dibujar, { dibujar: function () { return filasVenta(x); } }));
     });
   }
@@ -280,6 +433,8 @@ export function HistorialView(props) {
 
   return h('div', { className: 'contenedor fade-in historial', style: { '--alto-filtros': altoFiltros + 'px' } },
     h(Tarjetas, { m: m }),
+    hayVentas ? h(Barrera, { tipo: 'bloque', etiqueta: 'El gráfico', donde: 'Historial › gráfico', onVerErrores: props.onVerErrores },
+      h(Grafico, { serie: serie, periodo: filtros.periodo, ahora: ahora, onElegir: function (p) { cambiar({ periodo: p }); } })) : null,
 
     // ── Filtros (fijos al bajar) ──
     h('div', { className: 'h-filtros', ref: refFiltros },
@@ -323,7 +478,9 @@ export function HistorialView(props) {
     // ── El libro ──
     h('div', { className: 'h-libro', ref: ancho.ref },
       h('div', { className: 'h-libro-cab' },
-        h('span', null, h('b', null, fmtCr(ordenadas.length) + (ordenadas.length === 1 ? ' venta' : ' ventas')), ' · ' + TEXTO_ORDEN[filtros.orden])),
+        h('span', null, h('b', null, fmtCr(ordenadas.length) + (ordenadas.length === 1 ? ' venta' : ' ventas')), ' · ' + TEXTO_ORDEN[filtros.orden]),
+        h('button', { className: 'btn btn-chico h-csv', onClick: exportar, disabled: !ordenadas.length, title: 'Guardar las ventas de este filtro en un archivo para Excel' },
+          h(Ico, { name: 'download', size: 13 }), 'Exportar CSV')),
       !ordenadas.length
         ? h('div', { className: 'vacio' }, h(Ico, { name: hayVentas ? 'search' : 'recibo', size: 22, color: 'var(--text3)' }),
             h('div', { style: { marginTop: 6 } }, hayVentas ? 'Ninguna venta con estos filtros.' : 'Aún no hay ventas. Cuando vendas algo (o lo registre el Sniper), aparecerá aquí.'),

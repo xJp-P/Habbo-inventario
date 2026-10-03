@@ -551,3 +551,43 @@ input[type=number]{-moz-appearance:textfield}
 .tabla tbody tr.destacada{animation:destaca 2.4s ease}
 @keyframes destaca{0%,35%{background:var(--green-bg);box-shadow:inset 3px 0 0 var(--green)}100%{background:transparent;box-shadow:none}}
 @media (prefers-reduced-motion:reduce){.tabla tbody tr.destacada{animation-duration:1.4s}.h-drop-menu{animation-duration:.08s}}
+/* Fase 4: el grafico de ganancia por dia (clic = solo ese dia), «Exportar CSV», las ventas por
+   asignar en el libro (azul, sin ganancia) y las ventas que llegan en vivo (se iluminan). */
+.txt-azul{color:var(--blue)}
+.tag-asignar{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd)}
+.h-grafico{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 16px 10px;margin-bottom:2px}
+.h-grafico-cab{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text3);margin-bottom:6px;flex-wrap:wrap}
+.h-grafico-cab b{color:var(--text);font-size:13px}
+.h-ley{margin-left:auto;display:flex;gap:12px}
+.h-ley span::before{content:'';display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px;background:currentColor}
+.h-ley .s{color:var(--green)}
+.h-ley .m{color:var(--blue)}
+.h-ley .n{color:var(--red)}
+.h-barras{position:relative;display:flex;align-items:flex-end;gap:3px;height:92px;padding-top:4px}
+.h-base{position:absolute;left:0;right:0;border-top:1px dashed var(--border2);pointer-events:none}
+.h-barra{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%;position:relative;border-radius:3px;background:none;border:0;padding:0;cursor:pointer;transition:opacity .15s,background .12s}
+.h-barra:hover:not(:disabled){background:color-mix(in srgb,var(--bg4) 40%,transparent)}
+.h-barra:focus-visible{outline:2px solid var(--green);outline-offset:1px}
+.h-barra:disabled{cursor:default}
+.h-barra>div{width:100%;flex:none}
+.h-barra .s{background:var(--green)}
+.h-barra .m{background:var(--blue)}
+.h-barra .tope{border-radius:3px 3px 0 0}
+.h-barra .n{background:var(--red);border-radius:0 0 3px 3px;position:absolute;left:0;right:0}
+.h-barra.vacia::after{content:'';position:absolute;left:30%;right:30%;bottom:var(--base,0px);height:2px;border-radius:2px;background:var(--bg4)}
+.h-barra.sel{outline:2px solid var(--gold);outline-offset:1px}
+.h-barras.con-sel .h-barra:not(.sel){opacity:.45}
+.h-ejes{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text3);margin-top:5px}
+.h-tip{position:fixed;pointer-events:none;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:8px 10px;font-size:12px;z-index:40;min-width:170px;transform:translateY(-50%);animation:fadeIn .1s ease}
+.h-tip.izq{transform:translate(-100%,-50%)}
+[data-theme="light"] .h-tip{box-shadow:0 10px 30px rgba(31,35,40,.18)}
+.h-tip b{display:block;margin-bottom:3px}
+.h-tip .fila{display:flex;justify-content:space-between;gap:12px}
+.h-libro-cab .h-csv{margin-left:auto}
+.h-tabla tbody tr.venta.asignar{background:color-mix(in srgb,var(--blue-bg) 55%,transparent)}
+.h-tabla tbody tr.venta.asignar:hover,.h-tabla tbody tr.venta.asignar.abierta{background:var(--blue-bg)}
+.h-tabla td.detalle.asignar{background:color-mix(in srgb,var(--blue-bg) 70%,var(--bg3))}
+.h-motivo{display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd);line-height:1.45}
+.h-motivo svg{margin-top:1px}
+.h-tabla tbody tr.venta.nueva{animation:destaca 2.6s ease}
+@media (prefers-reduced-motion:reduce){.h-tabla tbody tr.venta.nueva{animation-duration:1.4s}.h-tip{animation-duration:.06s}.h-barra{transition-duration:.08s}}

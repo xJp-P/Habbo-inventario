@@ -357,12 +357,12 @@ async function main() {
     [['claudio4.8', 'Claudio4.8', 3], ['bodega uno', 'Bodega Uno', 2], ['xjp', 'xJp', 1], ['', null, 1]], 'el menu de kekos: de mas a menos ventas, «Sin keko» al final');
   // El grafico: un punto por dia; por semana (de lunes) o por mes en rangos largos.
   const s7 = hist.serieDiaria(hist.filtrar(filasH, { ...hist.FILTROS_INICIALES, rango: '7' }, ahoraH), { rango: '7' }, ahoraH);
-  assert.deepEqual([s7.por, s7.puntos.length, s7.desde, s7.hasta, s7.total], ['dia', 7, '2026-09-27', '2026-10-03', { ventas: 4, ganancia: 231, porAsignar: 1 }]);
+  assert.deepEqual([s7.por, s7.puntos.length, s7.desde, s7.hasta, s7.total], ['dia', 7, '2026-09-27', '2026-10-03', { ventas: 4, ganancia: 231, porAsignar: 1, sinDia: 0 }]);
   const hoyP = s7.puntos[6];
   assert.deepEqual([hoyP.clave, hoyP.desde, hoyP.hasta, hoyP.ventas, hoyP.porAsignar, hoyP.sniper, hoyP.manual, hoyP.ganancia, hoyP.entro], ['2026-10-03', '2026-10-03', '2026-10-03', 3, 1, 19, 215, 234, 542]);
   assert.deepEqual([s7.puntos[5].sniper, s7.puntos[0].ventas], [-3, 0], 'el dia con perdida y los dias sin ventas');
   const sTodo = hist.serieDiaria(todoH, { rango: 'todo' }, ahoraH);
-  assert.deepEqual([sTodo.por, sTodo.desde, sTodo.puntos.length, sTodo.total.ganancia], ['dia', '2026-08-24', 41, 431], 'Todo: desde la primera venta con dia (la del Excel no entra al grafico)');
+  assert.deepEqual([sTodo.por, sTodo.desde, sTodo.puntos.length, sTodo.total.ganancia, sTodo.total.sinDia], ['dia', '2026-08-24', 41, 431, 1], 'Todo: desde la primera venta con dia (la del Excel no entra al grafico, y se cuenta aparte)');
   const viejaH = (id, dia, g) => ({ ...fH('l7'), clave: 'l' + id, id, dia, momento: new Date(dia + 'T12:00:00').getTime(), ganancia: g });
   const sSem = hist.serieDiaria([...todoH, viejaH(20, '2026-04-15', 7)], { rango: 'todo' }, ahoraH);
   assert.equal(sSem.por, 'semana');
@@ -490,6 +490,38 @@ async function main() {
   avisadorMac.alEvento(avisoKeko('KekoC', false));
   assert.equal(dockFalso.globos.length, globosAntes, 'si estas mirando la app, el Dock no hace nada');
   ok('notificaciones en Mac (plan B): el Dock rebota y su globo cuenta los avisos sin ver; al volver a la app o hacer clic en el Dock, el globo desaparece');
+
+  // ── «Exportar CSV» del Historial en la app de escritorio (electron/archivos.js, con piezas falsas) ──
+  const archivosEl = require('../electron/archivos');
+  assert.deepEqual(['historial-ventas-2026-10-03.csv', '..\\..\\Windows\\sys32.csv', 'a/b/c.CSV', 'con<raro>:nombre?', '', '...csv'].map(archivosEl.nombreSeguro),
+    ['historial-ventas-2026-10-03.csv', 'sys32.csv', 'c.csv', 'conraronombre.csv', 'historial-ventas.csv', 'historial-ventas.csv'], 'solo el nombre, sin carpetas ni caracteres que Windows no admite, y con .csv');
+  const dirCsv = fs.mkdtempSync(path.join(os.tmpdir(), 'hbi-csv-'));
+  const pedidos = [];
+  const mostrados = [];
+  let respuestaDialogo = { canceled: false, filePath: path.join(dirCsv, 'mis ventas') };
+  const arch = archivosEl.crearArchivos({
+    dialogo: { showSaveDialog: async (ventana, op) => { pedidos.push({ ventana, op }); return respuestaDialogo; } },
+    carpetaDescargas: () => 'C:\\Usuarios\\x\\Descargas', mostrar: (r) => mostrados.push(r),
+  });
+  const contenidoCsv = '\uFEFFFecha;Furni\r\n2026-10-03;Dragón Hanami\r\n';
+  const guardado = await arch.guardarCsv('VENTANA', { nombre: 'historial-ventas-2026-10-03.csv', contenido: contenidoCsv });
+  assert.deepEqual([pedidos[0].ventana, pedidos[0].op.defaultPath, pedidos[0].op.filters[0].extensions], ['VENTANA', path.join('C:\\Usuarios\\x\\Descargas', 'historial-ventas-2026-10-03.csv'), ['csv']],
+    'el «Guardar como» propone Descargas y el nombre del archivo');
+  assert.deepEqual([guardado.nombre, guardado.ruta], ['mis ventas.csv', path.join(dirCsv, 'mis ventas.csv')], 'sin extension, se le pone .csv');
+  const bytesCsv = fs.readFileSync(guardado.ruta);
+  assert.deepEqual([...bytesCsv.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'con BOM: Excel lee bien los acentos');
+  assert.equal(bytesCsv.toString('utf8'), contenidoCsv);
+  respuestaDialogo = { canceled: true, filePath: '' };
+  assert.equal(await arch.guardarCsv(null, { nombre: 'x.csv', contenido: 'a' }), null, 'cancelar el dialogo no guarda nada');
+  await rechaza(arch.guardarCsv(null, { nombre: 'x.csv', contenido: 'x'.repeat(archivosEl.TOPE_BYTES + 1) }), /demasiado grande/);
+  assert.deepEqual([arch.mostrarArchivo(guardado.ruta), arch.mostrarArchivo('C:\\Windows\\notepad.exe'), arch.mostrarArchivo(42), mostrados], [true, false, false, [guardado.ruta]],
+    '«Mostrar» solo abre lo que se guardo en esta sesion');
+  fs.rmSync(dirCsv, { recursive: true, force: true });
+  const preloadTxt = fs.readFileSync(path.join(__dirname, '..', 'electron', 'preload.js'), 'utf8');
+  const mainTxt = fs.readFileSync(path.join(__dirname, '..', 'electron', 'main.js'), 'utf8');
+  assert.ok(/guardarCsv:.*'app:guardar-csv'/.test(preloadTxt) && /mostrarArchivo:.*'app:mostrar-archivo'/.test(preloadTxt), 'el puente de la interfaz expone guardarCsv y mostrarArchivo');
+  assert.ok(mainTxt.includes("ipcMain.handle('app:guardar-csv'") && mainTxt.includes("ipcMain.handle('app:mostrar-archivo'"), 'y el proceso principal los atiende');
+  ok('exportar CSV en la app de escritorio: «Guardar como» en Descargas con el nombre del archivo, con BOM y .csv; cancelar no guarda; nombres sin carpetas; «Mostrar» solo lo guardado');
 
   // ── Ventana de novedades (como Proyecto_Cartera) ──
   const { CHANGELOGS } = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'datos', 'changelogs.js')).href);

@@ -275,7 +275,8 @@ export function serieDiaria(filas, filtros, ahora) {
     indice[d] = puntos.length;
     puntos.push(p);
   }
-  var total = { ventas: 0, ganancia: 0, porAsignar: 0 };
+  // sinDia: las ventas que no entran en ninguna barra (las del Excel no tienen dia).
+  var total = { ventas: 0, ganancia: 0, porAsignar: 0, sinDia: (filas || []).filter(function (x) { return !x.dia && x.tipo !== 'por_asignar'; }).length };
   conDia.forEach(function (x) {
     if (x.dia < desde || x.dia > hasta) return;
     var p = puntos[indice[inicioDe(x.dia, por)]];

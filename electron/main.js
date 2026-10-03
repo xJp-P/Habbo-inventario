@@ -34,6 +34,7 @@ const http = require('http');
 const { crearApp } = require('../backend/server');
 const actualizaciones = require('./actualizaciones');
 const { APP_ID, crearPreferencias, crearNotificaciones } = require('./notificaciones');
+const { crearArchivos } = require('./archivos');
 
 const PUERTO_PREFERIDO = 3435;
 const RAIZ = path.join(__dirname, '..');
@@ -257,6 +258,11 @@ ipcMain.handle('app:notificaciones', () => ({
 }));
 ipcMain.handle('app:notificaciones-guardar', (_e, cambios) => preferencias.guardar(cambios));
 ipcMain.handle('app:notificaciones-probar', () => notificaciones.probar());
+
+// «Exportar CSV» del Historial de ventas (v1.9.0): el dialogo «Guardar como» y «Mostrar».
+const archivos = crearArchivos({ dialogo: dialog, carpetaDescargas: () => app.getPath('downloads'), mostrar: (ruta) => shell.showItemInFolder(ruta) });
+ipcMain.handle('app:guardar-csv', (_e, datos) => archivos.guardarCsv(ventana, datos));
+ipcMain.handle('app:mostrar-archivo', (_e, ruta) => archivos.mostrarArchivo(ruta));
 
 ipcMain.handle('app:elegir-excel', async () => {
   const r = await dialog.showOpenDialog(ventana, {

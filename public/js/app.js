@@ -431,9 +431,12 @@ function App() {
     onCambio: cambio,
   });
   else if (vista === 'historial') contenido = h(HistorialView, {
-    compras: datos.compras, furnis: datos.furnis || [], kekos: kekos, onVerErrores: abrirErrores, onCambio: cambio,
+    compras: datos.compras, furnis: datos.furnis || [], kekos: kekos, porAsignar: datos.porAsignar, onVerErrores: abrirErrores, onCambio: cambio,
     // «Ver en el Inventario» del detalle de una venta: Vendido, en su keko, con el lote abierto.
     onVerEnInventario: function (l) { abrirPestana({ filtro: 'vendido', keko: l.keko, lote: l.id }); },
+    // Una venta por asignar del libro: el mismo modal de Inventario › Por asignar.
+    onAsignarVenta: function (v) { setModal({ tipo: 'asignar-venta', venta: v }); },
+    onAviso: function (m, accion) { avisar(m, 'ok', accion); }, onError: function (m) { avisar(m, 'error'); },
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
     furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio, onRecargar: recargar,
