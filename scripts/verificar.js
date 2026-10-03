@@ -30,7 +30,7 @@ const { crearServicioInstalacion, MIGRACIONES } = require('../backend/services/i
 const { validarConfiguracion, leerConfiguracion, fetchConEspera } = require('../backend/db/supabase');
 const { crearRegistroErrores } = require('../backend/core/registro');
 const { datos: datosSupabase } = require('../backend/db/respuestas');
-const { normalizar, rastro } = require('../backend/core/util');
+const { normalizar, rastro, hoyStr } = require('../backend/core/util');
 const { DIR_DATOS_DEV } = require('./comun');
 
 let pasos = 0;
@@ -1277,7 +1277,7 @@ async function main() {
     await pk.cerrar();
 
     // Sin la migracion 18: si el furni solo esta en ese keko, se hace igual; si hay lotes de otro, 428.
-    const pk17 = await crearClienteLocal({ omitir: ['20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });
+    const pk17 = await crearClienteLocal({ omitir: ['20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
     await pk17.crearUsuario('pk17@prueba.local', 'clave-pk17');
     await pk17.auth.signInWithPassword({ email: 'pk17@prueba.local', password: 'clave-pk17' });
     const conex17 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: pk17 });
@@ -1562,7 +1562,7 @@ async function main() {
     assert.ok((await vs.from('ventas_por_asignar').select('id').eq('keko', 'Ux_Data')).data.length > 0, 'las de otros kekos se quedan');
     await vs.cerrar();
     // Sobre una base con la 18: la venta se rechaza (sin registrarse); con la migracion (dos veces) ya entra.
-    const v18 = await crearClienteLocal({ omitir: ['20261015000000_ventas_sniper.sql'] });
+    const v18 = await crearClienteLocal({ omitir: ['20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
     await v18.crearUsuario('v18@prueba.local', 'clave-v18');
     await v18.auth.signInWithPassword({ email: 'v18@prueba.local', password: 'clave-v18' });
     const conex18 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: v18 });
@@ -1582,6 +1582,89 @@ async function main() {
     assert.deepEqual([r18.procesados, r18.eventos[0].por_asignar, r18.eventos[0].neto], [1, false, 125], 'tras la migracion, la misma venta (que no se habia registrado) entra');
     await v18.cerrar();
     ok('publicar guarda la hora de Habbo (ms o ISO; si no, la de llegada); recuperar ya no cruza kekos; las ventas del Sniper cuentan en la ganancia real y revertir limpia vendido_por; la limpieza profunda borra sus ventas por asignar; la migracion entra (dos veces) sobre una base con la 18');
+
+    // ── La hora y el origen de las ventas manuales (migracion 20261016000000) ──
+    // (Las ventas del Sniper siguen con vendido_por 'sniper' y la hora de Habbo: lo comprueban
+    // las pruebas de arriba, que ya corren sobre esta migracion.)
+    const hm = await crearClienteLocal();
+    await hm.crearUsuario('hm@prueba.local', 'clave-hm');
+    await hm.auth.signInWithPassword({ email: 'hm@prueba.local', password: 'clave-hm' });
+    const conexHm = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: hm });
+    await conexHm.iniciar();
+    const negHm = crearServicioNegocio({ conexion: conexHm, furnidata });
+    const loteHm = async (id, b = hm) => (await b.from('compras').select('id,estado,cantidad,keko,vendido_por,vendido_en,fecha_venta').eq('id', id)).data[0];
+    const hoyHm = hoyStr();
+    const desdeHm = Date.now() - 1000;
+    const deAhora = (iso) => Boolean(iso) && new Date(iso).getTime() >= desdeHm && new Date(iso).getTime() <= Date.now() + 1000;
+    await negHm.crearKeko('Bodega');
+    const mHm = await negHm.crearCompra({ nombre: 'Trono HC', cantidad: 6, precio_compra: 100, keko: 'Bodega', fecha_compra: '2026-09-01' });
+    // Venta manual de hoy (una parte del lote): la hora en que se registra y «manual»; lo que queda en mano no se marca.
+    let vHm = await negHm.venderEnMano(mHm.furni_id, { cantidad: 1, precio: 150, keko: 'Bodega' });
+    let fHm = await loteHm(vHm.ventas[0].venta_id);
+    assert.deepEqual([fHm.estado, fHm.vendido_por, fHm.fecha_venta, fHm.keko, deAhora(fHm.vendido_en)], ['vendido', 'manual', hoyHm, 'Bodega', true]);
+    assert.deepEqual(Object.values(await loteHm(mHm.id)).slice(2), [5, 'Bodega', null, null, null], 'el lote que sigue en mano no se marca');
+    const vendHoy = fHm;
+    // De otro dia: «manual», sin inventar la hora.
+    vHm = await negHm.venderEnMano(mHm.furni_id, { cantidad: 1, precio: 150, keko: 'Bodega', fecha: '2026-09-20' });
+    fHm = await loteHm(vHm.ventas[0].venta_id);
+    assert.deepEqual([fHm.vendido_por, fHm.vendido_en, fHm.fecha_venta], ['manual', null, '2026-09-20'], 'una venta de otro dia no inventa la hora');
+    // Lo publicado: «Vendido» del Mercadillo (vender_furni, divide el lote) y de un lote entero (vender_lote, sin dividir).
+    await negHm.publicarFurni(mHm.furni_id, { cantidad: 3, precio_lista: 200, keko: 'Bodega' });
+    vHm = await negHm.venderFurni(mHm.furni_id, { cantidad: 1, keko: 'Bodega' });
+    fHm = await loteHm(vHm.ventas[0].venta_id);
+    assert.deepEqual([vHm.ventas[0].dividida, fHm.vendido_por, deAhora(fHm.vendido_en)], [true, 'manual', true]);
+    const pubHm = (await hm.from('compras').select('id').eq('estado', 'publicado')).data[0];
+    const vlHm = await negHm.vender(pubHm.id, {});
+    assert.deepEqual([vlHm.dividida, vlHm.venta.vendido_por, deAhora(vlHm.venta.vendido_en)], [false, 'manual', true], 'todo el lote, y v_compras lo expone');
+    const viejoHm = await negHm.vender(pubHm.id, {}).catch((e) => e);
+    assert.match(String(viejoHm.message), /ya esta vendido/);
+    // Una hora en el futuro (reloj del equipo adelantado) queda en la de la base; revertir la limpia.
+    const futuro = new Date(Date.now() + 6 * 3600000).toISOString();
+    const rFut = await hm.rpc('vender_lote', { p_id: mHm.id, p_precio: 120, p_moneda: 'creditos', p_fecha: hoyHm, p_vendido_en: futuro });
+    assert.equal(rFut.error, null);
+    fHm = await loteHm(rFut.data.venta_id);
+    assert.ok(deAhora(fHm.vendido_en), 'una hora futura queda en la de la base');
+    await negHm.revertirVenta(fHm.id);
+    assert.deepEqual(Object.values(await loteHm(fHm.id)).slice(1), ['comprado', 1, 'Bodega', null, null, null], 'revertir limpia la hora y el origen');
+    // Si se cambia el dia de una venta, su hora (la de aquel dia) se va; si no cambia, se queda.
+    assert.ok(deAhora((await negHm.actualizarCompra(vendHoy.id, { fecha_venta: hoyHm, notas: 'trade con Ana' })).vendido_en));
+    assert.deepEqual([(await negHm.actualizarCompra(vendHoy.id, { fecha_venta: '2026-09-30' })).vendido_en, (await loteHm(vendHoy.id)).vendido_por], [null, 'manual']);
+    // Sin la migracion 20 (una base con la 19): se reintenta sin la hora y nunca se pierde el keko.
+    await hm.cerrar();
+    const h19 = await crearClienteLocal({ omitir: ['20261016000000_hora_ventas_manuales.sql'] });
+    await h19.crearUsuario('h19@prueba.local', 'clave-h19');
+    await h19.auth.signInWithPassword({ email: 'h19@prueba.local', password: 'clave-h19' });
+    const conexH19 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: h19 });
+    await conexH19.iniciar();
+    const negH19 = crearServicioNegocio({ conexion: conexH19, furnidata });
+    const estH19 = await crearServicioInstalacion().comprobar(h19.comoAnon());
+    assert.deepEqual([estH19.completa, estH19.siguiente], [false, '20261016000000_hora_ventas_manuales.sql'], 'el asistente ve que falta la 20');
+    await negH19.crearKeko('Bodega');
+    await negH19.crearKeko('KekoB');
+    const bH19 = await negH19.crearCompra({ nombre: 'Trono HC', cantidad: 4, precio_compra: 100, keko: 'KekoB', fecha_compra: '2026-08-01' });
+    const aH19 = await negH19.crearCompra({ furni_id: bH19.furni_id, cantidad: 4, precio_compra: 100, keko: 'Bodega', fecha_compra: '2026-09-01' });
+    vHm = await negH19.venderEnMano(aH19.furni_id, { cantidad: 1, precio: 150, keko: 'Bodega' });
+    fHm = await loteHm(vHm.ventas[0].venta_id, h19);
+    assert.deepEqual([vHm.ventas[0].lote_id, fHm.keko, fHm.vendido_por, fHm.vendido_en], [aH19.id, 'Bodega', null, null], 'venta manual sin la 20: del keko elegido, como en la 1.8.0');
+    await negH19.publicarFurni(aH19.furni_id, { cantidad: 2, precio_lista: 200, keko: 'Bodega' });
+    await negH19.publicarFurni(aH19.furni_id, { cantidad: 2, precio_lista: 200, keko: 'KekoB' });
+    vHm = await negH19.venderFurni(aH19.furni_id, { cantidad: 1, keko: 'Bodega' });
+    assert.deepEqual([(await loteHm(vHm.ventas[0].venta_id, h19)).keko, (await loteHm(vHm.ventas[0].venta_id, h19)).vendido_en], ['Bodega', null],
+      '«Vendido» desde un keko sin la 20: solo ese keko (el reintento sin la hora no pide la migracion 18)');
+    vHm = await negH19.vender(vHm.ventas[0].lote_id, { cantidad: 1 });
+    assert.deepEqual([vHm.venta.keko, vHm.venta.vendido_por, vHm.venta.vendido_en], ['Bodega', null, null]);
+    // Con la migracion (dos veces): las ventas de hoy ya traen hora.
+    const mig20 = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261016000000_hora_ventas_manuales.sql'), 'utf8');
+    await h19.pg.exec(mig20);
+    await h19.pg.exec(mig20);
+    assert.equal((await crearServicioInstalacion().comprobar(h19.comoAnon())).completa, true);
+    vHm = await negH19.venderFurni(aH19.furni_id, { cantidad: 1, keko: 'KekoB' });
+    fHm = await loteHm(vHm.ventas[0].venta_id, h19);
+    assert.deepEqual([fHm.keko, fHm.vendido_por, deAhora(fHm.vendido_en)], ['KekoB', 'manual', true], 'tras la migracion, la venta de hoy trae su hora');
+    const firmas = (await h19.pg.query("select count(*)::int as n from pg_proc where proname in ('vender_lote', 'vender_furni', 'vender_en_mano') and pronamespace = 'public'::regnamespace")).rows[0].n;
+    assert.equal(firmas, 3, 'una sola firma de cada funcion (las viejas se borran)');
+    await h19.cerrar();
+    ok('ventas manuales: guardan «manual» y, si son de hoy, la hora en que se registran (de otro dia, sin hora; una hora futura queda en la de la base; cambiar el dia la quita; revertir limpia); sin la migracion 20 se venden igual, sin hora y sin perder el keko; la migracion entra (dos veces) sobre una base con la 19');
 
     // ── Modo demo: «Venta» y «Venta por asignar» pasan por la funcion real del Sniper ──
     const { crearDemo } = require('../backend/services/demo');
@@ -1625,7 +1708,7 @@ async function main() {
     ok('base local del demo: una migracion que cambio despues de aplicarse se vuelve a correr junto con las posteriores; una base sin huellas vuelve a correr la ultima');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -1644,7 +1727,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -1657,7 +1740,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -1674,7 +1757,7 @@ async function main() {
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
-    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql'] });
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
     await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
     await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
     const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });

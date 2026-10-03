@@ -8,6 +8,22 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
+## [Sin publicar]
+
+### Añadido
+
+- **La hora de las ventas que registras a mano** (la base del Historial de ventas; la
+  sección llega en las próximas fases). «Vendido» en el Mercadillo o en Publicado y la
+  venta manual guardan la hora en que las registras, si la venta es del día de hoy; una
+  venta de otro día queda solo con su fecha, sin inventar la hora. Además quedan marcadas
+  como manuales, para distinguirlas de las del Sniper. Las ventas anteriores no cambian.
+  Si cambias la fecha de una venta, pierde la hora de aquel día.
+
+### Migraciones de Supabase
+
+- `20261016000000_hora_ventas_manuales.sql` (requiere la `20261015000000`). Sin ella, la
+  app sigue vendiendo como en la 1.8.0: las ventas manuales quedan sin hora.
+
 ## [1.8.0] - 2026-10-02
 
 ### Añadido

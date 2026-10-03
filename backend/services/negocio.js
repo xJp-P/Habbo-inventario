@@ -139,11 +139,31 @@ function crearServicioNegocio({ conexion, furnidata }) {
     const conValor = { ...args };
     for (const k of PARAMETROS_1_1) if (conValor[k] === null || conValor[k] === undefined) delete conValor[k];
     try {
-      return await datos(db().rpc(nombre, conValor));
+      return await rpcConHora(nombre, conValor);
     } catch (e) {
       if (!faltaMigracion(e) || !PARAMETROS_1_1.some((k) => k in conValor)) throw e;
       for (const k of PARAMETROS_1_1) delete conValor[k];
-      return datos(db().rpc(nombre, conValor));
+      return rpcConHora(nombre, conValor);
+    }
+  }
+
+  // La hora de una venta a mano (migracion 20261016000000): el momento de registrarla,
+  // solo si la venta es del dia de hoy. Una venta de otro dia no inventa una hora.
+  function horaDeVenta(fecha) {
+    return fecha === hoyStr() ? new Date().toISOString() : null;
+  }
+
+  // Sin la migracion 20261016000000 la base no conoce p_vendido_en: se reintenta sin ella
+  // y la venta queda como en la 1.8.0 (solo el dia). Va primero que los demas reintentos
+  // (rpcCompatible, rpcConAmbito): asi un fallo por la hora nunca quita el keko.
+  async function rpcConHora(nombre, args) {
+    const { p_vendido_en: hora, ...sinHora } = args;
+    if (hora === null || hora === undefined) return datos(db().rpc(nombre, sinHora));
+    try {
+      return await datos(db().rpc(nombre, args));
+    } catch (e) {
+      if (!faltaMigracion(e)) throw e;
+      return datos(db().rpc(nombre, sinHora));
     }
   }
 
@@ -214,6 +234,8 @@ function crearServicioNegocio({ conexion, furnidata }) {
       if ('moneda_venta' in cambios) campos.moneda_venta = monedaDesdeTexto(cambios.moneda_venta);
       if ('precio_venta' in cambios) campos.precio_venta = numeroValido(cambios.precio_venta, { campo: 'El precio de venta' });
       if ('fecha_venta' in cambios) campos.fecha_venta = cambios.fecha_venta || null;
+      // La hora es la de aquel dia: si cambia el dia, la venta se queda sin hora.
+      if ('fecha_venta' in cambios && actual.vendido_en && String(campos.fecha_venta || '') !== String(actual.fecha_venta || '')) campos.vendido_en = null;
     }
     if (!Object.keys(campos).length) return actual;
     await datos(db().from('compras').update(campos).eq('id', Number(id)).select('id'));
@@ -230,14 +252,16 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // Vende `cantidad` unidades de un lote (todo el lote si no se indica). Si es una
   // parte, el lote se divide dentro de Postgres (funcion vender_lote).
   async function vender(id, entrada = {}) {
-    const r = await datos(db().rpc('vender_lote', {
+    const fecha = entrada.fecha_venta || hoyStr();
+    const r = await rpcConHora('vender_lote', {
       p_id: Number(id),
       p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
         ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a vender', minimo: 1, entero: true }),
       p_moneda: entrada.moneda_venta ? monedaDesdeTexto(entrada.moneda_venta) : null,
       p_precio: numeroValido(entrada.precio_venta, { campo: 'El precio de venta', opcional: true }),
-      p_fecha: entrada.fecha_venta || hoyStr(),
-    }));
+      p_fecha: fecha,
+      p_vendido_en: horaDeVenta(fecha),
+    });
     return {
       dividida: r.dividida,
       original: r.original_id ? await compraPorId(r.original_id) : null,
@@ -280,9 +304,9 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // tiene lotes de otros kekos en ese estado, da lo mismo y se llama sin el ambito; si los
   // tiene, se niega: sin el ambito tocaria unidades de otro keko.
   async function rpcConAmbito(nombre, args, ambito, { furniId, estado, soloManual }) {
-    if (!Object.keys(ambito).length) return datos(db().rpc(nombre, args));
+    if (!Object.keys(ambito).length) return rpcConHora(nombre, args);
     try {
-      return await datos(db().rpc(nombre, { ...args, ...ambito }));
+      return await rpcConHora(nombre, { ...args, ...ambito });
     } catch (e) {
       if (!faltaMigracion(e)) throw e;
       let consulta = db().from('compras').select('keko').eq('furni_id', furniId).eq('estado', estado);
@@ -292,7 +316,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
         ? l.keko !== null && l.keko !== undefined
         : String(l.keko || '').toLowerCase() !== ambito.p_keko.toLowerCase()));
       if (ajenos.length) throw new ClientError(MIGRACION_POR_KEKO, 428);
-      return datos(db().rpc(nombre, args));
+      return rpcConHora(nombre, args);
     }
   }
 
@@ -313,12 +337,14 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // publicadas, FIFO; con precio_lista, solo de los lotes publicados a ese precio (funcion
   // vender_furni). Lo que se guarda es el neto: vender_lote descuenta la comision.
   async function venderFurni(id, entrada = {}) {
+    const fecha = entrada.fecha_venta || hoyStr();
     const r = await rpcConAmbito('vender_furni', {
       p_furni_id: Number(id),
       p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad vendida', minimo: 1, entero: true }),
       p_precio: numeroValido(entrada.precio_venta, { campo: 'El precio de venta', opcional: true }),
-      p_fecha: entrada.fecha_venta || hoyStr(),
+      p_fecha: fecha,
       p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
+      p_vendido_en: horaDeVenta(fecha),
     }, ambitoKeko(entrada), { furniId: Number(id), estado: 'publicado' });
     return { cantidad: r.cantidad, ventas: r.ventas };
   }
@@ -340,15 +366,17 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // de un lote o FIFO entre los lotes en mano del furni. En el mercadillo se guarda el
   // neto y la comision; en un tradeo, el precio tal cual (funcion vender_en_mano).
   async function venderEnMano(id, entrada = {}) {
+    const fecha = entrada.fecha || hoyStr();
     const r = await rpcCompatible('vender_en_mano', {
       p_furni_id: Number(id),
       p_cantidad: numeroValido(entrada.cantidad, { campo: 'La cantidad vendida', minimo: 1, entero: true }),
       p_precio: numeroValido(entrada.precio, { campo: 'El precio de venta' }),
       p_moneda: entrada.moneda ? monedaDesdeTexto(entrada.moneda) : 'creditos',
       p_mercadillo: entrada.mercadillo === true,
-      p_fecha: entrada.fecha || hoyStr(),
+      p_fecha: fecha,
       p_lote_id: entrada.lote_id ? Number(entrada.lote_id) : null,
       p_keko: nombreKeko(entrada.keko),
+      p_vendido_en: horaDeVenta(fecha),
     });
     return { cantidad: r.cantidad, precio_neto: r.precio_neto, comision: r.comision, moneda: r.moneda, ventas: r.ventas };
   }
