@@ -145,6 +145,7 @@ class Consulta {
   delete() { this.op = 'delete'; return this; }
   eq(c, v) { this.filtros.push([ident(c), '=', v]); return this; }
   neq(c, v) { this.filtros.push([ident(c), '<>', v]); return this; }
+  gte(c, v) { this.filtros.push([ident(c), '>=', v]); return this; }
   in(c, lista) { this.filtros.push([ident(c), 'in', lista]); return this; }
   is(c, v) { this.filtros.push([ident(c), 'is', v]); return this; }
   order(c, { ascending = true } = {}) { this.ordenes.push(`${ident(c)} ${ascending ? 'asc' : 'desc'}`); return this; }

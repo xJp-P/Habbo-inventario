@@ -55,6 +55,7 @@ import { novedadesAMostrar, previsualizacionPedida, CLAVE_VISTA } from './core/n
 import { LtdModal } from './modales/LtdModal.js';
 import { AsignarVentaModal } from './modales/AsignarVentaModal.js';
 import { esDelKeko } from './core/kekos.js';
+import { retirable, ordenRetiro } from './core/caducidad.js';
 import { kekoConVentasSniper, nombreVentaPendiente } from './core/ventas.js';
 import { ErroresModal } from './componentes/ErroresModal.js';
 import { Barrera } from './componentes/Barrera.js';
@@ -256,6 +257,16 @@ function App() {
       var pendiente = (ev.avisos || []).some(function (x) { return x.por_asignar; });
       avisar(a.titulo + ': ' + a.cuerpo, 'sniper', pendiente ? { texto: 'Ver', fn: function () { abrirPestana({ filtro: 'por_asignar' }); } } : null);
     });
+    // Lo que volvio solo del Mercadillo (la oferta caduco y la foto del Sniper lo trajo en la
+    // mano; migracion 20261017000000): un aviso ambar con «Ver», que abre Comprado de ese keko
+    // con lo que volvio iluminado (maqueta del 08-10-2026, decision 7).
+    fuente.addEventListener('regresos', function (e) {
+      var ev = JSON.parse(e.data);
+      var a = (ev.avisos || [])[0];
+      if (!a) return;
+      var destino = a.destino || { filtro: 'comprado', keko: a.keko };
+      avisar(a.breve || a.titulo, 'sniper', { texto: 'Ver', fn: function () { abrirPestana(destino); } });
+    });
     // El catalogo de Habbo.es se actualizo solo (al abrir la app) y cambio algun nombre o
     // icono de tus furnis: se recargan los datos, sin aviso.
     fuente.addEventListener('catalogo', function () { recargar(); });
@@ -285,13 +296,13 @@ function App() {
     });
   }, []);
 
-  // Abre el Inventario en Vendido (en el bloque de un keko; con `lote`, ese lote abierto) o
-  // en «Por asignar».
+  // Abre el Inventario en Vendido (en el bloque de un keko; con `lote`, ese lote abierto), en
+  // «Por asignar» o, para lo que volvio del Mercadillo, en Comprado con `lotes` iluminados.
   function abrirPestana(destino) {
     setModal(null);
     setToast(null);
     setFiltroFurni('');
-    setAbrirInventario({ filtro: destino.filtro || 'vendido', keko: destino.keko || null, lote: destino.lote || null, vez: Date.now() });
+    setAbrirInventario({ filtro: destino.filtro || 'vendido', keko: destino.keko || null, lote: destino.lote || null, lotes: destino.lotes || null, vez: Date.now() });
     setVista('inventario');
   }
 
@@ -324,11 +335,14 @@ function App() {
   function venderFurniDeKeko(f, ambito) {
     venderConAviso(ambito && ambito.keko, function () { setModal({ tipo: 'vender-furni', furni: f, lotes: publicadosDe(f.id, false, ambito), ambito: ambito }); });
   }
+  // «Retirar»: lo que publicaste tu y, desde la v1.10.0, lo del Sniper ya caducado, en el
+  // orden de retirar_furni (core/caducidad.js). Lo del Sniper aun vigente no se retira aqui.
   function retirarFurniDeKeko(f, ambito) {
+    var ahora = Date.now();
     var todos = publicadosDe(f.id, false, ambito);
-    var manual = todos.filter(function (c) { return c.publicado_por === 'manual'; });
-    var sniper = todos.reduce(function (s, c) { return s + (c.publicado_por === 'manual' ? 0 : c.cantidad); }, 0);
-    setModal({ tipo: 'retirar-furni', furni: f, lotes: manual, unidadesSniper: sniper, ambito: ambito });
+    var lotes = ordenRetiro(todos.filter(function (c) { return retirable(c, ahora); }));
+    var vigentesSniper = todos.reduce(function (s, c) { return s + (retirable(c, ahora) ? 0 : c.cantidad); }, 0);
+    setModal({ tipo: 'retirar-furni', furni: f, lotes: lotes, unidadesSniper: vigentesSniper, ambito: ambito });
   }
   // Abre el Inventario en una pestana, filtrado por el nombre del furni.
   function verLotes(nombre, estado) { setFiltroFurni(nombre); setFiltroEstado(estado); setVista('inventario'); }
@@ -441,7 +455,7 @@ function App() {
   });
   else if (vista === 'auditoria') contenido = h(AuditoriaView, {
     furnis: datos.furnis, compras: datos.compras, demo: cuenta.demo, onCambio: cambio, onRecargar: recargar,
-    senal: senalAuditoria, abrir: abrirAuditoria, onVerErrores: abrirErrores,
+    senal: senalAuditoria, abrir: abrirAuditoria, onVerErrores: abrirErrores, onVerInventario: abrirPestana,
     onAviso: function (m) { avisar(m); }, onError: function (m) { avisar(m, 'error'); },
   });
   else contenido = h(AjustesView, {

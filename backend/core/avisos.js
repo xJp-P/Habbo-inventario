@@ -177,8 +177,10 @@ function avisoRegresosKeko(keko, regresos) {
   const lista = listaPorNombre(m);
   const n = [...m.values()].reduce((s, x) => s + x, 0);
   const una = n === 1;
+  // Los lotes de Comprado donde quedo lo que volvio: «Ver» los ilumina.
+  const lotes = [...new Set(regresos.flatMap((r) => r.lotes || []))];
   return {
-    keko, destino: { vista: 'inventario', filtro: 'comprado', keko }, unidades: n,
+    keko, destino: { vista: 'inventario', filtro: 'comprado', keko, lotes }, unidades: n,
     titulo: una ? 'Volvió del Mercadillo en ' + keko : 'Volvieron ' + n + ' furnis del Mercadillo en ' + keko,
     cuerpo: lista + (una
       ? ': su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.'
@@ -187,7 +189,7 @@ function avisoRegresosKeko(keko, regresos) {
   };
 }
 
-// regresos: [{ keko, nombre, sprite_id, cantidad, ltds }]
+// regresos: [{ keko, nombre, sprite_id, cantidad, ltds, lotes }]
 function crearAvisosRegresos(opciones) { return crearAvisosPorKeko(avisoRegresosKeko, opciones); }
 
 module.exports = { crearDetectorAuditoria, avisoCatalogo, diferencias, crearAvisosVentas, crearAvisosRegresos };

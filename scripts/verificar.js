@@ -165,7 +165,8 @@ async function main() {
   let aR = avR.avisar([regAv()]);
   assert.deepEqual([aR.length, aR[0].titulo, aR[0].cuerpo, aR[0].breve, aR[0].silencioso, aR[0].destino, aR[0].unidades], [1, 'Volvió del Mercadillo en Ux_Data',
     '1 × Trono HC: su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.', 'Volvió del Mercadillo en Ux_Data: 1 × Trono HC', false,
-    { vista: 'inventario', filtro: 'comprado', keko: 'Ux_Data' }, 1]);
+    { vista: 'inventario', filtro: 'comprado', keko: 'Ux_Data', lotes: [] }, 1]);
+  assert.deepEqual(avR.avisar([regAv({ lotes: [41, 42] }), regAv({ lotes: [42, 43] })])[0].destino.lotes, [41, 42, 43], '«Ver» ilumina los lotes donde quedo lo que volvio');
   relojR = 60 * 1000;
   aR = avR.avisar([regAv({ cantidad: 2 }), regAv({ nombre: 'Cama Criogénica Negra', ltds: [1475] }), regAv({ keko: '-JDark', nombre: null, sprite_id: 98765 })]);
   assert.deepEqual(aR.map((a) => [a.titulo, a.cuerpo, a.silencioso]), [
@@ -178,6 +179,39 @@ async function main() {
   ok('avisos de lo que vuelve del Mercadillo: uno por keko y rafaga, con lo que volvio y cuantas unidades (LTD con su numero, sin registrar con su sprite); abren Comprado de ese keko; seguidos, sin sonido');
 
   // ── Ventas del Sniper en la interfaz (public/js/core/ventas.js) ──
+  // ── Caducidad de las ofertas del Mercadillo (public/js/core/caducidad.js, v1.10.0) ──
+  const cad = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'caducidad.js')).href);
+  const HC = 3600000;
+  const AHORA_C = Date.parse('2026-10-08T12:00:00Z');
+  const pubC = (id, horas, extra) => ({ id, estado: 'publicado', cantidad: 1, publicado_por: 'sniper', publicado_en: horas === null ? null : new Date(AHORA_C - horas * HC).toISOString(), ...extra });
+  assert.equal(cad.DIAS_CADUCIDAD, 7);
+  assert.deepEqual([cad.restante(pubC(1, 167), AHORA_C), cad.restante(pubC(1, 170), AHORA_C), cad.restante(pubC(1, null), AHORA_C), cad.restante({ estado: 'comprado' }, AHORA_C)],
+    [HC, -2 * HC, null, null]);
+  assert.deepEqual([pubC(1, 167.99), pubC(1, 168), pubC(1, null), { estado: 'comprado', publicado_en: null }].map((l) => cad.caducada(l, AHORA_C)), [false, true, true, false],
+    'el borde exacto ya caduco; sin fecha, caducada (como oferta_caducada); lo que no esta publicado, nunca');
+  assert.deepEqual([pubC(1, 10), pubC(1, 200), pubC(1, 10, { publicado_por: 'manual' }), pubC(1, 10, { publicado_por: null }), { id: 1, estado: 'comprado' }].map((l) => cad.retirable(l, AHORA_C)),
+    [false, true, true, false, false], 'se retira lo tuyo y lo del Sniper ya caducado (sin publicado_por cuenta como del Sniper)');
+  assert.deepEqual(cad.ordenRetiro([pubC(5, 300), pubC(3, 200), pubC(9, 2, { publicado_por: 'manual' }), pubC(4, null), pubC(8, 2, { publicado_por: 'manual' })]).map((l) => l.id),
+    [8, 9, 4, 5, 3], 'retirar_furni: lo tuyo primero (por fecha y luego id); despues lo del Sniper, sin fecha primero');
+  assert.deepEqual(cad.ordenDevolver([
+    { lote_id: 7, keko: null, caducada: true, publicado_en: '2026-09-01T00:00:00Z', cantidad: 1, devolvible: true },
+    { lote_id: 6, keko: 'K', caducada: false, publicado_en: '2026-10-05T00:00:00Z', cantidad: 1, devolvible: true },
+    { lote_id: 5, keko: 'K', caducada: true, publicado_en: '2026-09-20T00:00:00Z', cantidad: 2, devolvible: true },
+    { lote_id: 4, keko: 'K', caducada: false, publicado_en: '2026-10-04T00:00:00Z', cantidad: 1, devolvible: false }]).map((l) => l.lote_id),
+    [5, 6, 7], 'devolver_del_mercadillo: el keko antes que lo sin keko, lo caducado antes; un LTD que la foto no trae, nunca');
+  assert.equal(cad.unidadesCaducadas([pubC(1, 200, { cantidad: 2 }), pubC(2, 10, { cantidad: 5 }), pubC(3, 300, { publicado_por: 'manual' })], AHORA_C), 3);
+  let fc = cad.caducidadDeFila([pubC(1, 160, { cantidad: 2 }), pubC(2, 100), pubC(3, 200), pubC(4, 167.5, { publicado_por: 'manual' })], AHORA_C);
+  assert.deepEqual([fc.unidades, fc.caducadas, fc.proxima.lote.id, fc.proxima.ms, fc.reciente], [4, 1, 1, 8 * HC, null],
+    'la columna Caducidad: solo lo del Sniper (la del manual vence antes, pero no cuenta); la vigente mas proxima');
+  fc = cad.caducidadDeFila([pubC(1, 200), pubC(2, 170)], AHORA_C);
+  assert.deepEqual([fc.proxima, fc.caducadas, fc.reciente.lote.id, fc.reciente.ms], [null, 2, 2, -2 * HC], 'todo caducado: la que caduco hace menos');
+  assert.deepEqual(cad.caducidadDeFila([pubC(1, 10, { publicado_por: 'manual' })], AHORA_C), { unidades: 0, caducadas: 0, proxima: null, reciente: null }, 'lo tuyo: sin dato (un guion)');
+  assert.deepEqual([3 * 24 * HC + 4 * HC + 59000, 22 * HC + 41 * 60000, 41 * 60000, 30000, -2 * 24 * HC, 5 * HC].map(cad.textoTiempo),
+    ['3 d 4 h', '22 h 41 min', '41 min', 'menos de 1 min', '2 d', '5 h']);
+  assert.deepEqual([cad.pronto(23 * HC), cad.pronto(25 * HC), cad.pronto(-HC), cad.pronto(null)], [true, false, false, false]);
+  assert.deepEqual([cad.vence(pubC(1, 0)), cad.vence(pubC(1, null))], [AHORA_C + 168 * HC, null]);
+  ok('caducidad de las ofertas: 168 h exactas (sin fecha, caducada); que se puede retirar y en que orden (el de retirar_furni y devolver_del_mercadillo); la columna Caducidad solo con lo del Sniper; «3 d 4 h»');
+
   const ventasJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'ventas.js')).href);
   const lotesV = [
     { id: 1, furni_id: 10, estado: 'publicado', keko: 'Ux_Data', precio_lista: 128, publicado_en: '2026-09-30T02:00:00Z' },
@@ -1993,6 +2027,8 @@ async function main() {
     assert.match(bitRm[0].id_externo, /^reg_\d+_\d+$/);
     fRm = await fotoRm([{ sprite_id: RA, cantidad: 2 }]);
     assert.deepEqual([fRm.regresos, (await lotesRm(RA)).map((l) => l.cantidad)], [[], [2, 1]], 'la misma foto otra vez no devuelve nada mas');
+    const audRA = await negRm.auditoria('Ux_Data');
+    assert.deepEqual(audRA.volvieron.map((v) => [v.furni_id, v.cantidad, v.lotes, v.causa]), [[furniA, 1, [origenA], 'caducada']], 'la Auditoria dice lo que volvio solo (y a que lote)');
     // Si su lote de origen sigue «por revisar», no se mete en el: vuelve como lote aparte, ya revisado.
     const RA2 = 991010;
     rRm = await evRm([compraVs('rm_ca2', RA2, 2, 100), publicarVs('rm_pa2', RA2, 1, 150, hace(8))]);
@@ -2035,6 +2071,7 @@ async function main() {
     // D) Lo caducado de OTRO keko nunca vuelve con la foto de este, ni se ofrece.
     const tkOtro = await negRm.crearToken('VPS Otro');
     await fotoRm([], 'Otro', tkOtro.token);
+    assert.deepEqual((await negRm.auditoria('Otro')).volvieron, [], 'la linea verde: solo lo de su keko');
     const RD = 991004;
     await evRm([compraVs('rm_cd', RD, 1, 20), publicarVs('rm_pd', RD, 1, 40, hace(8))], tkOtro.token);
     fRm = await fotoRm([{ sprite_id: RD, cantidad: 1 }]);
@@ -2655,7 +2692,7 @@ async function main() {
     assert.deepEqual([evReg2.regresos, evReg2.recuperaciones], [1, 0], 'el aviso de eventos separa lo que volvio solo de lo que retiro el Sniper');
     assert.deepEqual([evRegresos.avisos.length, evRegresos.avisos[0].titulo, evRegresos.avisos[0].cuerpo, evRegresos.avisos[0].destino],
       [1, 'Volvió del Mercadillo en KekoReg', '1 × Sprite 990779 (suelo): su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.',
-        { vista: 'inventario', filtro: 'comprado', keko: 'KekoReg' }]);
+        { vista: 'inventario', filtro: 'comprado', keko: 'KekoReg', lotes: fReg.regresos[0].lotes.map((x) => x.hacia_lote) }]);
     // «Volvió del Mercadillo» desde la Auditoria: la de hace 1 h, con el sobrante que queda; despues, sin prueba.
     h = await pedir(puerto, 'POST', '/api/auditoria/regreso', { cuerpo: { keko: 'KekoReg', furni_id: fReg.regresos[0].furni_id } });
     assert.deepEqual([h.status, h.json.cantidad, h.json.keko], [200, 1, 'KekoReg']);

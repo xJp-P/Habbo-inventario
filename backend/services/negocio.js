@@ -641,7 +641,8 @@ function crearServicioNegocio({ conexion, furnidata }) {
       }
       throw e;
     }
-    return { ...r, filas: (r.filas || []).map(conCatalogo), excluidos: (r.excluidos || []).map(conCatalogo) };
+    return { ...r, filas: (r.filas || []).map(conCatalogo), excluidos: (r.excluidos || []).map(conCatalogo),
+      volvieron: await regresosRecientes(r.keko) };
   }
 
   async function resumenAuditoria() {
@@ -807,26 +808,50 @@ function crearServicioNegocio({ conexion, furnidata }) {
     }
   }
 
-  // Lo que volvio solo en cada `recuperar` recien llegado (para el aviso): keko, furni y
-  // cuantas unidades. Los `recuperar` del Sniper (retiradas que vio en el juego) no cuentan:
-  // solo los que anoto la base al recibir la foto (datos.automatico).
+  // Un `recuperar` que anoto la base al recibir la foto (lo que volvio solo), en lo que
+  // necesitan el aviso y la Auditoria: keko, furni (con su nombre actual), unidades, los
+  // numeros LTD y los lotes de Comprado donde quedaron (para iluminarlos con «Ver»).
+  function automatico(f) { return f.tipo_evento === 'recuperar' && f.resultado && f.datos && f.datos.automatico === true; }
+  async function nombresDeFurnis(ids) {
+    const lista = [...new Set(ids.map(Number).filter((x) => Number.isInteger(x) && x > 0))];
+    return new Map(lista.length ? (await datos(db().from('furnis').select('id, nombre').in('id', lista))).map((f) => [Number(f.id), f.nombre]) : []);
+  }
+  function regresoDe(f, nombres) {
+    const r = f.resultado;
+    return {
+      id: f.id, keko: r.keko || f.datos.keko || null, furni_id: r.furni_id ?? null,
+      nombre: nombres.get(Number(r.furni_id)) || r.nombre || null, sprite_id: r.sprite_id ?? f.datos.sprite_id ?? null,
+      cantidad: Number(r.cantidad) || 0, ltds: (r.lotes || []).map((l) => l.numero_ltd).filter(Boolean),
+      lotes: [...new Set((r.lotes || []).map((l) => Number(l.hacia_lote)).filter((x) => Number.isInteger(x) && x > 0))],
+      causa: r.causa || f.datos.causa || 'caducada', cuando: f.recibido_en || null,
+    };
+  }
+
+  // Lo que volvio solo en cada `recuperar` recien llegado (para el aviso). Los `recuperar`
+  // del Sniper (retiradas que vio en el juego) no cuentan: solo los que anoto la base al
+  // recibir la foto (datos.automatico).
   async function detalleRegresos(ids) {
     const lista = (ids || []).map(Number).filter((x) => Number.isInteger(x) && x > 0);
     if (!lista.length) return [];
-    const filas = (await datos(db().from('eventos_sniper').select('id, tipo_evento, datos, resultado').in('id', lista)))
-      .filter((f) => f.tipo_evento === 'recuperar' && f.resultado && f.datos && f.datos.automatico === true);
-    const idsFurni = [...new Set(filas.map((f) => Number(f.resultado.furni_id)).filter((x) => Number.isInteger(x) && x > 0))];
-    const nombres = new Map(idsFurni.length
-      ? (await datos(db().from('furnis').select('id, nombre').in('id', idsFurni))).map((f) => [Number(f.id), f.nombre]) : []);
-    return filas.map((f) => {
-      const r = f.resultado;
-      return {
-        id: f.id, keko: r.keko || f.datos.keko || null, furni_id: r.furni_id ?? null,
-        nombre: nombres.get(Number(r.furni_id)) || r.nombre || null, sprite_id: r.sprite_id ?? f.datos.sprite_id ?? null,
-        cantidad: Number(r.cantidad) || 0, ltds: (r.lotes || []).map((l) => l.numero_ltd).filter(Boolean),
-        causa: r.causa || f.datos.causa || 'caducada',
-      };
-    });
+    const filas = (await datos(db().from('eventos_sniper').select('id, tipo_evento, datos, resultado, recibido_en').in('id', lista))).filter(automatico);
+    const nombres = await nombresDeFurnis(filas.map((f) => f.resultado.furni_id));
+    return filas.map((f) => regresoDe(f, nombres));
+  }
+
+  // Lo que volvio solo del Mercadillo a un keko en las ultimas 24 h: la linea verde de su
+  // Auditoria. Sin la migracion (o si algo falla), nada: la Auditoria sigue igual.
+  async function regresosRecientes(keko) {
+    const clave = String(keko || '').trim().toLowerCase();
+    if (!clave) return [];
+    let filas;
+    try {
+      filas = await datos(db().from('eventos_sniper').select('id, tipo_evento, datos, resultado, recibido_en')
+        .eq('tipo_evento', 'recuperar').gte('recibido_en', new Date(Date.now() - 24 * 3600000).toISOString())
+        .order('recibido_en', { ascending: false }));
+    } catch (_) { return []; }
+    const propios = filas.filter((f) => automatico(f) && String(f.resultado.keko || f.datos.keko || '').trim().toLowerCase() === clave);
+    const nombres = await nombresDeFurnis(propios.map((f) => f.resultado.furni_id));
+    return propios.map((f) => regresoDe(f, nombres));
   }
 
   return {

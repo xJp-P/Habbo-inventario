@@ -13,12 +13,19 @@
 // de lista, de cual; se aplican FIFO y solo en ese keko (migracion 20261014000000). Clic
 // en la fila: detalle. Desde la v1.8.0, la cabecera de cada bloque es el encabezado C del
 // Inventario: su dona y su barra reparten lo que te entraria entre los furnis del keko.
+//
+// Lo que vuelve del Mercadillo (v1.10.0): una oferta caduca a los 7 dias (core/caducidad.js).
+// La columna «Caducidad» (pedido del dueño, 08-10-2026) dice cuanto le falta a la oferta del
+// Sniper mas proxima a caducar, al minuto; lo que publicaste tu no lo sigue la app (guion).
+// «Publicado por» suma la etiqueta ambar «N caducadas», y «Retirar» aparece tambien si hay
+// algo del Sniper ya caducado (maqueta del 08-10-2026, decision 3).
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { fmtCr, fmtLg } from '../core/format.js';
 import { normalizar } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
-import { NombreFurni } from '../componentes/base.js';
+import { NombreFurni, EtiquetaCaducada, AYUDA_CADUCADA } from '../componentes/base.js';
+import { caducidadDeFila, unidadesCaducadas, textoTiempo, pronto, vence, DIAS_CADUCIDAD } from '../core/caducidad.js';
 import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado, nombreBloque } from '../componentes/BloquesKeko.js';
 import { Barrera, Dibujar } from '../componentes/Barrera.js';
 import { agruparPorKeko, ambitoDe, claveKeko } from '../core/kekos.js';
@@ -27,7 +34,7 @@ import { composicionMercadillo } from '../core/grupos.js';
 
 // Anchos de las columnas (null = Furni). Con sitio para todos, fijos: los bloques quedan
 // alineados entre si.
-var ANCHOS = [null, 176, 84, 96, 104, 132, 188];
+var ANCHOS = [null, 176, 84, 124, 96, 104, 150, 188];
 
 function rangoLista(r) {
   return r.listaMin === r.listaMax ? fmtLg(r.listaMin) + ' cr' : fmtLg(r.listaMin) + ' – ' + fmtLg(r.listaMax) + ' cr';
@@ -37,12 +44,32 @@ function Dato(props) {
   return h('div', null, h('div', { className: 'dato-l' }, props.l), h('div', { className: 'dato-v ' + (props.c || '') }, props.v));
 }
 
-// Quien publico lo de este furni: el Sniper, tu (a mano) o ambos.
+// Quien publico lo de este furni: el Sniper, tu (a mano) o ambos; y cuantas caducaron.
 function PublicadoPor(props) {
   var r = props.r;
   return h('span', { style: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' } },
     r.sniper ? h('span', { className: 'tag tag-morado', title: r.sniper + ' und publicadas por el Sniper' }, h(Ico, { name: 'radar', size: 11 }), 'Sniper') : null,
-    r.manual ? h('span', { className: 'tag tag-azul', title: r.manual + ' und publicadas por ti' }, h(Ico, { name: 'store', size: 11 }), 'Tú') : null);
+    r.manual ? h('span', { className: 'tag tag-azul', title: r.manual + ' und publicadas por ti' }, h(Ico, { name: 'store', size: 11 }), 'Tú') : null,
+    props.caducadas ? h(EtiquetaCaducada, { n: props.caducadas }) : null);
+}
+
+// «29 oct, 14:05» (el dia y la hora de tu reloj).
+function diaHora(t) { return new Date(t).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+
+// La columna «Caducidad»: cuanto le falta a la oferta del Sniper mas proxima a caducar. Lo
+// que publicaste tu no lo sigue la app: guion.
+function CeldaCaducidad(props) {
+  var c = caducidadDeFila(props.lotes, props.ahora);
+  if (!c.unidades) return h('span', { className: 'tenue', title: 'Lo publicaste tú: la app no sigue la caducidad de tus ofertas' }, '—');
+  if (c.proxima) {
+    var l = c.proxima.lote;
+    return h('div', { title: 'La oferta del Sniper más próxima a caducar (lote Nº ' + l.id + ') vence el ' + diaHora(vence(l)) + '. Las ofertas duran ' + DIAS_CADUCIDAD + ' días.' },
+      h('div', { className: 'caducidad' + (pronto(c.proxima.ms) ? ' pronto' : '') }, 'en ' + textoTiempo(c.proxima.ms)),
+      h('div', { className: 'caducidad-sub' }, diaHora(vence(l))));
+  }
+  return h('div', { title: AYUDA_CADUCADA },
+    h('div', { className: 'caducidad caduco' }, 'Caducada'),
+    c.reciente ? h('div', { className: 'caducidad-sub' }, 'hace ' + textoTiempo(c.reciente.ms)) : null);
 }
 
 // Lo que dice la cabecera de un bloque (encabezado C, v1.8.0): la capsula «furnis · und ·
@@ -64,6 +91,12 @@ export function MercadilloView(props) {
   useEffect(function () { if (props.enfocar) setAbierto(props.enfocar); }, [props.enfocar]);
   var usaKekos = !!(props.kekos && props.kekos.disponible);
   var alineado = useAlineado(anchoMinimo(ANCHOS));
+  // La hora con la que se dice cuanto le queda a cada oferta: al minuto.
+  var sAhora = useState(Date.now); var ahora = sAhora[0]; var setAhora = sAhora[1];
+  useEffect(function () {
+    var t = setInterval(function () { setAhora(Date.now()); }, 60000);
+    return function () { clearInterval(t); };
+  }, []);
 
   // Un renglon por keko y furni con algo publicado, con el resumen de SOLO lo publicado
   // de ese furni en ese keko (y lo ya vendido alli, para el detalle).
@@ -95,22 +128,25 @@ export function MercadilloView(props) {
     var minimo = precioMinimoSinPerder(r.costoPromedio);
     var realizada = x.vendidos.reduce(function (s, l) { return s + (l.ganancia_cr || 0); }, 0);
     var comisionPagada = x.vendidos.reduce(function (s, l) { return s + (l.comision_pagada_cr || 0) * l.cantidad; }, 0);
+    var caducadas = unidadesCaducadas(x.publicados, ahora);
     var trs = [h('tr', { key: x.clave, className: 'fila' + (abiertoEste ? ' abierta' : ''), onClick: function () { setAbierto(abiertoEste ? null : x.clave); } },
       h('td', null, h(NombreFurni, { furni: f, ltds: r.ltds.slice().sort(function (a, b) { return a - b; }) })),
       h('td', { className: 'r mono' },
         h('span', { className: 'morado', style: { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } },
           h(Ico, { name: 'lock', size: 11, sw: 2.2 }), rangoLista(r))),
       h('td', { className: 'r mono' }, r.unidades),
+      h('td', null, h(CeldaCaducidad, { lotes: x.publicados, ahora: ahora })),
       h('td', { className: 'r mono' }, r.costoPromedio === null ? '-' : fmtLg(r.costoPromedio)),
       h('td', { className: 'r mono ' + (r.ganancia > 0 ? 'pos' : r.ganancia < 0 ? 'neg' : ''), title: r.comision ? 'Ya descuenta ' + fmtCr(r.comision) + ' cr de comisión del mercadillo' : '' },
         (r.ganancia > 0 ? '+' : '') + fmtCr(r.ganancia)),
-      h('td', null, h(PublicadoPor, { r: r })),
+      h('td', null, h(PublicadoPor, { r: r, caducadas: caducadas })),
       h('td', { className: 'r' },
         h('span', { style: { display: 'inline-flex', gap: 6 } },
           h('button', { className: 'btn btn-chico', title: 'Registrar la venta de unidades publicadas en este keko', onClick: function (e) { e.stopPropagation(); props.onVender(f, ambitoDe(k)); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
-          r.manual ? h('button', { className: 'btn btn-chico', title: 'Quitaste del mercadillo lo que publicaste tú en este keko: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); props.onRetirar(f, ambitoDe(k)); } }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)))];
+          r.manual || caducadas ? h('button', { className: 'btn btn-chico', title: r.manual ? 'Quitaste del mercadillo lo que publicaste tú en este keko (o lo del Sniper ya caducado): vuelve a Comprado'
+            : 'Su oferta caducó: ya no está a la venta. Vuelve a Comprado', onClick: function (e) { e.stopPropagation(); props.onRetirar(f, ambitoDe(k)); } }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)))];
     if (abiertoEste) {
-      trs.push(h('tr', { key: x.clave + '-d' }, h('td', { colSpan: 7, className: 'detalle' },
+      trs.push(h('tr', { key: x.clave + '-d' }, h('td', { colSpan: 8, className: 'detalle' },
         h('div', { className: 'detalle-grid' },
           h(Dato, { l: 'Unidades publicadas', v: r.unidades, c: 'morado' }),
           h(Dato, { l: 'Precio de lista', v: rangoLista(r), c: 'morado' }),
@@ -138,10 +174,11 @@ export function MercadilloView(props) {
         h(Columnas, { anchos: ANCHOS }),
         h('thead', null, h('tr', null,
           h('th', null, 'Furni'), h('th', { className: 'r' }, 'Precio de lista'), h('th', { className: 'r' }, 'Publicadas'),
+          h('th', { title: 'Cuánto le falta a la oferta del Sniper más próxima a caducar (las ofertas duran ' + DIAS_CADUCIDAD + ' días). Lo que publicaste tú no lo sigue la app.' }, 'Caducidad'),
           h('th', { className: 'r' }, 'Costo prom.'), h('th', { className: 'r' }, 'Ganancia esp.'), h('th', null, 'Publicado por'), h('th', null))),
         h('tbody', null, b.items.map(function (x) {
           var nombre = x.f && typeof x.f.nombre === 'string' ? x.f.nombre : 'este furni';
-          return h(Barrera, { key: x.clave, tipo: 'fila', columnas: 7, etiqueta: '«' + nombre + '»',
+          return h(Barrera, { key: x.clave, tipo: 'fila', columnas: 8, etiqueta: '«' + nombre + '»',
               donde: 'Mercadillo › ' + nombreBloque(b.keko) + ' › ' + nombre, onVerErrores: props.onVerErrores },
             h(Dibujar, { dibujar: function () { return filasDe(x, b.keko); } }));
         }))));

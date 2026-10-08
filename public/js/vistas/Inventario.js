@@ -48,13 +48,20 @@
 //
 // Desde el Historial de ventas (v1.9.0), «Ver en el Inventario» abre Vendido con ese lote
 // abierto (y su furni desplegado), y lo ilumina un momento.
+//
+// Lo que vuelve del Mercadillo (v1.10.0; maqueta del 08-10-2026, decisiones 1, 2 y 7): una
+// oferta caduca a los 7 dias (core/caducidad.js). En Publicado, cada lote dice cuanto le
+// queda («caduca en 23 h») o desde cuando caduco, con la etiqueta ambar «Caducada»; lo
+// caducado del Sniper ya se puede «Retirar» (lo tuyo, siempre). Desde el aviso de lo que
+// volvio solo («Ver»), se abre Comprado de ese keko con esos lotes iluminados.
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
 import { fmtCr, fmtLg, fmtPct, fmtD, fmtHace } from '../core/format.js';
 import { normalizar, _submitGuard } from '../core/ui.js';
 import { Ico } from '../componentes/iconos.js';
-import { NombreFurni, IconoFurni, EtiquetaPublicado, EtiquetaLtd, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL } from '../componentes/base.js';
+import { NombreFurni, IconoFurni, EtiquetaPublicado, EtiquetaCaducada, EtiquetaLtd, Confirmar, AYUDA_PUBLICADO, AYUDA_PUBLICADO_MANUAL, AYUDA_CADUCADA } from '../componentes/base.js';
+import { restante, caducada, retirable, unidadesCaducadas, textoTiempo, DIAS_CADUCIDAD } from '../core/caducidad.js';
 import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlineado, nombreBloque, AvatarKeko } from '../componentes/BloquesKeko.js';
 import { Barrera, Dibujar } from '../componentes/Barrera.js';
 import { agruparPorKeko, claveKeko } from '../core/kekos.js';
@@ -218,24 +225,51 @@ function fechaCorta(s) {
   return d.toLocaleDateString('es-CO', op);
 }
 function cuandoVendido(l) { return l.vendido_en ? cuandoVenta(l.vendido_en) : l.fecha_venta ? 'el ' + fmtD(l.fecha_venta) : 'sin fecha'; }
+// «29 sept» de un instante, en el dia de tu reloj (no el UTC).
+function diaLocal(iso) {
+  var d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d.getTime())) return null;
+  var op = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) op.year = 'numeric';
+  return d.toLocaleDateString('es-CO', op);
+}
+// Bajo el nombre de un lote publicado: cuanto le queda a su oferta, o desde cuando caduco.
+function TextoCaducidad(props) {
+  var l = props.lote;
+  var r = restante(l, props.ahora);
+  if (caducada(l, props.ahora)) {
+    return h('span', { className: 'caduco', title: AYUDA_CADUCADA }, r === null ? 'Caducada (sin fecha de publicación)' : 'Caducó hace ' + textoTiempo(r));
+  }
+  return h('span', { title: 'Las ofertas del mercadillo duran ' + DIAS_CADUCIDAD + ' días' }, 'Caduca en ' + textoTiempo(r));
+}
 var ORIGEN_LOTE = { excel: 'del Excel', manual: 'a mano', sniper: 'del Sniper' };
 
 // Lo que dice un lote dentro de su furni (en vez del nombre, que ya esta en la fila del furni).
 function EncabezadoLote(props) {
   var l = props.lote;
   var titulo, sub;
+  var claseTitulo = 'lote-titulo';
   if (l.estado === 'vendido') {
     titulo = 'Vendida ' + cuandoVendido(l);
     sub = ventaDelSniper(l) ? 'registrada por el Sniper' + (props.sniper ? ' · ' + props.sniper : '') : 'registrada por ti';
   } else if (l.estado === 'publicado') {
-    titulo = l.publicado_en ? 'Publicado ' + fmtHace(l.publicado_en) : 'Publicado (sin fecha)';
-    sub = (l.publicado_por === 'manual' ? 'por ti' : 'por el Sniper') + (fechaCorta(l.fecha_compra) ? ' · comprado el ' + fechaCorta(l.fecha_compra) : '');
+    // Cuanto le queda a la oferta, o desde cuando caduco (decisiones 1 y 2 de la maqueta).
+    var quien = l.publicado_por === 'manual' ? 'por ti' : 'por el Sniper';
+    var r = restante(l, props.ahora);
+    if (caducada(l, props.ahora)) {
+      titulo = r === null ? 'Caducada (sin fecha)' : 'Caducó hace ' + textoTiempo(r);
+      claseTitulo += ' caduco';
+      sub = (diaLocal(l.publicado_en) ? 'publicado el ' + diaLocal(l.publicado_en) + ' ' : '') + quien;
+    } else {
+      titulo = 'Publicado ' + fmtHace(l.publicado_en);
+      sub = quien + ' · caduca en ' + textoTiempo(r);
+    }
   } else {
     titulo = fechaCorta(l.fecha_compra) ? 'Lote del ' + fechaCorta(l.fecha_compra) : 'Lote sin fecha';
     sub = (ORIGEN_LOTE[l.fuente] || l.fuente || '') + (l.instancia ? ' · ' + l.instancia : '');
   }
   return h('div', { style: { minWidth: 0 } },
-    h('div', { className: 'lote-nombre' }, h('span', { className: 'lote-titulo' }, titulo),
+    h('div', { className: 'lote-nombre' }, h('span', { className: claseTitulo }, titulo),
       l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : null,
       props.primero ? h('span', { className: 'primero', title: '«Publicar todo» empieza por este lote: es el más antiguo que tienes en mano' }, '1º en salir') : null),
     sub ? h('div', { className: 'lote-sub' }, sub) : null);
@@ -281,9 +315,10 @@ function GrupoFurni(props) {
   if (filtro === 'vendido') sub = n + ' ventas · última ' + cuandoVendido(g.lotes[0]);
   else if (filtro === 'publicado') sub = n + ' lotes · ' + (g.listas.length > 1 ? g.listas.length + ' precios de lista' : 'todos a ' + fmtLg(g.listas[0]) + ' cr');
   else sub = n + ' lotes · ' + (g.compraMin === g.compraMax ? 'todos a ' + fmtLg(g.compraMin) + ' c/u' : 'de ' + fmtLg(g.compraMin) + ' a ' + fmtLg(g.compraMax) + ' c/u');
+  var nCaducadas = filtro === 'publicado' ? unidadesCaducadas(g.lotes, props.ahora) : 0;
   var estado = filtro === 'comprado'
     ? (g.porRevisar ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), g.porRevisar + ' por revisar') : h('span', { className: 'tag tag-azul' }, 'Comprado'))
-    : filtro === 'publicado' ? h(EtiquetaPublicado, {})
+    : filtro === 'publicado' ? (nCaducadas ? h(EtiquetaCaducada, { n: nCaducadas }) : h(EtiquetaPublicado, {}))
     : g.todasSniper ? h('span', { className: 'tag tag-sniper' }, h(Ico, { name: 'radar', size: 11 }), 'Vendido · Sniper')
     : h('span', { className: 'tag tag-verde' }, 'Vendido');
   var prom = h('div', { className: 'prom' }, 'prom.');
@@ -295,13 +330,16 @@ function GrupoFurni(props) {
       icono ? h(Ico, { name: icono, size: icono === 'lock' ? 11 : 12 }) : null, texto);
   }
   var enManoLibres = g.unidades - g.unidadesPorRevisar;
-  var hayManual = g.lotes.some(function (l) { return l.publicado_por === 'manual'; });
+  // «Retirar»: lo que publicaste tu y, desde la v1.10.0, lo del Sniper que ya caduco.
+  var hayRetirable = g.lotes.some(function (l) { return retirable(l, props.ahora); });
+  var soloCaducadas = hayRetirable && !g.lotes.some(function (l) { return l.publicado_por === 'manual'; });
   var botones = filtro === 'comprado'
     ? [enManoLibres > 0 ? boton('btn-morado', 'store', 'Publicar todo', 'Ya lo pusiste en el mercadillo de Habbo: pasan a Publicado las ' + enManoLibres + ' und en mano de este furni en este keko, de la más antigua a la más nueva', acc.publicarTodo) : null,
        boton('', null, 'Vender', 'Lo vendiste fuera del Sniper (tradeo o venta desde otro keko): salen de este keko, de los lotes más antiguos o del que elijas', acc.vender)]
     : filtro === 'publicado'
     ? [boton('', 'lock', 'Vendido', 'Registrar la venta de lo publicado de este furni en este keko (eliges el precio de lista y cuántas)', acc.vendido),
-       hayManual ? boton('', 'undo', 'Retirar', 'Lo quitaste del mercadillo: lo que publicaste tú vuelve a Comprado', acc.retirar) : null]
+       hayRetirable ? boton('', 'undo', 'Retirar', soloCaducadas ? 'Su oferta caducó: ya no está a la venta. Vuelve a Comprado'
+         : 'Lo quitaste del mercadillo: lo que publicaste tú (y lo del Sniper ya caducado) vuelve a Comprado', acc.retirar) : null]
     : [];
   return [
     h('tr', { key: 'g', className: 'fila-grupo' + (abierto ? ' abierto' : '') + (g.porRevisar ? ' con-revisar' : ''), onClick: alternar },
@@ -370,30 +408,44 @@ export function InventarioView(props) {
   var enBandeja = filtro === 'por_asignar' && !!porAsignar;
   var alineado = useAlineado(anchoMinimo(ANCHOS[enBandeja ? 'vendido' : filtro] || ANCHOS.vendido));
   useEffect(function () { if (props.filtroFurni) { setQ(props.filtroFurni); setFiltro(props.filtroEstado || 'comprado'); } }, [props.filtroFurni, props.filtroEstado]);
+  // La hora con la que se dice cuanto le queda a cada oferta: en Publicado, al minuto.
+  var sAhora = useState(Date.now); var ahora = sAhora[0]; var setAhora = sAhora[1];
+  useEffect(function () {
+    if (filtro !== 'publicado') return undefined;
+    setAhora(Date.now());
+    var t = setInterval(function () { setAhora(Date.now()); }, 60000);
+    return function () { clearInterval(t); };
+  }, [filtro]);
   // Clic en el aviso de ventas del Sniper: Vendido (en el bloque de ese keko) o la bandeja.
   // Desde el Historial («Ver en el Inventario») llega tambien `lote`: se abre su detalle (y su
-  // furni, si tiene varios lotes) y se baja hasta el, iluminado un momento.
+  // furni, si tiene varios lotes) y se baja hasta el, iluminado un momento. Desde el aviso de
+  // lo que volvio del Mercadillo llegan `filtro: 'comprado'` y `lotes` (varios): se iluminan
+  // todos, sin abrir ningun detalle.
   var sDest = useState(null); var destacado = sDest[0]; var setDestacado = sDest[1];
   useEffect(function () {
     var a = props.abrir;
     if (!a) return undefined;
+    var destino = ['por_asignar', 'comprado', 'publicado'].indexOf(a.filtro) !== -1 ? a.filtro : 'vendido';
+    var ids = a.lote ? [a.lote] : (a.lotes || []);
     setQ('');
     setAbierto(a.lote || null);
-    setFiltro(a.filtro === 'por_asignar' ? 'por_asignar' : 'vendido');
-    if (a.filtro === 'por_asignar' || (!a.keko && !a.lote)) return undefined;
-    var l = a.lote ? compras.find(function (x) { return x.id === a.lote; }) : null;
-    if (l) {
-      var clave = claveGrupo(l.keko, 'vendido', l.furni_id);
-      var hermanos = compras.filter(function (x) { return x.estado === 'vendido' && x.furni_id === l.furni_id && claveKeko(x.keko) === claveKeko(l.keko); }).length;
-      if (hermanos > 1 && abiertos.indexOf(clave) === -1) guardar(alternarAbierto(abiertos, clave, true));
-      setDestacado(l.id);
-    }
+    setFiltro(destino);
+    if (destino === 'por_asignar' || (!a.keko && !ids.length)) return undefined;
+    var lotes = ids.map(function (id) { return compras.find(function (x) { return x.id === id && x.estado === destino; }); }).filter(Boolean);
+    var lista = abiertos;
+    lotes.forEach(function (l) {
+      var clave = claveGrupo(l.keko, destino, l.furni_id);
+      var hermanos = compras.filter(function (x) { return x.estado === destino && x.furni_id === l.furni_id && claveKeko(x.keko) === claveKeko(l.keko); }).length;
+      if (hermanos > 1 && lista.indexOf(clave) === -1) lista = alternarAbierto(lista, clave, true);
+    });
+    if (lista !== abiertos) guardar(lista);
+    if (lotes.length) setDestacado(lotes.map(function (l) { return l.id; }));
     var t = setTimeout(function () {
-      var el = l ? document.getElementById('lote-' + l.id) : null;
+      var el = lotes.length ? document.getElementById('lote-' + lotes[0].id) : null;
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       else if (a.keko) { el = document.getElementById('bk-' + claveKeko(a.keko)); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    }, l ? 450 : 150);
-    var t2 = l ? setTimeout(function () { setDestacado(null); }, 2600) : null;
+    }, lotes.length ? 450 : 150);
+    var t2 = lotes.length ? setTimeout(function () { setDestacado(null); }, 2600) : null;
     return function () { clearTimeout(t); if (t2) clearTimeout(t2); };
   }, [props.abrir && props.abrir.vez]);
   // Sin la migracion (o si se fue la ultima venta y la pestaña se oculta), a Vendido.
@@ -477,8 +529,12 @@ export function InventarioView(props) {
       } });
   }
   function retirar(l) {
+    // Lo del Sniper solo se retira aqui si su oferta ya caduco (migracion 20261017000000).
+    var delSniperCaducado = l.publicado_por !== 'manual';
     setConfirmacion({ titulo: 'Retirar del mercadillo', icono: 'undo', textoBoton: 'Retirar',
-      mensaje: h('span', null, '¿Retirar del mercadillo ', h('b', null, l.cantidad + ' × ' + l.nombre), ' (lote Nº ', l.id, ')? Vuelve a Comprado, en mano.'),
+      mensaje: h('span', null, '¿Retirar del mercadillo ', h('b', null, l.cantidad + ' × ' + l.nombre), ' (lote Nº ', l.id, ')? Vuelve a Comprado, en mano.',
+        delSniperCaducado ? h('span', { className: 'suave', style: { display: 'block', marginTop: 8, fontSize: 12 } },
+          'Lo publicó el Sniper y su oferta caducó, así que ya no está a la venta. Si ya lo tienes de vuelta en tu inventario, no hace falta: la próxima foto del Sniper lo devuelve solo.') : null),
       accion: function () {
         return API.post('/api/compras/' + l.id + '/retirar', {}).then(function (r) {
           if (r) { setAbierto(null); props.onCambio(r.fusionada ? 'Retirado: las unidades volvieron a su lote en Comprado' : 'Retirado: el lote volvió a Comprado'); }
@@ -507,14 +563,15 @@ export function InventarioView(props) {
       + (op.dentro ? ' lote' + (op.ultimo ? ' ultimo' : '') + (op.resaltado ? ' resalta' : '') : '');
     var g = l.ganancia_cr;
     var delSniper = ventaDelSniper(l);
-    var filas = [h('tr', { key: l.id, id: 'lote-' + l.id, className: clase + (destacado === l.id ? ' destacada' : ''), onClick: function () { setAbierto(abiertoEste ? null : l.id); },
+    var filas = [h('tr', { key: l.id, id: 'lote-' + l.id, className: clase + (destacado && destacado.indexOf(l.id) !== -1 ? ' destacada' : ''), onClick: function () { setAbierto(abiertoEste ? null : l.id); },
         style: op.dentro ? { '--i': op.indice } : undefined,
         onMouseEnter: op.onResaltar ? function () { op.onResaltar(l.id); } : undefined,
         onMouseLeave: op.onResaltar ? function () { op.onResaltar(null); } : undefined },
       h('td', { className: 'mono' + (op.dentro ? ' rama' : ''), style: { color: l.pendiente ? 'var(--yellow)' : 'var(--text3)' } }, l.id),
       h('td', null, op.dentro
-        ? h(EncabezadoLote, { lote: l, primero: op.primero, sniper: delSniper ? sniperDe(l.keko) : null })
-        : h(NombreFurni, { furni: l, sub: l.estado === 'vendido' && l.vendido_en ? 'vendida ' + cuandoVenta(l.vendido_en) : null })),
+        ? h(EncabezadoLote, { lote: l, primero: op.primero, sniper: delSniper ? sniperDe(l.keko) : null, ahora: ahora })
+        : h(NombreFurni, { furni: l, sub: l.estado === 'vendido' && l.vendido_en ? 'vendida ' + cuandoVenta(l.vendido_en)
+          : publicado ? h(TextoCaducidad, { lote: l, ahora: ahora }) : null })),
       h('td', { className: 'r mono' }, l.cantidad),
       h('td', { className: 'r mono' }, l.moneda_compra === 'lingos' ? fmtLg(l.precio_compra) + ' lg' : fmtLg(l.precio_compra)),
       h('td', { className: 'r mono' }, fmtCr(l.costo_total_cr)),
@@ -522,14 +579,15 @@ export function InventarioView(props) {
       conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)) : null,
       conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)) : null,
       h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
-        : publicado ? h(EtiquetaPublicado, { manual: manual })
+        : publicado ? (caducada(l, ahora) ? h(EtiquetaCaducada, {}) : h(EtiquetaPublicado, { manual: manual }))
         : delSniper ? h('span', { className: 'tag tag-sniper', title: 'Venta registrada por el Sniper' + (sniperDe(l.keko) ? ' (' + sniperDe(l.keko) + ')' : '') },
             h(Ico, { name: 'radar', size: 11 }), 'Vendido · Sniper')
         : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
       h('td', { className: 'r' }, publicado
         ? h('span', { style: { display: 'inline-flex', gap: 6 } },
             h('button', { className: 'btn btn-chico', title: 'Registrar la venta de lo publicado', onClick: function (e) { e.stopPropagation(); props.onVender(l); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
-            manual ? h('button', { className: 'btn btn-chico', title: 'Lo quitaste del mercadillo: vuelve a Comprado', onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)
+            retirable(l, ahora) ? h('button', { className: 'btn btn-chico', title: manual ? 'Lo quitaste del mercadillo: vuelve a Comprado' : 'Su oferta caducó: ya no está a la venta. Vuelve a Comprado',
+              onClick: function (e) { e.stopPropagation(); retirar(l); }, disabled: enviando }, h(Ico, { name: 'undo', size: 12 }), 'Retirar') : null)
         : l.estado === 'comprado'
         ? h('span', { style: { display: 'inline-flex', gap: 6 } },
             l.pendiente ? null : op.dentro
@@ -606,7 +664,7 @@ export function InventarioView(props) {
           return h(Barrera, { key: 'g' + gr.clave, tipo: 'fila', columnas: columnas, etiqueta: 'El furni «' + nombre + '»',
               donde: 'Inventario › ' + nombreBloque(k) + ' › ' + nombre, onVerErrores: props.onVerErrores },
             h(Dibujar, { dibujar: function () {
-              return h(GrupoFurni, { grupo: gr, filtro: filtro, abierto: grupoAbierto(clave), animar: seAnima(clave),
+              return h(GrupoFurni, { grupo: gr, filtro: filtro, abierto: grupoAbierto(clave), animar: seAnima(clave), ahora: ahora,
                 onAlternar: function () { alternarGrupo(clave); }, filasLote: filasLote, columnas: columnas, anchos: ANCHOS[filtro],
                 acciones: accionesFurni, onVerErrores: props.onVerErrores });
             } }));
@@ -634,6 +692,14 @@ export function InventarioView(props) {
         h(Ico, { name: todosAbiertos ? 'contraer' : 'expandir', size: 14 }), todosAbiertos ? 'Cerrar todo' : 'Abrir todo') : null,
       h('button', { className: 'btn', onClick: props.onVentaManual, title: 'Registrar una venta hecha fuera del Sniper: un tradeo o una venta desde otro keko' }, h(Ico, { name: 'tag', size: 14 }), 'Venta'),
       h('button', { className: 'btn btn-verde', onClick: function () { props.onNueva(); } }, h(Ico, { name: 'plus', size: 14, sw: 2.4 }), 'Compra')),
+
+    // Hay ofertas caducadas a la vista: como se resuelven (maqueta del 08-10-2026).
+    filtro === 'publicado' && visibles.some(function (l) { return caducada(l, ahora); })
+      ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 12, fontSize: 12.5 } },
+          h(Ico, { name: 'reloj', size: 15, color: 'var(--yellow)' }),
+          h('div', null, h('b', null, 'Las ofertas caducan a los ' + DIAS_CADUCIDAD + ' días. '),
+            'Lo que caduca en un keko con Sniper vuelve solo a Comprado en cuanto el Sniper lo ve en tu inventario. Si no vuelve (sigue en «Mis ofertas», o el keko no tiene Sniper), retíralo aquí cuando lo saques del mercadillo.'))
+      : null,
 
     enBandeja
       ? h(TablaPorAsignar, { ventas: ventasVisibles, q: q, furnis: props.furnis, kekos: listaKekos, onVerErrores: props.onVerErrores,

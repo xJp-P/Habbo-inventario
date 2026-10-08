@@ -19,13 +19,21 @@
 // registrado lo propone: cantidad y costo ya puestos, y aviso si el costo es un promedio.
 // Desde la v1.4.0 (migracion 20261010000000) cada costo distinto llega como un tramo
 // aparte: una linea por tramo, cada una con su propia entrada a su costo exacto.
+//
+// Lo que vuelve del Mercadillo (v1.10.0, migracion 20261017000000; maqueta del 08-10-2026,
+// decisiones 4 a 6): lo que caduco (7 dias) en un keko con Sniper vuelve solo a Comprado
+// cuando la foto lo trae en la mano, y la tarjeta lo dice en una linea verde («Ver en
+// Comprado»). Lo demas (lo que retiraste en Habbo sin que el Sniper lo viera, o lo publicado
+// sin keko) sale en el sobrante como «Puede ser lo que tenias publicado»: «Volvió del
+// Mercadillo» lo devuelve, tras una confirmacion, hasta lo que sobra en la foto.
 
 import { h, useState, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
 import { _submitGuard } from '../core/ui.js';
 import { fmtHace, leerNumero, fmtLg } from '../core/format.js';
 import { tramosDelSniper, porRegistrar, mismoCosto, textoCosto } from '../core/costos.js';
-import { NombreFurni, SelectorMoneda, Confirmar, EtiquetaLtd } from '../componentes/base.js';
+import { NombreFurni, SelectorMoneda, Confirmar, EtiquetaLtd, EtiquetaCaducada } from '../componentes/base.js';
+import { ordenDevolver, restante, textoTiempo } from '../core/caducidad.js';
 import { Ico } from '../componentes/iconos.js';
 
 function clave(f) { return f.tipo + ':' + f.sprite_id; }
@@ -325,6 +333,56 @@ export function AuditoriaView(props) {
     return null;
   }
 
+  // «Puede ser lo que tenias publicado»: lo publicado de este furni en este keko o sin keko
+  // que pudo volver a la mano sin que el Sniper lo viera. `n`: hasta lo que sobra en la foto.
+  function regreso(f) {
+    var p = f.publicadas || {};
+    var lotes = ordenDevolver(p.lotes);
+    var posibles = lotes.reduce(function (s, l) { return s + l.cantidad; }, 0);
+    var n = Math.min(f.diferencia, posibles);
+    return { lotes: lotes, posibles: posibles, n: n, otros: (p.unidades || 0) - (p.devolvibles || 0) };
+  }
+  function lineaRegreso(l) {
+    var r = restante({ estado: 'publicado', publicado_en: l.publicado_en }, Date.now());
+    return h('div', { key: l.lote_id, className: 'aud-regreso-lote' },
+      h('span', { className: 'mono' }, 'Nº ' + l.lote_id), l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : null,
+      h('b', { className: 'mono' }, l.cantidad + ' und'),
+      h('span', null, (l.keko ? 'en ' + l.keko : 'sin keko') + ' · publicada ' + fmtHace(l.publicado_en) + ' ' + (l.publicado_por === 'manual' ? 'por ti' : 'por el Sniper')
+        + (l.precio_lista !== null && l.precio_lista !== undefined ? ' a ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') : '')),
+      l.caducada ? h(EtiquetaCaducada, {})
+        : h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Vigente · caduca en ' + textoTiempo(r)));
+  }
+  function confirmarRegreso(f) {
+    var x = regreso(f);
+    var resta = x.n;
+    var tomas = [];
+    x.lotes.forEach(function (l) { if (resta > 0) { var t = Math.min(l.cantidad, resta); tomas.push({ l: l, t: t }); resta -= t; } });
+    setConfirmacion({ titulo: 'Volvió del Mercadillo', icono: 'undo', textoBoton: 'Volvió del Mercadillo',
+      mensaje: h('span', null, h('b', null, unidades(x.n)), ' de «' + nombreDe(f) + '» ' + pl(x.n, 'vuelve', 'vuelven') + ' de Publicado a Comprado en ' + K + ': ',
+        tomas.map(function (t) { return 'lote Nº ' + t.l.lote_id + (t.l.keko ? '' : ' (sin keko, pasa a ' + K + ')') + ' · ' + unidades(t.t) + ', publicada ' + fmtHace(t.l.publicado_en) + (t.l.caducada ? ' (caducada)' : ''); }).join('; ') + '.',
+        h('span', { className: 'suave', style: { display: 'block', marginTop: 8, fontSize: 12 } },
+          'Hazlo solo si lo quitaste del Mercadillo en Habbo (o caducó). Si fue otra unidad igual (un tradeo, un regalo), usa «Registrar entrada».')),
+      accion: function () {
+        enviar('/api/auditoria/regreso', { keko: K, furni_id: f.furni_id, cantidad: x.n },
+          nombreDe(f) + ': ' + unidades(x.n) + pl(x.n, ' volvió', ' volvieron') + ' del Mercadillo a Comprado en ' + K);
+      } });
+  }
+  function BloqueRegreso(f) {
+    var x = regreso(f);
+    if (!x.n) return null;
+    var sinKeko = x.lotes.some(function (l) { return !l.keko; });
+    return h('div', { key: 'regreso', className: 'aud-regreso' },
+      h('div', { className: 'aud-regreso-t' }, h(Ico, { name: 'store', size: 14 }), 'Puede ser lo que tenías publicado'),
+      h('div', { className: 'aud-regreso-txt' }, 'Tienes ' + x.posibles + ' und de este furni en el Mercadillo. Si ' + pl(x.posibles, 'la quitaste', 'las quitaste')
+        + ' en Habbo, o ' + pl(x.posibles, 'caducó', 'caducaron') + ', y el Sniper no lo vio, ' + pl(x.n, 'devuélvela', 'devuélvelas') + ' a Comprado: la foto trae '
+        + f.diferencia + ' de más.' + (sinKeko ? ' Lo publicado sin keko pasa a ' + K + '.' : '')
+        + (x.otros > 0 ? ' (' + unidades(x.otros) + ' con otro número LTD no ' + pl(x.otros, 'cuenta', 'cuentan') + ': la foto no trae ese número.)' : '')),
+      x.lotes.map(lineaRegreso),
+      h('div', { className: 'aud-regreso-pie' },
+        h('button', { className: 'btn btn-chico btn-verde', onClick: function () { confirmarRegreso(f); }, disabled: enviando },
+          h(Ico, { name: 'undo', size: 12 }), 'Volvió del Mercadillo' + (x.n > 1 ? ' (' + x.n + ')' : ''))));
+  }
+
   function Fila(f) {
     var k = clave(f);
     var abiertoAqui = abierto && abierto.clave === k ? abierto.accion : null;
@@ -440,6 +498,7 @@ export function AuditoriaView(props) {
         (f.ltds_faltantes || []).map(function (n) { return h(EtiquetaLtd, { key: 'a' + n, numero: n }); }),
         ' · En Habbo: ', (f.ltds_nuevos || []).map(function (n) { return h(EtiquetaLtd, { key: 'h' + n, numero: n }); })) : null,
       notas.map(function (t, i) { return h('div', { key: i, className: 'aud-nota' }, t); }),
+      f.categoria === 'sobrante' ? BloqueRegreso(f) : null,
       lineas,
       acciones.length ? h('div', { className: 'aud-acc' }, acciones) : null,
       // La entrada de un tramo se abre bajo su linea; lo demas, al pie de la fila.
@@ -455,6 +514,23 @@ export function AuditoriaView(props) {
   }
 
   var hayDiferencias = sobrantes.length + faltantes.length + ltds.length > 0;
+
+  // Lo que volvio solo del Mercadillo a este keko en las ultimas 24 h: su oferta caduco y la
+  // foto del Sniper lo trajo en la mano (la base lo paso a Comprado al recibirla).
+  function LineaVolvieron() {
+    var v = aud.volvieron || [];
+    if (!v.length) return null;
+    var und = v.reduce(function (s, x) { return s + (Number(x.cantidad) || 0); }, 0);
+    var porNombre = {};
+    v.forEach(function (x) { var nom = typeof x.nombre === 'string' ? x.nombre : 'un furni'; porNombre[nom] = (porNombre[nom] || 0) + (Number(x.cantidad) || 0); });
+    var lista = Object.keys(porNombre).map(function (nom) { return porNombre[nom] + ' × ' + nom; }).join(', ');
+    var ids = [];
+    v.forEach(function (x) { (x.lotes || []).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); }); });
+    return h('div', { className: 'aud-volvieron' }, h(Ico, { name: 'check', size: 15, sw: 2.4 }),
+      h('span', null, 'En las últimas 24 h ' + pl(und, 'volvió solo', 'volvieron solos') + ' del Mercadillo: ' + lista + '. '
+        + pl(und, 'Su oferta caducó y ya está', 'Sus ofertas caducaron y ya están') + ' en Comprado.'),
+      props.onVerInventario ? h('button', { className: 'btn btn-chico', onClick: function () { props.onVerInventario({ filtro: 'comprado', keko: K, lotes: ids }); } }, 'Ver en Comprado') : null);
+  }
 
   return h('div', { className: 'contenedor fade-in', style: { display: 'flex', flexDirection: 'column', gap: 14 } },
     confirmacion ? h(Confirmar, Object.assign({}, confirmacion, {
@@ -480,7 +556,8 @@ export function AuditoriaView(props) {
         ltds.length ? h(Chip, { clase: 'tag-ambar' }, ltds.length + ' LTD con otro número') : null,
         sinKeko.length ? h(Chip, { clase: 'tag-ambar' }, sinKeko.length + ' con unidades sin keko') : null,
         noReg.length ? h(Chip, { clase: 'tag-gris' }, noReg.length + ' sin registrar') : null,
-        (aud.excluidos || []).length ? h(Chip, { clase: 'tag-gris' }, aud.excluidos.length + pl(aud.excluidos.length, ' excluido', ' excluidos')) : null)),
+        (aud.excluidos || []).length ? h(Chip, { clase: 'tag-gris' }, aud.excluidos.length + pl(aud.excluidos.length, ' excluido', ' excluidos')) : null),
+      LineaVolvieron()),
 
     hayDiferencias ? null : h('div', { className: 'aviso', style: { background: 'var(--green-bg)', color: 'var(--green)', fontSize: 13 } },
       'Todo cuadra: lo que la app tiene en mano en ' + K + ' coincide con Habbo.'),

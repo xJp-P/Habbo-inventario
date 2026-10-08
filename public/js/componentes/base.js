@@ -8,6 +8,7 @@
 import { h, useState, useEffect } from '../core/react.js';
 import { Ico } from './iconos.js';
 import { iconoUrl } from '../core/ui.js';
+import { DIAS_CADUCIDAD } from '../core/caducidad.js';
 
 export function Modal(props) {
   return h('div', { className: 'modal-overlay' },
@@ -93,6 +94,13 @@ export var AYUDA_PUBLICADO_MANUAL = 'Lo publicaste tú en el mercadillo de Habbo
 export function EtiquetaPublicado(props) {
   return h('span', { className: 'tag tag-morado', title: props.manual ? AYUDA_PUBLICADO_MANUAL : AYUDA_PUBLICADO },
     h(Ico, { name: 'lock', size: 11, sw: 2.2 }), props.texto || 'Publicado');
+}
+
+// Oferta caducada (v1.10.0): ámbar, como lo «por revisar». Con `n`, «2 caducadas».
+export var AYUDA_CADUCADA = 'Su oferta venció (' + DIAS_CADUCIDAD + ' días) sin venderse: ya no está a la venta. Si vuelve a tu inventario, la foto del Sniper la devuelve sola a Comprado; si no, retírala cuando la saques del mercadillo.';
+export function EtiquetaCaducada(props) {
+  return h('span', { className: 'tag tag-caducada', title: AYUDA_CADUCADA },
+    h(Ico, { name: 'reloj', size: 11, sw: 2.2 }), props.n ? props.n + (props.n === 1 ? ' caducada' : ' caducadas') : 'Caducada');
 }
 
 export function SelectorMoneda(props) {
