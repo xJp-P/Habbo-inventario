@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const { ClientError, monedaDesdeTexto, numeroValido, hoyStr, normalizar } = require('../core/util');
 const { calcularResumen } = require('../core/calculos');
 const { datos, todas } = require('../db/respuestas');
+const { planFantasmas, resumenFantasmas, NOTA_ENTRADA } = require('../core/fantasmas');
 
 function crearServicioNegocio({ conexion, furnidata }) {
   const db = () => conexion.clienteListo();
@@ -737,7 +738,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
   async function entradaAuditoria(entrada) {
     const base = { cantidad: entrada.cantidad, precio_compra: entrada.precio, moneda_compra: entrada.moneda,
                    keko: entrada.keko, numero_ltd: entrada.numero_ltd,
-                   notas: entrada.notas || 'Entrada por auditoria del inventario' };
+                   notas: entrada.notas || NOTA_ENTRADA };
     if (entrada.furni_id) return crearCompra({ ...base, furni_id: entrada.furni_id });
     const sprite = Number(entrada.sprite_id);
     const tipo = entrada.tipo === 'pared' ? 'pared' : 'suelo';
@@ -845,6 +846,25 @@ function crearServicioNegocio({ conexion, furnidata }) {
     }
   }
 
+  // Los furnis fantasma de antes de la 1.10.0 (v1.10.1, core/fantasmas.js): SOLO LECTURA. Lo que
+  // limpia es el SQL de scripts/limpiar-fantasmas (con la misma regla), nunca la app. Sin la
+  // migracion 21 los scripts no corren: `migracion21` lo dice para que el aviso pida instalarla.
+  async function fantasmas() {
+    let fotos;
+    try {
+      fotos = await datos(db().from('inventario_habbo').select('keko, recibido_en, furnis'));
+    } catch (e) {
+      if (faltaMigracion(e)) return { disponible: false, fantasmas: [], unidades: 0, lotes: 0, kekos: [] };
+      throw e;
+    }
+    const [lotes, furnis] = await Promise.all([
+      todas(() => db().from('compras').select('id, keko, furni_id, cantidad, estado, numero_ltd, publicado_en, notas, fecha_compra').order('id')),
+      todas(() => db().from('furnis').select('id, nombre, sprite_id, tipo').order('id')),
+    ]);
+    const r = resumenFantasmas(planFantasmas({ lotes, furnis, fotos }));
+    return { disponible: true, migracion21: r.unidades ? await hayRegresos() : true, ...r };
+  }
+
   // Un `recuperar` que anoto la base al recibir la foto (lo que volvio solo), en lo que
   // necesitan el aviso y la Auditoria: keko, furni (con su nombre actual), unidades, los
   // numeros LTD y los lotes de Comprado donde quedaron (para iluminarlos con «Ver»).
@@ -901,7 +921,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     resolverNombre, sincronizarConCatalogo,
     auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,
     ventasPorAsignar, aplicarVentaPorAsignar, descartarVentaPorAsignar, detalleVentas,
-    devolverDelMercadillo, detalleRegresos,
+    devolverDelMercadillo, detalleRegresos, fantasmas,
   };
 }
 

@@ -2210,11 +2210,16 @@ async function main() {
     // ── Limpieza de los fantasmas de antes de la 1.10.0 (scripts/limpiar-fantasmas, SQL Editor) ──
     // Lo caducado que volvio a la mano, se registro con «Entrada con costo» y se volvio a publicar dejo
     // el lote viejo en Publicado. Los tres SQL se corren como en el SQL Editor (sin RLS, una transaccion).
+    // Desde la v1.10.1 exigen la huella (la entrada de la Auditoria), y el aviso de la app
+    // (backend/core/fantasmas.js) usa la misma regla: deben dar las mismas filas.
     const sqlFz = (n) => fs.readFileSync(path.join(__dirname, 'limpiar-fantasmas', n), 'utf8');
     const planFz = (s) => s.slice(s.indexOf('-- >>> PLAN'), s.indexOf('-- <<< PLAN'));
     assert.ok(planFz(sqlFz('1-revisar.sql')).length > 1000);
     assert.equal(planFz(sqlFz('1-revisar.sql')), planFz(sqlFz('2-limpiar.sql')), 'revisar y limpiar usan el mismo plan');
     assert.doesNotMatch(sqlFz('1-revisar.sql').replace(/--.*$/gm, ''), /\b(delete|drop|update|insert|truncate)\b/i, 'revisar no cambia nada (y el SQL Editor no avisa de nada destructivo)');
+    const { planFantasmas, CADUCIDAD_H: caducidadFz, NOTA_ENTRADA: notaFz } = require('../backend/core/fantasmas');
+    assert.equal(caducidadFz, lotesJs.CADUCIDAD_MERCADILLO_H, 'las 168 h del aviso son las de la interfaz y la base');
+    assert.ok(planFz(sqlFz('1-revisar.sql')).includes(`'${notaFz}'`), 'la huella del script es la nota de negocio.entradaAuditoria');
     const fz = await crearClienteLocal();
     await fz.crearUsuario('fz@prueba.local', 'clave-fz');
     await fz.auth.signInWithPassword({ email: 'fz@prueba.local', password: 'clave-fz' });
@@ -2251,7 +2256,7 @@ async function main() {
       const furni = c.eventos[0].furni_id;
       await negFz.activarPendientes({ furni_id: furni });
       const p1 = await evFz([publicarVs(id + '_p1', sprite, publicadas, 60, haceFz(8), extra)], token);
-      await negFz.crearCompra({ furni_id: furni, cantidad: publicadas, precio_compra: 50, keko, numero_ltd: ltd });
+      await negFz.entradaAuditoria({ furni_id: furni, cantidad: publicadas, precio: 50, keko, numero_ltd: ltd });
       const p2 = republicar ? await evFz([publicarVs(id + '_p2', sprite, republicar, 62, fechaRe, extra)], token) : null;
       return { furni, viejo: p1.eventos[0].lotes.map((l) => l.lote_id), nuevo: p2 && p2.eventos[0].lotes.map((l) => l.lote_id) };
     };
@@ -2269,6 +2274,28 @@ async function main() {
     await fantasmaFz('fz8', 995008, { ltd: 300, fechaRe: haceFz(8) });
     const sobraFz = await publicadoFz('fz10', 995010);
     const vigenteFz = await publicadoFz('fz11', 995011, {}, Date.now());
+    // Sin huella: una oferta real en «Expirado» (nadie la volvio a registrar), una que se arreglo con
+    // «+ Compra» (sin la nota de la Auditoria), una entrada de ANTES de que caducara y menos entradas
+    // que caducadas.
+    const furniDeFz = async (lote) => (await sqlQFz('select furni_id from public.compras where id = $1', [lote]))[0].furni_id;
+    await publicadoFz('fz16', 995016);
+    const compraManualFz = await publicadoFz('fz17', 995017);
+    await negFz.crearCompra({ furni_id: await furniDeFz(compraManualFz), cantidad: 1, precio_compra: 50, keko: 'Ux_Data' });
+    const antesFz = await publicadoFz('fz18', 995018);
+    const entradaAntesFz = await negFz.entradaAuditoria({ furni_id: await furniDeFz(antesFz), cantidad: 1, precio: 50, keko: 'Ux_Data' });
+    await sqlQFz("update public.compras set fecha_compra = (now() - interval '10 days')::date where id = $1", [entradaAntesFz.id]);
+    const pocasFz = await evFz([compraVs('fz19_c', 995019, 2, 50)]);
+    await negFz.activarPendientes({ furni_id: pocasFz.eventos[0].furni_id });
+    await evFz([publicarVs('fz19_p', 995019, 2, 60, haceFz(8))]);
+    await negFz.entradaAuditoria({ furni_id: pocasFz.eventos[0].furni_id, cantidad: 1, precio: 50, keko: 'Ux_Data' });
+    // Con huella por la hora del equipo: caduco ayer a las 02:00 UTC (la noche anterior en Colombia) y la
+    // entrada lleva la fecha local de esa noche, un dia antes que la UTC.
+    const ayerFz = new Date();
+    ayerFz.setUTCDate(ayerFz.getUTCDate() - 1);
+    ayerFz.setUTCHours(2, 0, 0, 0);
+    const husoFz = await publicadoFz('fz20', 995020, {}, ayerFz.getTime() - 168 * H);
+    const entradaHusoFz = await negFz.entradaAuditoria({ furni_id: await furniDeFz(husoFz), cantidad: 1, precio: 50, keko: 'Ux_Data' });
+    await sqlQFz('update public.compras set fecha_compra = $2::date where id = $1', [entradaHusoFz.id, new Date(ayerFz.getTime() - 24 * H).toISOString().slice(0, 10)]);
     await negFz.crearKeko('Bodega');
     const bodegaFz = await negFz.crearCompra({ furni_id: dragonFz.furni, cantidad: 1, precio_compra: 40, keko: 'Bodega' });
     await negFz.publicarLote(bodegaFz.id, { precio_lista: 80 });
@@ -2278,12 +2305,12 @@ async function main() {
     const viejoFz = await fantasmaFz('fz14', 995014, { token: tkViejoFz.token, keko: 'Viejo' });
     await fotoFz([], 'Viejo', tkViejoFz.token);
     await sqlQFz("update public.inventario_habbo set recibido_en = now() - interval '3 hours' where keko = 'Viejo'");
-    const fFz = await fotoFz([{ sprite_id: 995003, cantidad: 2 }, { sprite_id: 995005, cantidad: 1 }, { sprite_id: 995009, cantidad: 1 }]);
+    const fFz = await fotoFz([{ sprite_id: 995003, cantidad: 2 }, { sprite_id: 995005, cantidad: 1 }, { sprite_id: 995009, cantidad: 1 },
+      { sprite_id: 995017, cantidad: 1 }, { sprite_id: 995018, cantidad: 1 }, { sprite_id: 995019, cantidad: 1 }, { sprite_id: 995020, cantidad: 1 }]);
     assert.deepEqual(fFz.regresos.map((x) => x.sprite_id), [995005], 'lo real que se recogio de «Expirado» lo devuelve la foto');
     // La foto es de hace 20 min (lo de fz6 caduco despues) y Habbo trae de fz10 uno sin numero y el
     // LTD #77, que la app tiene en la mano (un LTD no cuenta como unidad sin numero).
-    const furniSobraFz = (await sqlQFz('select furni_id from public.compras where id = $1', [sobraFz]))[0].furni_id;
-    await negFz.crearCompra({ furni_id: furniSobraFz, cantidad: 1, precio_compra: 50, keko: 'Ux_Data', numero_ltd: 77 });
+    await negFz.crearCompra({ furni_id: await furniDeFz(sobraFz), cantidad: 1, precio_compra: 50, keko: 'Ux_Data', numero_ltd: 77 });
     await sqlQFz("update public.inventario_habbo set recibido_en = now() - interval '20 minutes', "
       + "furnis = furnis || '[{\"sprite_id\": 995010, \"tipo\": \"suelo\", \"cantidad\": 2, \"ltds\": [77]}]'::jsonb where keko = 'Ux_Data'");
     await evFz([{ tipo_evento: 'venta', id_externo: 'fz11_v', oferta_id: null, hotel: 'es', keko: 'Ux_Data', sprite_id: 995011, tipo: 'suelo', precio: 70, numero_ltd: null, fecha: Date.now() }]);
@@ -2291,23 +2318,39 @@ async function main() {
     const totalFz = async () => (await sqlQFz('select count(*)::int n from public.compras'))[0].n;
     const ventasAntesFz = await ventasFz();
     const totalAntesFz = await totalFz();
-    const esperadosFz = [...dragonFz.viejo, ...sofaFz.viejo, ...fusionFz.viejo, ...patitaFz.viejo, ...enManoFz.viejo].sort((a, b) => a - b);
+    const esperadosFz = [...dragonFz.viejo, ...sofaFz.viejo, ...fusionFz.viejo, ...patitaFz.viejo, ...enManoFz.viejo, husoFz].sort((a, b) => a - b);
 
     // 1-revisar: no cambia nada y marca BORRAR solo los fantasmas.
     const planRFz = await correrFz('1-revisar.sql');
     assert.equal(await totalFz(), totalAntesFz, 'revisar no cambia nada');
-    assert.deepEqual([planRFz[0].accion, planRFz[0].borrar], ['TOTAL', 6]);
+    assert.deepEqual([planRFz[0].accion, planRFz[0].borrar], ['TOTAL', 7]);
     assert.deepEqual(idsFz(planRFz.filter((p) => p.accion === 'BORRAR').flatMap((p) => idsFz(p.lotes))), esperadosFz, 'solo los fantasmas');
     const noFz = planRFz.filter((p) => p.accion === 'NO SE TOCA');
     const porFz = (re) => noFz.filter((p) => re.test(p.motivo)).length;
-    assert.deepEqual([porFz(/Caducó después/), porFz(/No hay otra copia/), porFz(/1 más en la mano/), porFz(/no envía su inventario/), porFz(/^Sin keko/), porFz(/hace 18\d min/), noFz.length],
-      [2, 3, 1, 1, 1, 1, 9], 'lo que no se toca: caduco despues de la foto (o menos de 15 min antes), LTD sin otra copia (o con todas caducadas), sobra en Habbo, keko manual, sin keko y foto vieja');
+    assert.deepEqual([porFz(/Caducó después/), porFz(/No hay otra copia/), porFz(/1 más en la mano/), porFz(/no envía su inventario/), porFz(/^Sin keko/), porFz(/hace 18\d min/),
+      porFz(/^Sin huella/), porFz(/^Solo 1 se volvieron a registrar .* hay 2 caducadas/), noFz.length],
+      [2, 3, 1, 1, 1, 1, 3, 1, 13], 'lo que no se toca: caduco despues de la foto (o menos de 15 min antes), LTD sin otra copia (o con todas caducadas), sobra en Habbo, keko manual, sin keko, foto vieja, sin huella (real en «Expirado», «+ Compra», entrada de antes) y menos entradas que caducadas');
+
+    // El aviso de la app (JS) da exactamente las mismas filas que el paso 1 (SQL).
+    const [lotesFz, furnisFz, fotosFz] = (await Promise.all([
+      fz.from('compras').select('id, keko, furni_id, cantidad, estado, numero_ltd, publicado_en, notas, fecha_compra'),
+      fz.from('furnis').select('id, nombre, sprite_id, tipo'),
+      fz.from('inventario_habbo').select('keko, recibido_en, furnis'),
+    ])).map((r) => r.data);
+    const filaFz = (p) => [p.accion, p.keko === null ? '(sin keko)' : p.keko, p.furni, p.caducadas, p.borrar, p.motivo.replace(/hace \d+ min/, 'hace N min'), idsFz(p.lotes).join(',')].join(' | ');
+    const planJsFz = planFantasmas({ lotes: lotesFz, furnis: furnisFz, fotos: fotosFz });
+    assert.deepEqual(planJsFz.map(filaFz).sort(), planRFz.slice(1).map(filaFz).sort(), 'el aviso y el paso 1 dan las mismas filas, con los mismos motivos');
+    assert.ok(planJsFz.filter((f) => !f.fantasma).every((f) => f.unidades === 0 && f.lotes_fantasma.length === 0), 'lo que no es fantasma no suma en el aviso');
+    const avisoFz = await negFz.fantasmas();
+    assert.deepEqual([avisoFz.disponible, avisoFz.migracion21, avisoFz.unidades, avisoFz.lotes, avisoFz.kekos.slice().sort()], [true, true, 8, 7, ['Ux_Data', 'Viejo']],
+      'el aviso: los 7 de Ux_Data y el de Viejo, aunque su inventario sea viejo (el paso 1 pedira uno nuevo)');
+    assert.deepEqual(avisoFz.fantasmas.filter((f) => !f.inventario_reciente).map((f) => [f.keko, f.lotes_fantasma]), [['Viejo', viejoFz.viejo]]);
 
     // 2-limpiar: borra exactamente eso, con copia; ventas, Auditoria y lo demas igual.
     const limpioFz = await correrFz('2-limpiar.sql');
     assert.deepEqual(idsFz(limpioFz.filter((b) => b.accion === 'BORRADO').map((b) => b.lote)), esperadosFz);
-    assert.match(limpioFz[0].furni, /Se borraron 6 unidades fantasma \(5 lotes\)/);
-    assert.deepEqual([await totalFz(), (await sqlQFz('select count(*)::int n from public.compras where id = any($1)', [esperadosFz]))[0].n], [totalAntesFz - 5, 0]);
+    assert.match(limpioFz[0].furni, /Se borraron 7 unidades fantasma \(6 lotes\)/);
+    assert.deepEqual([await totalFz(), (await sqlQFz('select count(*)::int n from public.compras where id = any($1)', [esperadosFz]))[0].n], [totalAntesFz - 6, 0]);
     assert.deepEqual(await ventasFz(), ventasAntesFz, 'las ventas y la ganancia realizada no cambian');
     const estadoFz = async (id) => ((await sqlQFz('select estado from public.compras where id = $1', [id]))[0] || {}).estado;
     assert.deepEqual(await Promise.all([tardeFz, margenFz, ltdSoloFz, sobraFz, viejoFz.viejo[0], dragonFz.nuevo[0], patitaFz.nuevo[0], bodegaFz.id, sinKekoFz.id, realFz, vigenteFz].map(estadoFz)),
@@ -2317,6 +2360,7 @@ async function main() {
       [{ a: false, b: false }], 'la copia no la ve la app ni la clave publica');
     assert.equal((await correrFz('1-revisar.sql'))[0].borrar, 0);
     assert.match((await correrFz('2-limpiar.sql'))[0].furni, /Se borraron 0 unidades/, 'otra vez no borra nada');
+    assert.deepEqual((await negFz.fantasmas()).kekos, ['Viejo'], 'limpio Ux_Data, el aviso solo sigue por el keko del inventario viejo');
 
     // Otra limpieza con un fantasma nuevo; 3-deshacer devuelve primero esa y luego la anterior, una vez cada una.
     const nuevoFz = await fantasmaFz('fz15', 995015);
@@ -2325,11 +2369,11 @@ async function main() {
     const restFz = await correrFz('3-deshacer.sql');
     assert.deepEqual(idsFz(restFz.map((x) => x.lote)), esperadosFz, 'luego la anterior');
     assert.deepEqual((await sqlQFz('select estado, count(*)::int n, sum(cantidad)::int u from public.compras where id = any($1) group by estado', [esperadosFz])),
-      [{ estado: 'publicado', n: 5, u: 6 }]);
+      [{ estado: 'publicado', n: 6, u: 7 }]);
     assert.deepEqual(await correrFz('3-deshacer.sql'), [], 'ya no queda nada por restaurar');
-    assert.equal((await correrFz('1-revisar.sql'))[0].borrar, 7);
+    assert.equal((await correrFz('1-revisar.sql'))[0].borrar, 8);
     await fz.cerrar();
-    ok('limpieza de los fantasmas de antes de la 1.10.0 (SQL Editor): revisar no cambia nada y usa el mismo plan que limpiar; solo borra lo publicado y caducado que la foto reciente no explica (sin numero: Habbo no tiene mas en la mano que la app; LTD: otra copia buena), nunca lo que caduco despues de la foto, lo vigente, lo sin keko, los kekos manuales ni con foto vieja; las ventas y la Auditoria no cambian; la copia no la ve la app y deshacer los devuelve tal cual');
+    ok('fantasmas de antes de la 1.10.0: el aviso de la app y el paso 1 del SQL Editor dan las mismas filas; revisar no cambia nada y usa el mismo plan que limpiar; solo borra lo caducado con huella que la foto reciente no explica (sin numero: una «Entrada con costo» de la Auditoria desde que caduco, por todas las unidades, y Habbo no tiene mas en la mano; LTD: otra copia buena), nunca lo real en «Expirado», lo arreglado con «+ Compra», lo que caduco despues de la foto, lo vigente, lo sin keko, los kekos manuales ni con foto vieja; las ventas y la Auditoria no cambian; la copia no la ve la app y deshacer los devuelve tal cual');
 
     // ── Modo demo: «Venta» y «Venta por asignar» pasan por la funcion real del Sniper ──
     const { crearDemo } = require('../backend/services/demo');

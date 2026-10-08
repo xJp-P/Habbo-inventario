@@ -9,8 +9,12 @@
 --     60 min, y que caduco al menos 15 min ANTES de ese inventario (lo que caduco despues puede
 --     seguir en la pestana «Expirado» de Habbo).
 --   - Sin numero LTD: es fantasma si el inventario de Habbo NO tiene en la mano mas unidades de ese
---     furni que la app (si las tuviera, seria lo caducado que volvio, y la app lo devuelve sola).
+--     furni que la app (si las tuviera, seria lo caducado que volvio, y la app lo devuelve sola) Y
+--     tiene la HUELLA de la duplicacion: en ese keko se volvieron a registrar con «Entrada con costo»
+--     (la Auditoria) al menos tantas unidades como caducadas, el dia en que caducaron o despues. Sin
+--     huella puede ser una oferta real que espera en «Expirado»: no se toca.
 --   - Con numero LTD: es fantasma si la app ya tiene otra copia con ese numero que no esta caducada.
+--   - Es la misma regla del aviso de la app (backend/core/fantasmas.js, v1.10.1).
 --   - Nunca toca lo vigente, lo sin keko, los kekos sin inventario (manuales) ni nada en mano o vendido.
 --
 -- ANTES de correrlo: en Habbo, recoge todo lo de la pestana «Expirado» de cada keko y espera unos
@@ -23,7 +27,8 @@
 -- >>> PLAN (este bloque es identico en 1-revisar.sql y 2-limpiar.sql: npm run verificar lo comprueba)
 create or replace temporary view fantasmas_plan as
 with reglas as (
-  select interval '60 minutes' as inventario_max, interval '15 minutes' as margen
+  select interval '60 minutes' as inventario_max, interval '15 minutes' as margen,
+         interval '14 hours' as husos, 'Entrada por auditoria del inventario'::text as nota_entrada
 ),
 fotos as (
   select i.propietario, i.keko, i.recibido_en, i.furnis, i.recibido_en >= now() - r.inventario_max as reciente
@@ -47,12 +52,24 @@ mano as (
    where c.estado = 'comprado' and c.keko is not null and f.sprite_id is not null
    group by c.propietario, c.keko, f.sprite_id, f.tipo
 ),
+entradas as (
+  -- La huella: lo registrado con «Entrada con costo» en la Auditoria (su nota fija; las partes de
+  -- un lote la conservan al publicar, vender o dividir), en cualquier estado.
+  select c.propietario, c.keko, f.sprite_id, f.tipo, c.fecha_compra, c.cantidad
+    from public.compras c
+    join public.furnis f on f.id = c.furni_id and f.propietario = c.propietario
+   cross join reglas r
+   where c.notas = r.nota_entrada and c.numero_ltd is null and c.keko is not null and f.sprite_id is not null
+),
 caducadas as (
   select c.id, c.propietario, c.keko, c.furni_id, c.cantidad, c.numero_ltd, f.sprite_id, f.tipo, f.nombre,
          fo.recibido_en, coalesce(fo.reciente, false) as reciente, fo.keko is not null as con_inventario,
          fo.keko is not null
            and (c.publicado_en is null
-                or c.publicado_en + public.caducidad_mercadillo() <= fo.recibido_en - r.margen) as antes_del_inventario
+                or c.publicado_en + public.caducidad_mercadillo() <= fo.recibido_en - r.margen) as antes_del_inventario,
+         -- el dia (con margen por la hora del equipo) desde el que una entrada cuenta como huella
+         coalesce(((c.publicado_en + public.caducidad_mercadillo() - r.husos) at time zone 'UTC')::date,
+                  date '1900-01-01') as huella_desde
     from public.compras c
     join public.furnis f on f.id = c.furni_id and f.propietario = c.propietario
    cross join reglas r
@@ -65,7 +82,8 @@ grupos as (
          sum(k.cantidad)::integer as caducadas,
          coalesce(sum(k.cantidad) filter (where k.antes_del_inventario), 0)::integer as comprobables,
          coalesce(array_agg(k.id order by k.id) filter (where k.antes_del_inventario), '{}'::bigint[]) as lotes,
-         false as repetido
+         false as repetido,
+         min(k.huella_desde) filter (where k.antes_del_inventario) as desde
     from caducadas k
    where k.numero_ltd is null
    group by k.propietario, k.keko, k.sprite_id, k.tipo, case when k.sprite_id is null then k.furni_id end
@@ -79,7 +97,8 @@ grupos as (
                    join public.furnis f2 on f2.id = o.furni_id and f2.propietario = o.propietario
                   where o.propietario = k.propietario and o.id <> k.id and o.numero_ltd = k.numero_ltd
                     and (o.furni_id = k.furni_id or (k.sprite_id is not null and f2.sprite_id = k.sprite_id and f2.tipo = k.tipo))
-                    and not (o.estado = 'publicado' and public.oferta_caducada(o.publicado_en)))
+                    and not (o.estado = 'publicado' and public.oferta_caducada(o.publicado_en))),
+         null::date
     from caducadas k
    where k.numero_ltd is not null
 ),
@@ -88,7 +107,10 @@ cuentas as (
          greatest(coalesce(h.cantidad - cardinality(h.ltds), 0), 0) as habbo_sin_numero,
          coalesce(m.sin_numero, 0) as app_sin_numero,
          coalesce(g.numero_ltd = any(h.ltds), false) as ltd_en_habbo,
-         coalesce(g.numero_ltd = any(m.ltds), false) as ltd_en_app
+         coalesce(g.numero_ltd = any(m.ltds), false) as ltd_en_app,
+         coalesce((select sum(e.cantidad) from entradas e
+                    where e.propietario = g.propietario and e.keko = g.keko and e.sprite_id = g.sprite_id
+                      and e.tipo = g.tipo and e.fecha_compra >= g.desde), 0)::integer as entradas
     from grupos g
     left join habbo h on h.propietario = g.propietario and h.keko = g.keko and h.sprite_id = g.sprite_id and h.tipo = g.tipo
     left join mano m on m.propietario = g.propietario and m.keko = g.keko and m.sprite_id = g.sprite_id and m.tipo = g.tipo
@@ -110,6 +132,11 @@ decision as (
            when c.numero_ltd is null and c.habbo_sin_numero > c.app_sin_numero then
              format('En Habbo tienes %s más en la mano que en la app: el próximo inventario lo devuelve solo a Comprado.',
                     c.habbo_sin_numero - c.app_sin_numero)
+           when c.numero_ltd is null and c.entradas = 0 then
+             'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Lo más probable es que siga en «Expirado» de Habbo: recógelo y la app lo devuelve sola a Comprado.'
+           when c.numero_ltd is null and c.entradas < c.comprobables then
+             format('Solo %s se volvieron a registrar con «Entrada con costo» y hay %s caducadas: revísalo a mano.',
+                    c.entradas, c.comprobables)
            when c.numero_ltd is not null and c.ltd_en_habbo and not c.ltd_en_app then
              'Este LTD está en tu mano en Habbo: el próximo inventario lo devuelve solo a Comprado.'
            when c.numero_ltd is not null and not c.repetido then
@@ -124,8 +151,8 @@ select d.propietario, d.keko, d.recibido_en, d.numero_ltd,
        case when d.no_se_toca is null then d.comprobables else 0 end as borrar,
        coalesce(d.no_se_toca,
                 case when d.numero_ltd is null
-                     then format('Fantasma: Habbo tiene %s en la mano y la app ya cuenta %s; esta oferta caducada no está en ningún lado.',
-                                 d.habbo_sin_numero, d.app_sin_numero)
+                     then format('Fantasma: se volvió a registrar con «Entrada con costo» (%s desde que caducó) y Habbo no tiene más en la mano que la app (%s y %s).',
+                                 d.entradas, d.habbo_sin_numero, d.app_sin_numero)
                      else format('Fantasma: el LTD #%s está repetido y la otra copia es la buena.', d.numero_ltd)
                 end
                 || case when d.caducadas > d.comprobables

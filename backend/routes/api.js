@@ -65,6 +65,8 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
 
   // ── Auditoria del inventario de Habbo (por keko) ─────────────────────────
   r.get('/api/auditoria', async (req, res) => res.json(await negocio.auditoria(req.query.keko)));
+  // Furnis fantasma de antes de la 1.10.0 (v1.10.1): solo lectura, para el aviso.
+  r.get('/api/fantasmas', async (req, res) => res.json(await negocio.fantasmas()));
   r.get('/api/auditoria/resumen', async (_req, res) => res.json(await negocio.resumenAuditoria()));
   r.post('/api/auditoria/mover', async (req, res) => res.json(await negocio.moverAKeko(req.body || {})));
   r.post('/api/auditoria/baja', async (req, res) => res.json(await negocio.darDeBaja(req.body || {})));
