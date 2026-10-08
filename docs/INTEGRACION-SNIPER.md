@@ -180,7 +180,17 @@ Nunca envíes una foto a medias (una carga de varios fragmentos sin terminar, o 
   "resumen": { "coinciden": 2, "sobrantes": 1, "faltantes": 0, "ltd": 0, "no_registrados": 0, "sin_keko": 0, "excluidos": 0 } }
 ```
 
-Los elementos inválidos (sin `sprite_id` ni `nombre` conocido, cantidad no válida) van a `errores` con su `indice` sin frenar el resto. El `resumen` sirve para el log del bot (p. ej. «3 diferencias»). Errores: 401 token inválido o revocado; 400 falta `keko`, hotel no admitido o `inventario` no es una lista; 404 (`PGRST202`) falta ejecutar la migración **en el proyecto al que apunta el bot** (si la app no avisa en ámbar, el bot usa otro proyecto: ver la tabla de la sección 3).
+Los elementos inválidos (sin `sprite_id` ni `nombre` conocido, cantidad no válida) van a `errores` con su `indice` sin frenar el resto. El `resumen` sirve para el log del bot (p. ej. «3 diferencias»).
+
+**Lo que vuelve del Mercadillo (requiere `20261017000000_regreso_mercadillo.sql`):** una oferta dura **168 horas (7 días)**. Si vence sin venderse, el furni vuelve al inventario del keko y no hay ninguna retirada que interceptar, así que el bot no manda `recuperar`. La foto lo resuelve sola: antes de comparar, la base devuelve a `comprado` lo que ese keko tiene publicado hace 168 h o más si la foto lo trae en la mano (un sobrante de ese furni), hasta ese sobrante, lo del Sniper primero y un LTD solo si viene su número. La respuesta trae además `regresos`, una entrada por furni devuelto, con la misma forma que la respuesta a un `recuperar`:
+
+```json
+"regresos": [ { "furni_id": 12, "nombre": "Trono HC", "keko": "NombreDelKeko", "sprite_id": 4623, "tipo": "suelo",
+                "cantidad": 1, "faltante": 0, "automatico": true, "causa": "caducada",
+                "lotes": [ { "desde_lote": 58, "hacia_lote": 57, "cantidad": 1, "publicado_en": "…", "publicado_por": "sniper", "precio_lista": 150, "moneda_lista": "creditos", "numero_ltd": null } ] } ]
+```
+
+El bot no tiene que hacer nada nuevo (puede ignorar el campo o anotarlo en su log). Las retiradas que sí intercepta siguen yendo como `recuperar`, por la misma cola y antes de la foto, como hasta ahora. Errores: 401 token inválido o revocado; 400 falta `keko`, hotel no admitido o `inventario` no es una lista; 404 (`PGRST202`) falta ejecutar la migración **en el proyecto al que apunta el bot** (si la app no avisa en ámbar, el bot usa otro proyecto: ver la tabla de la sección 3).
 
 ---
 

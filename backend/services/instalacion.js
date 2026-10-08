@@ -46,6 +46,7 @@ const MIGRACIONES = [
   { archivo: '20261014000000_inventario_por_keko.sql', titulo: 'Inventario y Mercadillo por keko (cada acción en su keko)', sonda: funcion('publicar_furni', { p_furni_id: -1, p_sin_keko: false }) },
   { archivo: '20261015000000_ventas_sniper.sql', titulo: 'Ventas del Sniper (y las que quedan por asignar)', sonda: funcion('descartar_venta_por_asignar', { p_id: -1 }) },
   { archivo: '20261016000000_hora_ventas_manuales.sql', titulo: 'La hora de las ventas que registras a mano (Historial de ventas)', sonda: funcion('vender_lote', { p_id: -1, p_vendido_en: '2026-01-01T00:00:00Z' }) },
+  { archivo: '20261017000000_regreso_mercadillo.sql', titulo: 'Los furnis que vuelven del Mercadillo (ofertas caducadas)', sonda: funcion('devolver_del_mercadillo', { p_keko: 'sonda', p_furni_id: -1 }) },
 ];
 
 const FALTA = new Set(['PGRST202', '42883', '42703', 'PGRST204', 'PGRST205', '42P01']);

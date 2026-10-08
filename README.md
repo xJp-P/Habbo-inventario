@@ -101,6 +101,7 @@ Las migraciones son los archivos de [`supabase/migrations/`](supabase/migrations
 | 18 | `20261014000000_inventario_por_keko.sql` | Inventario y Mercadillo por keko: cada acción en su keko y las partes de un lote conservan su keko |
 | 19 | `20261015000000_ventas_sniper.sql` | Ventas del Sniper: cada venta del mercadillo pasa a Vendido en su keko; lo que no casa queda por asignar |
 | 20 | `20261016000000_hora_ventas_manuales.sql` | Las ventas que registras a mano guardan su hora (si son de hoy) y quedan marcadas como manuales |
+| 21 | `20261017000000_regreso_mercadillo.sql` | Los furnis cuya oferta caducó (7 días) vuelven solos a Comprado cuando el Sniper los ve en el inventario; lo demás, con «Volvió del Mercadillo» en la Auditoría |
 
 Para cada archivo, en orden:
 

@@ -5,6 +5,11 @@
 // vender_furni, retirar_furni y el evento recuperar del Sniper. Tambien lo cargan las
 // pruebas en Node (public/js/package.json lo marca como modulo ES).
 
+// Horas que dura una oferta en el Mercadillo de Habbo.es antes de vencer (antes eran 48).
+// Es un dato del juego: el mismo numero vive en caducidad_mercadillo() de la base
+// (migracion 20261017000000) y verificar exige que coincidan.
+export var CADUCIDAD_MERCADILLO_H = 168;
+
 // Lotes publicados en orden FIFO: publicado_en ascendente (sin fecha primero) y luego id.
 export function ordenFifoPublicados(lotes) {
   return lotes.slice().sort(function (a, b) {

@@ -1002,8 +1002,8 @@ async function main() {
     await rechaza(negocio.eliminarCompra(loteA.id), /Retíralo primero/);
     await rechaza(negocio.publicarLote(loteA.id, { precio_lista: 10 }), /Solo se publica un lote comprado/);
     await rechaza(negocio.publicarLote(loteB.id, { cantidad: 5, precio_lista: 10 }), /Solo hay 1 unidad/);
-    await rechaza(negocio.retirarLote(p1.id), /lo publico el Sniper/);
-    ok('publicar a mano: exige precio de lista; una parte (el lote se divide) o todo; retirar lo devuelve; lo del Sniper no se retira desde la app');
+    await rechaza(negocio.retirarLote(p1.id), /lo publicó el Sniper y su oferta sigue vigente/);
+    ok('publicar a mano: exige precio de lista; una parte (el lote se divide) o todo; retirar lo devuelve; lo del Sniper con la oferta vigente no se retira desde la app');
 
     r = await sniper([{ tipo_evento: 'publicar', id_externo: 'pub_sak', sprite_id: sakura.sprite_id, cantidad: 1, precio_lista: 190, moneda: 'creditos', hotel: 'es' }]);
     assert.equal(r.data.procesados, 1);
@@ -1450,7 +1450,7 @@ async function main() {
     await pk.cerrar();
 
     // Sin la migracion 18: si el furni solo esta en ese keko, se hace igual; si hay lotes de otro, 428.
-    const pk17 = await crearClienteLocal({ omitir: ['20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
+    const pk17 = await crearClienteLocal({ omitir: ['20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await pk17.crearUsuario('pk17@prueba.local', 'clave-pk17');
     await pk17.auth.signInWithPassword({ email: 'pk17@prueba.local', password: 'clave-pk17' });
     const conex17 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: pk17 });
@@ -1735,7 +1735,7 @@ async function main() {
     assert.ok((await vs.from('ventas_por_asignar').select('id').eq('keko', 'Ux_Data')).data.length > 0, 'las de otros kekos se quedan');
     await vs.cerrar();
     // Sobre una base con la 18: la venta se rechaza (sin registrarse); con la migracion (dos veces) ya entra.
-    const v18 = await crearClienteLocal({ omitir: ['20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
+    const v18 = await crearClienteLocal({ omitir: ['20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await v18.crearUsuario('v18@prueba.local', 'clave-v18');
     await v18.auth.signInWithPassword({ email: 'v18@prueba.local', password: 'clave-v18' });
     const conex18 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: v18 });
@@ -1804,7 +1804,7 @@ async function main() {
     assert.deepEqual([(await negHm.actualizarCompra(vendHoy.id, { fecha_venta: '2026-09-30' })).vendido_en, (await loteHm(vendHoy.id)).vendido_por], [null, 'manual']);
     // Sin la migracion 20 (una base con la 19): se reintenta sin la hora y nunca se pierde el keko.
     await hm.cerrar();
-    const h19 = await crearClienteLocal({ omitir: ['20261016000000_hora_ventas_manuales.sql'] });
+    const h19 = await crearClienteLocal({ omitir: ['20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await h19.crearUsuario('h19@prueba.local', 'clave-h19');
     await h19.auth.signInWithPassword({ email: 'h19@prueba.local', password: 'clave-h19' });
     const conexH19 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: h19 });
@@ -1830,7 +1830,7 @@ async function main() {
     const mig20 = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261016000000_hora_ventas_manuales.sql'), 'utf8');
     await h19.pg.exec(mig20);
     await h19.pg.exec(mig20);
-    assert.equal((await crearServicioInstalacion().comprobar(h19.comoAnon())).completa, true);
+    assert.equal((await crearServicioInstalacion().comprobar(h19.comoAnon())).siguiente, '20261017000000_regreso_mercadillo.sql', 'el asistente ya ve la 20');
     vHm = await negH19.venderFurni(aH19.furni_id, { cantidad: 1, keko: 'KekoB' });
     fHm = await loteHm(vHm.ventas[0].venta_id, h19);
     assert.deepEqual([fHm.keko, fHm.vendido_por, deAhora(fHm.vendido_en)], ['KekoB', 'manual', true], 'tras la migracion, la venta de hoy trae su hora');
@@ -1909,6 +1909,218 @@ async function main() {
     await hb.cerrar();
     ok('historial contra la base: cada venta (Sniper, a mano de hoy y de otro dia, tradeo en lingos, Excel) gana lo mismo que en el Inventario y el Mercadillo, y los totales son los del Resumen al centimo, tambien con otra tasa y tras deshacer una venta; las por asignar aparte');
 
+    // ── Lo que vuelve del Mercadillo (migracion 20261017000000) ──
+    // Una oferta dura 168 h. Si vence, el furni vuelve al inventario sin que el Sniper avise:
+    // la foto lo prueba. Lo caducado del mismo keko vuelve solo; lo demas, con un clic.
+    const rm = await crearClienteLocal();
+    await rm.crearUsuario('rm@prueba.local', 'clave-rm');
+    await rm.auth.signInWithPassword({ email: 'rm@prueba.local', password: 'clave-rm' });
+    const conexRm = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: rm });
+    await conexRm.iniciar();
+    const negRm = crearServicioNegocio({ conexion: conexRm, furnidata });
+    const anonRm = rm.comoAnon();
+    const tkRm = await negRm.crearToken('VPS Regresos');
+    const fotoRm = async (inventario, keko = 'Ux_Data', token = tkRm.token) => {
+      const r = await anonRm.rpc('auditar_inventario', { token_sniper: token, keko, hotel: 'es', inventario });
+      assert.equal(r.error, null);
+      return r.data;
+    };
+    const evRm = async (eventos, token = tkRm.token) => (await anonRm.rpc('registrar_eventos_sniper', { token_sniper: token, eventos })).data;
+    const lotesRm = async (sprite) => (await rm.pg.query('select c.id, c.estado, c.cantidad, c.keko, c.numero_ltd, c.publicado_por from public.compras c '
+      + 'join public.furnis f on f.id = c.furni_id where f.sprite_id = $1 order by c.id', [sprite])).rows;
+    const loteDe = async (sprite, id) => (await lotesRm(sprite)).find((l) => l.id === id);
+    const filaRm = async (sprite) => (await negRm.auditoria('Ux_Data')).filas.find((x) => x.sprite_id === sprite);
+    const devolverRm = (furni, cantidad = null) => rm.rpc('devolver_del_mercadillo', { p_keko: 'Ux_Data', p_furni_id: furni, p_cantidad: cantidad });
+    const DIA = 24 * H;
+    const hace = (dias) => Date.now() - dias * DIA;
+    const envejecer = (id, dias) => rm.pg.query('update public.compras set publicado_en = $2 where id = $1', [id, new Date(hace(dias)).toISOString()]);
+    await fotoRm([]);
+
+    // A) Publicado por el Sniper hace 8 dias y la foto lo trae: vuelve solo, a su lote de origen.
+    const RA = 991001;
+    let rRm = await evRm([compraVs('rm_ca', RA, 3, 100)]);
+    const furniA = rRm.eventos[0].furni_id;
+    await negRm.activarPendientes({ furni_id: furniA });
+    rRm = await evRm([publicarVs('rm_pa', RA, 2, 150, hace(8))]);
+    const pubRA = rRm.eventos[0].lotes[0].lote_id;
+    const origenA = rRm.eventos[0].lotes[0].origen_id;
+    let fRm = await fotoRm([{ sprite_id: RA, cantidad: 2 }]);
+    assert.equal(fRm.regresos.length, 1);
+    const regA = fRm.regresos[0];
+    assert.deepEqual([regA.furni_id, regA.keko, regA.cantidad, regA.causa, regA.automatico, regA.lotes[0].desde_lote, regA.lotes[0].hacia_lote, regA.lotes[0].publicado_por],
+      [furniA, 'Ux_Data', 1, 'caducada', true, pubRA, origenA, 'sniper']);
+    assert.deepEqual((await lotesRm(RA)).map((l) => [l.id, l.estado, l.cantidad]), [[origenA, 'comprado', 2], [pubRA, 'publicado', 1]],
+      'solo hasta el sobrante: una vuelve a su lote de origen y la otra sigue publicada');
+    assert.equal(fRm.resumen.sobrantes, 0, 'no llega a la Auditoria');
+    const bitRm = (await rm.from('eventos_sniper').select('id_externo,tipo_evento,cantidad,token_id,datos,resultado').eq('tipo_evento', 'recuperar')).data;
+    assert.deepEqual([bitRm.length, bitRm[0].token_id, bitRm[0].cantidad, bitRm[0].datos.automatico, bitRm[0].datos.causa, bitRm[0].resultado.furni_id],
+      [1, tkRm.id, 1, true, 'caducada', furniA], 'queda en la bitacora como un recuperar automatico');
+    assert.match(bitRm[0].id_externo, /^reg_\d+_\d+$/);
+    fRm = await fotoRm([{ sprite_id: RA, cantidad: 2 }]);
+    assert.deepEqual([fRm.regresos, (await lotesRm(RA)).map((l) => l.cantidad)], [[], [2, 1]], 'la misma foto otra vez no devuelve nada mas');
+    // Si su lote de origen sigue «por revisar», no se mete en el: vuelve como lote aparte, ya revisado.
+    const RA2 = 991010;
+    rRm = await evRm([compraVs('rm_ca2', RA2, 2, 100), publicarVs('rm_pa2', RA2, 1, 150, hace(8))]);
+    await fotoRm([{ sprite_id: RA2, cantidad: 2 }]);
+    assert.deepEqual((await rm.pg.query('select c.estado, c.cantidad, c.pendiente from public.compras c join public.furnis f on f.id = c.furni_id where f.sprite_id = $1 order by c.id', [RA2])).rows
+      .map((l) => [l.estado, l.cantidad, l.pendiente]), [['comprado', 1, true], ['comprado', 1, false]]);
+
+    // B) Publicado hace 2 dias: no vuelve solo (pudo entrar otra unidad igual por un tradeo con la
+    //    oferta abierta). La fila del sobrante lo dice y «Volvió del Mercadillo» lo devuelve, hasta el sobrante.
+    const RB = 991002;
+    rRm = await evRm([compraVs('rm_cb', RB, 2, 50), publicarVs('rm_pb', RB, 2, 80, hace(2))]);
+    const furniB = rRm.eventos[0].furni_id;
+    const pubRB = rRm.eventos[1].lotes[0].lote_id;
+    fRm = await fotoRm([{ sprite_id: RB, cantidad: 1 }]);
+    assert.deepEqual(fRm.regresos, []);
+    const filaB = await filaRm(RB);
+    assert.deepEqual([filaB.categoria, filaB.diferencia, filaB.publicadas.unidades, filaB.publicadas.caducadas, filaB.publicadas.devolvibles],
+      ['sobrante', 1, 2, 0, 2], 'la fila del sobrante trae lo que hay publicado');
+    assert.deepEqual([filaB.publicadas.lotes[0].lote_id, filaB.publicadas.lotes[0].caducada, filaB.publicadas.lotes[0].publicado_por], [pubRB, false, 'sniper']);
+    let dRm = await devolverRm(furniB, 2);
+    assert.match(dRm.error.message, /solo tiene 1 unidad/);
+    dRm = await devolverRm(furniB);
+    assert.deepEqual([dRm.error, dRm.data.cantidad, dRm.data.lotes[0].desde_lote], [null, 1, pubRB]);
+    assert.deepEqual((await lotesRm(RB)).map((l) => [l.estado, l.cantidad, l.keko]), [['publicado', 1, 'Ux_Data'], ['comprado', 1, 'Ux_Data']]);
+    assert.equal(await filaRm(RB), undefined, 'ya cuadra');
+    dRm = await devolverRm(furniB);
+    assert.match(dRm.error.message, /no tiene unidades de más/, 'sin sobrante en la foto no hay prueba: no se toca');
+    assert.match((await rm.rpc('retirar_lote', { p_id: pubRB })).error.message, /sigue vigente/, 'lo del Sniper con la oferta vigente no se retira desde la app');
+
+    // C) Caducada, pero la foto no la trae (sigue en «Mis ofertas» o se vendio): no se toca. Desde la
+    //    app ya se puede retirar: una oferta vencida no puede estar a la venta.
+    const RC = 991003;
+    rRm = await evRm([compraVs('rm_cc', RC, 1, 30), publicarVs('rm_pc', RC, 1, 60, hace(9))]);
+    const pubRC = rRm.eventos[1].lotes[0].lote_id;
+    fRm = await fotoRm([]);
+    assert.deepEqual([fRm.regresos, (await loteDe(RC, pubRC)).estado], [[], 'publicado']);
+    await negRm.retirarLote(pubRC);
+    assert.deepEqual([(await loteDe(RC, pubRC)).estado, (await loteDe(RC, pubRC)).publicado_por], ['comprado', null], '«Retirar» acepta lo del Sniper ya caducado');
+
+    // D) Lo caducado de OTRO keko nunca vuelve con la foto de este, ni se ofrece.
+    const tkOtro = await negRm.crearToken('VPS Otro');
+    await fotoRm([], 'Otro', tkOtro.token);
+    const RD = 991004;
+    await evRm([compraVs('rm_cd', RD, 1, 20), publicarVs('rm_pd', RD, 1, 40, hace(8))], tkOtro.token);
+    fRm = await fotoRm([{ sprite_id: RD, cantidad: 1 }]);
+    assert.deepEqual([fRm.regresos, (await lotesRm(RD))[0].estado, (await lotesRm(RD))[0].keko], [[], 'publicado', 'Otro']);
+    assert.deepEqual([(await filaRm(RD)).categoria, (await filaRm(RD)).publicadas.unidades], ['sobrante', 0]);
+
+    // E) Un LTD vuelve solo si la foto trae SU numero.
+    const RE = 991005;
+    rRm = await evRm([compraVs('rm_ce', RE, 1, 500, { numero_ltd: 45 }), publicarVs('rm_pe', RE, 1, 900, hace(8))]);
+    fRm = await fotoRm([{ sprite_id: RE, cantidad: 1, ltds: [46] }]);
+    assert.deepEqual([fRm.regresos, (await lotesRm(RE))[0].estado], [[], 'publicado'], 'con otro numero, no');
+    const filaE = await filaRm(RE);
+    assert.deepEqual([filaE.publicadas.unidades, filaE.publicadas.devolvibles, filaE.publicadas.lotes[0].devolvible], [1, 0, false]);
+    assert.match((await devolverRm(rRm.eventos[0].furni_id)).error.message, /No hay unidades publicadas/, '«Volvió del Mercadillo» tampoco toma un LTD con otro numero');
+    fRm = await fotoRm([{ sprite_id: RE, cantidad: 1, ltds: [45] }]);
+    assert.deepEqual([fRm.regresos.length, (await lotesRm(RE))[0].estado, (await lotesRm(RE))[0].numero_ltd], [1, 'comprado', 45], 'con su numero, vuelve');
+
+    // F) Lo del Sniper antes que lo publicado a mano (aunque esto sea mas antiguo) y, dentro, lo
+    //    publicado hace mas tiempo; una parte divide el lote.
+    const RF = 991006;
+    rRm = await evRm([compraVs('rm_cf', RF, 5, 10)]);
+    const furniF = rRm.eventos[0].furni_id;
+    await negRm.activarPendientes({ furni_id: furniF });
+    rRm = await evRm([publicarVs('rm_pf1', RF, 3, 20, hace(10)), publicarVs('rm_pf2', RF, 2, 20, hace(9))]);
+    const pfR1 = rRm.eventos[0].lotes[0].lote_id;
+    const pfR2 = rRm.eventos[1].lotes[0].lote_id;
+    await negRm.crearCompra({ furni_id: furniF, cantidad: 1, precio_compra: 10, keko: 'Ux_Data', fecha_compra: '2026-09-01' });
+    await negRm.publicarFurni(furniF, { cantidad: 1, precio_lista: 20, keko: 'Ux_Data' });
+    const pfRm = (await lotesRm(RF)).find((l) => l.publicado_por === 'manual').id;
+    await envejecer(pfRm, 12);
+    fRm = await fotoRm([{ sprite_id: RF, cantidad: 4 }]);
+    assert.deepEqual(fRm.regresos[0].lotes.map((x) => [x.desde_lote, x.cantidad, x.publicado_por]), [[pfR1, 3, 'sniper'], [pfR2, 1, 'sniper']]);
+    assert.deepEqual([(await loteDe(RF, pfR2)).estado, (await loteDe(RF, pfR2)).cantidad, (await loteDe(RF, pfRm)).estado], ['publicado', 1, 'publicado'],
+      'una parte divide el lote; lo publicado a mano espera');
+    assert.equal((await lotesRm(RF)).filter((l) => l.estado === 'comprado').reduce((s, l) => s + l.cantidad, 0), 4);
+
+    // G) Un fantasma que se quito de la auditoria tambien vuelve (las exclusiones no cuentan).
+    const RG = 991007;
+    rRm = await evRm([compraVs('rm_cg', RG, 1, 10), publicarVs('rm_pg', RG, 1, 20, hace(1))]);
+    const pubRG = rRm.eventos[1].lotes[0].lote_id;
+    await fotoRm([{ sprite_id: RG, cantidad: 1 }]);
+    const filaRG = await filaRm(RG);
+    await negRm.excluirDeAuditoria({ keko: 'Ux_Data', sprite_id: RG, tipo: 'suelo', unidades: 1, habbo: filaRG.habbo, app: filaRG.app });
+    assert.equal(await filaRm(RG), undefined, 'quitado de la auditoria');
+    await envejecer(pubRG, 8);
+    fRm = await fotoRm([{ sprite_id: RG, cantidad: 1 }]);
+    assert.deepEqual([fRm.regresos.length, (await loteDe(RG, pubRG)).estado], [1, 'comprado']);
+
+    // H) Lo publicado sin keko no vuelve solo (nada prueba donde esta): se ofrece y, al devolverlo,
+    //    pasa al keko de la foto.
+    const RH = 991008;
+    rRm = await evRm([compraVs('rm_ch', RH, 1, 10)]);
+    const furniH = rRm.eventos[0].furni_id;
+    await negRm.crearCompra({ furni_id: furniH, cantidad: 1, precio_compra: 12, fecha_compra: '2026-09-01' });
+    await negRm.publicarFurni(furniH, { cantidad: 1, precio_lista: 30, sin_keko: true });
+    const pubRH = (await lotesRm(RH)).find((l) => l.estado === 'publicado').id;
+    await envejecer(pubRH, 8);
+    fRm = await fotoRm([{ sprite_id: RH, cantidad: 2 }]);
+    assert.deepEqual([fRm.regresos, (await loteDe(RH, pubRH)).estado], [[], 'publicado'], 'sin keko: no vuelve solo');
+    const filaH = await filaRm(RH);
+    assert.deepEqual([filaH.diferencia, filaH.publicadas.unidades, filaH.publicadas.caducadas, filaH.publicadas.lotes[0].keko], [1, 1, 1, null]);
+    assert.equal((await devolverRm(furniH)).error, null);
+    assert.deepEqual([(await loteDe(RH, pubRH)).estado, (await loteDe(RH, pubRH)).keko], ['comprado', 'Ux_Data'], 'pasa al keko de la foto');
+
+    // I) «Retirar» del furni: lo tuyo primero (como siempre) y despues lo del Sniper ya caducado;
+    //    lo del Sniper con la oferta vigente, nunca.
+    const RI = 991009;
+    rRm = await evRm([compraVs('rm_ci', RI, 3, 10), publicarVs('rm_pi1', RI, 1, 20, hace(8)), publicarVs('rm_pi2', RI, 1, 20, hace(1))]);
+    const furniI = rRm.eventos[0].furni_id;
+    const piCad = rRm.eventos[1].lotes[0].lote_id;
+    const piVig = rRm.eventos[2].lotes[0].lote_id;
+    await negRm.activarPendientes({ furni_id: furniI });
+    await negRm.publicarFurni(furniI, { cantidad: 1, precio_lista: 20, keko: 'Ux_Data' });
+    const piMan = (await lotesRm(RI)).find((l) => l.publicado_por === 'manual').id;
+    let rfRm = await negRm.retirarFurni(furniI, { cantidad: 1, keko: 'Ux_Data' });
+    assert.equal(rfRm.lotes[0].desde_lote, piMan, 'lo tuyo primero, aunque lo del Sniper sea mas antiguo');
+    rfRm = await negRm.retirarFurni(furniI, { cantidad: 1, keko: 'Ux_Data' });
+    assert.equal(rfRm.lotes[0].desde_lote, piCad, 'despues, lo del Sniper con la oferta caducada');
+    await rechaza(negRm.retirarFurni(furniI, { cantidad: 1, keko: 'Ux_Data' }), /ni del Sniper con la oferta caducada/);
+    assert.equal((await loteDe(RI, piVig)).estado, 'publicado', 'la oferta vigente sigue publicada');
+
+    // J) Las 168 h de la base son las de la interfaz; el borde exacto ya caduco; sin fecha, caducada.
+    const lotesJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'lotes.js')).href);
+    const bordes = (await rm.pg.query("select extract(epoch from public.caducidad_mercadillo()) / 3600 as horas, "
+      + "public.oferta_caducada(now() - interval '168 hours') as justo, public.oferta_caducada(now() - interval '167 hours 59 minutes') as antes, "
+      + 'public.oferta_caducada(null) as sin_fecha')).rows[0];
+    assert.deepEqual([Number(bordes.horas), bordes.justo, bordes.antes, bordes.sin_fecha], [lotesJs.CADUCIDAD_MERCADILLO_H, true, false, true]);
+
+    // La clave anon no la usa y otro usuario no toca lo tuyo.
+    assert.ok((await anonRm.rpc('devolver_del_mercadillo', { p_keko: 'Ux_Data', p_furni_id: furniB })).error, 'la clave anon no la usa');
+    await rm.crearUsuario('rm2@prueba.local', 'clave-rm2');
+    await rm.auth.signInWithPassword({ email: 'rm2@prueba.local', password: 'clave-rm2' });
+    assert.match((await devolverRm(furniB)).error.message, /Ese furni no existe/, 'otro usuario no toca lo tuyo');
+    await rm.cerrar();
+    ok('lo que vuelve del Mercadillo: lo publicado en el keko hace 168 h o mas vuelve solo a Comprado cuando la foto lo trae (a su lote de origen, hasta el sobrante, lo del Sniper primero, un LTD solo con su numero, nunca de otro keko, aunque se hubiera quitado de la auditoria; queda en la bitacora y la misma foto no repite); lo vigente y lo sin keko se ofrecen y «Volvió del Mercadillo» los devuelve solo con la prueba de la foto; «Retirar» acepta lo del Sniper ya caducado; las 168 h son las de la interfaz');
+
+    // Sin la migracion 21 (una base con la 20): la foto entra como siempre, sin regresos. Con la
+    // migracion (dos veces), la misma foto devuelve lo caducado.
+    const r20 = await crearClienteLocal({ omitir: ['20261017000000_regreso_mercadillo.sql'] });
+    await r20.crearUsuario('r20@prueba.local', 'clave-r20');
+    await r20.auth.signInWithPassword({ email: 'r20@prueba.local', password: 'clave-r20' });
+    const conexR20 = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: r20 });
+    await conexR20.iniciar();
+    const negR20 = crearServicioNegocio({ conexion: conexR20, furnidata });
+    const tkR20 = await negR20.crearToken('VPS 20');
+    const fotoR20 = async (inventario) => (await r20.comoAnon().rpc('auditar_inventario', { token_sniper: tkR20.token, keko: 'Ux_Data', hotel: 'es', inventario })).data;
+    await fotoR20([]);
+    await r20.comoAnon().rpc('registrar_eventos_sniper', { token_sniper: tkR20.token, eventos: [compraVs('r20_c', RA, 1, 100), publicarVs('r20_p', RA, 1, 150, hace(8))] });
+    let f20 = await fotoR20([{ sprite_id: RA, cantidad: 1 }]);
+    assert.deepEqual([f20.regresos, f20.resumen.sobrantes], [undefined, 1], 'sin la 21: un sobrante, como en la 1.9.0');
+    const est20 = await crearServicioInstalacion().comprobar(r20.comoAnon());
+    assert.deepEqual([est20.completa, est20.siguiente], [false, '20261017000000_regreso_mercadillo.sql'], 'el asistente ve que falta la 21');
+    const mig21 = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261017000000_regreso_mercadillo.sql'), 'utf8');
+    await r20.pg.exec(mig21);
+    await r20.pg.exec(mig21);
+    assert.equal((await crearServicioInstalacion().comprobar(r20.comoAnon())).completa, true);
+    f20 = await fotoR20([{ sprite_id: RA, cantidad: 1 }]);
+    assert.deepEqual([f20.regresos.length, f20.resumen.sobrantes], [1, 0], 'con la migracion, la misma foto lo devuelve');
+    await r20.cerrar();
+    ok('lo que vuelve del Mercadillo sin la migracion 21 (base con la 20): la foto entra como en la 1.9.0 y el asistente pide la 21; la migracion entra (dos veces) y la misma foto devuelve lo caducado');
+
     // ── Modo demo: «Venta» y «Venta por asignar» pasan por la funcion real del Sniper ──
     const { crearDemo } = require('../backend/services/demo');
     const dirDemo = fs.mkdtempSync(path.join(os.tmpdir(), 'hbi-demo-'));
@@ -1951,7 +2163,7 @@ async function main() {
     ok('base local del demo: una migracion que cambio despues de aplicarse se vuelve a correr junto con las posteriores; una base sin huellas vuelve a correr la ultima');
 
     // ── App actualizada sobre una base que aun no tiene la migracion 20261007000000 ──
-    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
+    const sinAuditoria = await crearClienteLocal({ omitir: ['20261007000000_auditoria_inventario.sql', '20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await sinAuditoria.crearUsuario('dani@prueba.local', 'clave-dani');
     await sinAuditoria.auth.signInWithPassword({ email: 'dani@prueba.local', password: 'clave-dani' });
     const conexD = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinAuditoria });
@@ -1970,7 +2182,7 @@ async function main() {
     ok('app 1.1 sobre una base sin la migracion de auditoria: + Compra, la venta manual y los tokens siguen funcionando; la auditoria pide instalarla');
 
     // ── App 1.2 sobre una base con la migracion 11 pero sin la 12 ──
-    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
+    const sinKekos = await crearClienteLocal({ omitir: ['20261008000000_kekos_manuales.sql', '20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await sinKekos.crearUsuario('eva@prueba.local', 'clave-eva');
     await sinKekos.auth.signInWithPassword({ email: 'eva@prueba.local', password: 'clave-eva' });
     const conexE = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinKekos });
@@ -1983,7 +2195,7 @@ async function main() {
     ok('app 1.2 sobre una base sin la migracion de kekos: no hay lista (el formulario no pide keko) y la compra con keko sigue funcionando');
 
     // ── Base con la 12 pero sin la 13: el Sniper ya manda costos y la base los ignora ──
-    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
+    const sinCostos = await crearClienteLocal({ omitir: ['20261009000000_costos_auditoria.sql', '20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await sinCostos.crearUsuario('fede@prueba.local', 'clave-fede');
     await sinCostos.auth.signInWithPassword({ email: 'fede@prueba.local', password: 'clave-fede' });
     const conexF = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinCostos });
@@ -2000,7 +2212,7 @@ async function main() {
     ok('base sin la migracion de costos: el inventario del Sniper con costos entra igual (los ignora) y la bandeja no propone costo');
 
     // ── Base con la 13 pero sin la 14: el Sniper ya manda un elemento por costo ──
-    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql'] });
+    const sinTramos = await crearClienteLocal({ omitir: ['20261010000000_costos_por_tramo.sql', '20261011000000_inventario_en_vivo.sql', '20261012000000_limpieza_tokens.sql', '20261013000000_origen_con_evidencia.sql', '20261014000000_inventario_por_keko.sql', '20261015000000_ventas_sniper.sql', '20261016000000_hora_ventas_manuales.sql', '20261017000000_regreso_mercadillo.sql'] });
     await sinTramos.crearUsuario('gabi@prueba.local', 'clave-gabi');
     await sinTramos.auth.signInWithPassword({ email: 'gabi@prueba.local', password: 'clave-gabi' });
     const conexG = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: sinTramos });
