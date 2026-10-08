@@ -2056,7 +2056,7 @@ async function main() {
     assert.equal(await filaRm(RB), undefined, 'ya cuadra');
     dRm = await devolverRm(furniB);
     assert.match(dRm.error.message, /no tiene unidades de más/, 'sin sobrante en la foto no hay prueba: no se toca');
-    assert.match((await rm.rpc('retirar_lote', { p_id: pubRB })).error.message, /sigue vigente/, 'lo del Sniper con la oferta vigente no se retira desde la app');
+    await rechaza(negRm.retirarLote(pubRB), /sigue vigente/);
 
     // C) Caducada, pero la foto no la trae (sigue en «Mis ofertas» o se vendio): no se toca. Desde la
     //    app ya se puede retirar: una oferta vencida no puede estar a la venta.
@@ -2186,6 +2186,18 @@ async function main() {
     assert.deepEqual([est20.completa, est20.siguiente], [false, '20261017000000_regreso_mercadillo.sql'], 'el asistente ve que falta la 21');
     const sinMig21 = await negR20.devolverDelMercadillo({ keko: 'Ux_Data', furni_id: 1 }).catch((e) => e);
     assert.deepEqual([sinMig21.code, /20261017000000_regreso_mercadillo/.test(sinMig21.message)], [428, true], '«Volvió del Mercadillo» pide la migracion');
+    // «Retirar» lo del Sniper caducado: la base vieja se niega y la app dice que falta la 21. Lo
+    // que publicaste tu se retira igual y sus errores no cambian.
+    const pub20 = (await r20.from('compras').select('id, furni_id').eq('estado', 'publicado')).data[0];
+    const ret20 = await negR20.retirarLote(pub20.id).catch((e) => e);
+    const retF20 = await negR20.retirarFurni(pub20.furni_id, { keko: 'Ux_Data' }).catch((e) => e);
+    assert.deepEqual([ret20.code, retF20.code, /20261017000000_regreso_mercadillo/.test(ret20.message), /Lo que publicaste tú se retira igual/.test(retF20.message)],
+      [428, 428, true, true], 'sin la 21, «Retirar» de lo del Sniper pide la migracion');
+    const man20 = await negR20.crearCompra({ furni_id: pub20.furni_id, cantidad: 1, precio_compra: 90 });
+    await negR20.publicarLote(man20.id, { precio_lista: 120 });
+    const retMan20 = await negR20.retirarFurni(pub20.furni_id, { sin_keko: true, cantidad: 3 }).catch((e) => e);
+    assert.deepEqual([retMan20.code, /Solo hay 1 unidad/.test(retMan20.message)], [400, true], 'un error de lo tuyo no cambia');
+    assert.equal((await negR20.retirarFurni(pub20.furni_id, { sin_keko: true })).cantidad, 1, 'lo tuyo se retira sin la 21');
     const mig21 = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261017000000_regreso_mercadillo.sql'), 'utf8');
     await r20.pg.exec(mig21);
     await r20.pg.exec(mig21);
@@ -2193,7 +2205,7 @@ async function main() {
     f20 = await fotoR20([{ sprite_id: RA, cantidad: 1 }]);
     assert.deepEqual([f20.regresos.length, f20.resumen.sobrantes], [1, 0], 'con la migracion, la misma foto lo devuelve');
     await r20.cerrar();
-    ok('lo que vuelve del Mercadillo sin la migracion 21 (base con la 20): la foto entra como en la 1.9.0 y el asistente pide la 21; la migracion entra (dos veces) y la misma foto devuelve lo caducado');
+    ok('lo que vuelve del Mercadillo sin la migracion 21 (base con la 20): la foto entra como en la 1.9.0 y el asistente pide la 21; «Retirar» de lo del Sniper dice que falta la 21 y lo tuyo se retira igual; la migracion entra (dos veces) y la misma foto devuelve lo caducado');
 
     // ── Modo demo: «Venta» y «Venta por asignar» pasan por la funcion real del Sniper ──
     const { crearDemo } = require('../backend/services/demo');

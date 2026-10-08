@@ -8,6 +8,64 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
+## [1.10.0] - 2026-10-08
+
+### Añadido
+
+- **Lo que vuelve del Mercadillo vuelve solo a Comprado**. Una oferta del Mercadillo de
+  Habbo.es dura 168 horas (7 días); si caduca, el furni vuelve al inventario del keko, pero
+  el Sniper no lo avisa (solo lo hace cuando retiras una oferta en el juego). Ahora, con
+  cada inventario que envía el Sniper, la base devuelve a Comprado lo que estaba publicado
+  **en ese keko** hace 168 h o más y que el inventario trae en la mano: hasta las unidades
+  que sobran, primero lo que publicó el Sniper y después lo tuyo, del más antiguo al más
+  nuevo, y un LTD solo si el inventario trae su número. Vuelve a su lote de origen si
+  sigue en mano al mismo costo; si no, como lote aparte en ese keko. Nunca toca otro keko
+  y queda anotado en la bitácora del Sniper.
+- **Aviso de lo que volvió**: dentro de la app, uno ámbar («Volvió del Mercadillo en
+  Keko: …») con «Ver», que abre Comprado de ese keko con esos lotes desplegados e
+  iluminados. Con la app minimizada, una notificación de Windows (o el Dock en Mac), con el
+  interruptor «Tu inventario de Habbo» de **Ajustes → Notificaciones**.
+- **«Caducada» en Inventario › Publicado**: etiqueta ámbar en Estado y, bajo cada lote,
+  «Caducó hace 2 d 3 h» o «Caduca en 22 h 59 min», al minuto. La fila del furni dice
+  «N caducadas» y arriba sale un aviso si hay caducadas a la vista. En lo que publicaste
+  tú, el tiempo cuenta desde que pulsaste «Publicar» (es aproximado).
+- **Columna «Caducidad» en el Mercadillo**: cuánto le falta a la oferta del Sniper que
+  caduca antes, con su día y hora (en ámbar si falta menos de un día), o «Caducada · hace
+  6 h». Solo con lo que publicó el Sniper: lo que publicaste tú muestra «—». «Publicado
+  por» suma «N caducadas».
+- **Auditoría: «Puede ser lo que tenías publicado»**. Si un sobrante coincide con algo
+  publicado en ese keko o sin keko, un recuadro morado muestra esos lotes (caducados o
+  vigentes) y el botón «Volvió del Mercadillo», que confirma cuántas unidades y de qué
+  lotes vuelven a Comprado. Solo devuelve hasta lo que sobra en el último inventario del
+  Sniper. Sirve para lo que retiraste sin que el Sniper lo viera.
+- **Línea verde en la Auditoría** con lo que volvió solo en las últimas 24 horas, y «Ver
+  en Comprado».
+- Modo demo: botón «Regreso del Mercadillo» en Ajustes.
+
+### Cambiado
+
+- **«Retirar» acepta lo que publicó el Sniper si su oferta ya caducó** (en el Mercadillo,
+  en Publicado y en el lote). Primero retira lo tuyo y después lo del Sniper caducado, del
+  más antiguo al más nuevo; lo del Sniper aún vigente se sigue retirando desde el juego.
+  El diálogo dice cuántas unidades son tuyas y cuántas del Sniper.
+- La respuesta de `auditar_inventario` trae además `regresos`: lo que volvió con ese
+  inventario (ver `docs/INTEGRACION-SNIPER.md`). El Sniper no necesita cambios.
+
+### Corregido
+
+- **Los furnis caducados ya no quedan como fantasmas**: lo que volvía del Mercadillo
+  seguía en Publicado para siempre y la Auditoría lo mostraba como sobrante (y, si se
+  registraba con «Entrada con costo», quedaba repetido). Lo que ya registraste así no
+  vuelve solo, porque ya no sobra: retira la caducada y da de baja la entrada repetida
+  desde la Auditoría.
+
+### Migraciones de Supabase
+
+- `20261017000000_regreso_mercadillo.sql` (requiere la `20261016000000`). Hay que correrla
+  **antes de publicar** el Release. Sin ella, la app muestra las caducadas y la columna
+  «Caducidad», pero nada vuelve solo, la Auditoría no ofrece «Volvió del Mercadillo» y
+  «Retirar» de lo del Sniper caducado avisa que falta esta migración.
+
 ## [1.9.0] - 2026-10-03
 
 ### Añadido

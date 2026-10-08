@@ -13,6 +13,14 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.10.0': [
+    'Lo que vuelve del Mercadillo ya no se pierde: una oferta dura 7 días y, si nadie la compra, el furni vuelve a tu inventario de Habbo. Ahora la app lo nota sola con el inventario que envía tu Sniper y lo regresa a Comprado.',
+    'Te avisamos cuando algo vuelve: dentro de la app, con «Ver» para ir directo a esos lotes en Comprado, y con una notificación si la tienes minimizada. Puedes apagarlo en Ajustes → Notificaciones.',
+    'En Publicado verás cuánto le queda a cada oferta («Caduca en 22 h 59 min») o cuándo caducó, con la etiqueta «Caducada» en ámbar. Lo que publicó el Sniper y ya caducó ahora también se puede retirar desde la app.',
+    'El Mercadillo estrena la columna «Caducidad»: cuánto le falta a la oferta del Sniper que vence antes, en ámbar si le queda menos de un día. Lo que publicaste tú lleva un guion.',
+    'En la Auditoría, si te sobra algo que tenías publicado, la app te lo dice («Puede ser lo que tenías publicado») y lo regresas a Comprado con un clic. Una línea verde te cuenta lo que volvió solo en el último día.',
+    'Arreglado: lo que caducaba en el Mercadillo se quedaba para siempre en Publicado y la Auditoría lo mostraba como si te sobrara.',
+  ],
   '1.9.0': [
     'Nueva sección «Historial» en el menú: todas tus ventas en un solo lugar, de la más reciente a la más antigua, sin importar el keko. Cada día lleva su total de lo que entró y lo que ganaste.',
     'Arriba ves cuántas ventas hiciste, cuánto te entró, cuánto ganaste y tu mejor furni. Todo se ajusta a lo que elijas: busca un furni, cambia las fechas (hoy, 7 días, 30 días, este mes o las que quieras), elige uno o varios kekos, solo lo del Sniper o solo lo tuyo, o solo las ventas con pérdida. La app recuerda lo que elegiste.',

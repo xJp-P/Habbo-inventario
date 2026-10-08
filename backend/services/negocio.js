@@ -353,13 +353,43 @@ function crearServicioNegocio({ conexion, furnidata }) {
   // lotes o de los de un keko), FIFO; con precio_lista, solo las de ese precio (funcion
   // retirar_furni).
   async function retirarFurni(id, entrada = {}) {
-    const r = await rpcConAmbito('retirar_furni', {
-      p_furni_id: Number(id),
-      p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
-        ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a retirar', minimo: 1, entero: true }),
-      p_precio_lista: numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true }),
-    }, ambitoKeko(entrada), { furniId: Number(id), estado: 'publicado', soloManual: true });
+    const ambito = ambitoKeko(entrada);
+    const precio = numeroValido(entrada.precio_lista, { campo: 'El precio de lista', opcional: true });
+    let r;
+    try {
+      r = await rpcConAmbito('retirar_furni', {
+        p_furni_id: Number(id),
+        p_cantidad: entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === ''
+          ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad a retirar', minimo: 1, entero: true }),
+        p_precio_lista: precio,
+      }, ambito, { furniId: Number(id), estado: 'publicado', soloManual: true });
+    } catch (e) {
+      if (e.code === 400 && await hayDelSniper(Number(id), ambito, precio) && !(await hayRegresos())) throw new ClientError(MIGRACION_RETIRAR, 428);
+      throw e;
+    }
     return { cantidad: r.cantidad, lotes: r.lotes };
+  }
+
+  // Sin la migracion 20261017000000 la base no deja retirar nada que haya publicado el
+  // Sniper, aunque su oferta ya caduco, y responde con su mensaje viejo («se retira desde el
+  // juego»). La interfaz ofrece «Retirar» en lo caducado: si la base se niega y falta la
+  // migracion, se dice eso. Solo se mira cuando la base ya se nego.
+  const MIGRACION_RETIRAR = 'Para retirar lo que publicó el Sniper y ya caducó instala la migración 20261017000000_regreso_mercadillo.sql en tu Supabase (aviso ámbar de arriba). Lo que publicaste tú se retira igual.';
+  async function hayRegresos() {
+    try {
+      await datos(db().rpc('caducidad_mercadillo'));
+      return true;
+    } catch (e) {
+      return !faltaMigracion(e);
+    }
+  }
+  // El furni tiene unidades publicadas por el Sniper en ese keko (y a ese precio, si se pidio).
+  async function hayDelSniper(furniId, ambito, precio) {
+    const lotes = await datos(db().from('compras').select('keko, publicado_por, precio_lista').eq('furni_id', furniId).eq('estado', 'publicado'));
+    return lotes.some((l) => l.publicado_por !== 'manual'
+      && (precio === null || precio === undefined || Number(l.precio_lista) === precio)
+      && (ambito.p_sin_keko ? !l.keko
+        : !ambito.p_keko || String(l.keko || '').toLowerCase() === ambito.p_keko.toLowerCase()));
   }
 
   // Venta manual de lo que tienes en mano (tradeo, o venta desde un keko sin Sniper):
@@ -388,9 +418,16 @@ function crearServicioNegocio({ conexion, furnidata }) {
     return { separado: r.separado, lote: await compraPorId(r.lote_id) };
   }
 
-  // Deshace una publicacion manual: el lote vuelve a "comprado" (funcion retirar_lote).
+  // Deshace una publicacion manual, o una del Sniper ya caducada: el lote vuelve a
+  // "comprado" (funcion retirar_lote). Sin la migracion 20261017000000, lo del Sniper se niega.
   async function retirarLote(id) {
-    const r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
+    let r;
+    try {
+      r = await datos(db().rpc('retirar_lote', { p_id: Number(id) }));
+    } catch (e) {
+      if (e.code === 409 && !(await hayRegresos())) throw new ClientError(MIGRACION_RETIRAR, 428);
+      throw e;
+    }
     return { fusionada: r.fusionada, compra: await compraPorId(r.compra_id) };
   }
 
