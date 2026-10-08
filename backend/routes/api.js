@@ -70,6 +70,8 @@ module.exports = function crearRutasApi({ conexion, negocio, furnidata, eventos,
   r.post('/api/auditoria/baja', async (req, res) => res.json(await negocio.darDeBaja(req.body || {})));
   r.post('/api/auditoria/excluir', async (req, res) => res.json(await negocio.excluirDeAuditoria(req.body || {})));
   r.post('/api/auditoria/entrada', async (req, res) => res.status(201).json(await negocio.entradaAuditoria(req.body || {})));
+  // «Volvió del Mercadillo» (migracion 20261017000000): { keko, furni_id, cantidad? }.
+  r.post('/api/auditoria/regreso', async (req, res) => res.json(await negocio.devolverDelMercadillo(req.body || {})));
 
   // ── Compras / lotes (vista Inventario) ───────────────────────────────────
   r.get('/api/compras', async (req, res) => res.json(await negocio.listarCompras({ pendientes: req.query.pendientes === '1' })));

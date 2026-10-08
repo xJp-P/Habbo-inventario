@@ -26,7 +26,7 @@ const { crearServicioNegocio } = require('./services/negocio');
 const { crearServicioInstalacion } = require('./services/instalacion');
 const { importarExcel } = require('./services/importarExcel');
 const { protegerApiLocal } = require('./core/seguridad');
-const { crearDetectorAuditoria, avisoCatalogo, crearAvisosVentas } = require('./core/avisos');
+const { crearDetectorAuditoria, avisoCatalogo, crearAvisosVentas, crearAvisosRegresos } = require('./core/avisos');
 const crearRutasApi = require('./routes/api');
 const { ClientError, rastro } = require('./core/util');
 const { crearRegistroErrores } = require('./core/registro');
@@ -88,6 +88,13 @@ async function crearApp({
     const avisos = avisosVentas.avisar(await negocio.detalleVentas(filas.map((f) => f.id)));
     if (avisos.length) eventos.emit('evento', { tipo: 'ventas', avisos });
   }
+  // Lo que vuelve del Mercadillo (migracion 20261017000000): de los `recuperar` de la
+  // rafaga, los que anoto la base al recibir la foto -> un aviso por keko.
+  const avisosRegresos = crearAvisosRegresos();
+  async function avisarRegresos(filas) {
+    const avisos = avisosRegresos.avisar(await negocio.detalleRegresos(filas.map((f) => f.id)));
+    if (avisos.length) eventos.emit('evento', { tipo: 'regresos', avisos });
+  }
   const conexion = crearServicioConexion({
     raiz, dirDatos, eventos, log, cifrado,
     clienteFijo: clienteFijo || (demo ? demo.cliente : null),
@@ -99,6 +106,7 @@ async function crearApp({
     alRecibirInventario: revisarAuditoria,
     esperaInventarioMs,
     alRecibirVentas: avisarVentas,
+    alRecibirRegresos: avisarRegresos,
   });
   negocio = crearServicioNegocio({ conexion, furnidata });
 

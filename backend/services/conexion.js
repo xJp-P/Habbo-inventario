@@ -11,7 +11,8 @@
 // (~0,7 s); antes de avisar se corre `alRecibirEventos` (sincroniza con el catalogo los
 // furnis nuevos que llegaron solo con sprite_id) y luego se publica un evento
 // `eventos-sniper` en el bus que alimenta /api/eventos. Si en la rafaga hay ventas, sus
-// filas van a `alRecibirVentas` (el servidor arma con ellas el aviso del sistema).
+// filas van a `alRecibirVentas` (el servidor arma con ellas el aviso del sistema); los
+// `recuperar`, a `alRecibirRegresos` (los automaticos son lo que volvio del Mercadillo).
 //
 // AUDITORIA EN VIVO (migracion 20261011000000): la foto del inventario de cada sniper
 // (inventario_habbo) tambien llega por Realtime, en un canal APARTE: sin esa migracion la
@@ -51,6 +52,7 @@ function datosParaSniper(config) {
 function crearServicioConexion({
   raiz, dirDatos, eventos, log = () => {}, cifrado = null, clienteFijo = null, demo = false, alRecibirEventos = null,
   alEscucharInventario = null, alRecibirInventario = null, esperaInventarioMs = ESPERA_INVENTARIO_MS, alRecibirVentas = null,
+  alRecibirRegresos = null,
 }) {
   let config = clienteFijo ? { url: 'local', anonKey: 'local', origen: 'demo' } : leerConfiguracion({ raiz, dirDatos });
   let cliente = clienteFijo || (config ? crearClienteSupabase({ ...config, dirDatos, cifrado }) : null);
@@ -72,18 +74,29 @@ function crearServicioConexion({
       try { await alRecibirEventos(); } catch (e) { log('No se pudo sincronizar tras eventos del Sniper: ' + e.message); }
     }
     const cuenta = (t) => filas.filter((f) => f.tipo_evento === t).length;
+    // Un `recuperar` automatico lo anota la base al recibir la foto (lo que volvio del
+    // Mercadillo, migracion 20261017000000): no es una retirada que vio el Sniper.
+    const automatico = (f) => Boolean(f.datos && f.datos.automatico);
+    const regresos = filas.filter((f) => f.tipo_evento === 'recuperar' && automatico(f)).length;
     eventos.emit('evento', {
       tipo: 'eventos-sniper',
       total: filas.length,
       compras: cuenta('compra'),
       publicaciones: cuenta('publicar'),
-      recuperaciones: cuenta('recuperar'),
+      recuperaciones: cuenta('recuperar') - regresos,
+      regresos,
       ventas: cuenta('venta'),
       unidades: filas.reduce((s, f) => s + (Number(f.cantidad) || 0), 0),
     });
     const ventas = filas.filter((f) => f.tipo_evento === 'venta' && f.id);
     if (ventas.length && alRecibirVentas) {
       try { await alRecibirVentas(ventas); } catch (e) { log('No se pudo armar el aviso de las ventas del Sniper: ' + e.message); }
+    }
+    // Todos los `recuperar`: la base dice cuales fueron automaticos (Realtime puede dejar
+    // fuera `datos`).
+    const recuperar = filas.filter((f) => f.tipo_evento === 'recuperar' && f.id);
+    if (recuperar.length && alRecibirRegresos) {
+      try { await alRecibirRegresos(recuperar); } catch (e) { log('No se pudo armar el aviso de lo que volvio del Mercadillo: ' + e.message); }
     }
   }
 

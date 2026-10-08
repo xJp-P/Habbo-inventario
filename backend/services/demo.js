@@ -5,8 +5,8 @@
 // Levanta el Postgres local (PGlite) con el MISMO esquema de supabase/migrations
 // (empieza vacio; `npm run demo` importa el unico .xlsx de la raiz, si hay) y permite
 // simular eventos de un SniperMercadillo (compra, publicar, recuperar, venta, una venta
-// que queda por asignar y el envio del inventario de su keko para la auditoria) desde
-// Ajustes. Los eventos pasan por la funcion SQL real registrar_eventos_sniper, con la
+// que queda por asignar, el envio del inventario de su keko para la auditoria y una oferta
+// que caduca y vuelve del Mercadillo) desde Ajustes. Los eventos pasan por la funcion SQL real registrar_eventos_sniper, con la
 // clave "anon", un token de sniper y SOLO el sprite_id del furni, igual que los envia el
 // bot desde el VPS.
 //
@@ -173,8 +173,53 @@ async function crearDemo({ dirDatos }) {
     return { ...base, sprite_id: f.sprite_id, tipo: f.tipo, precio: Math.max(1, Math.round(Number(lote.precio_lista))), numero_ltd: lote.numero_ltd || null, fecha };
   }
 
+  // Lo que vuelve del Mercadillo (migracion 20261017000000): la oferta de un lote publicado
+  // en KekoDemo caduca sin venderse y el furni vuelve a la mano. El demo no puede esperar 7
+  // dias: envejece ese lote 8 dias en la base local y manda la foto que mandaria el Sniper
+  // (la ultima de KekoDemo, o lo que tiene en mano, con esas unidades de vuelta). La base lo
+  // devuelve sola a Comprado y lo anota: llega el aviso como con el Sniper real.
+  async function simularRegreso() {
+    const [furnis, compras] = await Promise.all([negocio.listarFurnis(), negocio.listarCompras()]);
+    const porId = new Map(furnis.filter((f) => f.sprite_id !== null).map((f) => [f.id, f]));
+    const publicados = compras.filter((c) => c.estado === 'publicado' && c.keko === KEKO && porId.has(c.furni_id));
+    if (!publicados.length) {
+      throw new Error('No hay nada publicado en KekoDemo: simula antes el «Inventario» (el Sniper demo aprende su keko), una compra y una publicación.');
+    }
+    const lote = azar(publicados);
+    const f = porId.get(lote.furni_id);
+    await cliente.pg.query("update public.compras set publicado_en = now() - interval '8 days' where id = $1", [lote.id]);
+
+    const mismoFurni = (c) => { const g = porId.get(c.furni_id); return g && g.sprite_id === f.sprite_id && g.tipo === f.tipo; };
+    const enMano = compras.filter((c) => c.estado === 'comprado' && c.keko === KEKO && mismoFurni(c)).reduce((s, c) => s + c.cantidad, 0);
+    const previa = (await cliente.pg.query('select furnis from public.inventario_habbo where keko = $1', [KEKO])).rows[0];
+    let lista;
+    if (previa && Array.isArray(previa.furnis)) {
+      lista = previa.furnis.map((x) => ({ ...x }));
+    } else {
+      const mano = new Map();
+      for (const c of compras) {
+        if (c.estado !== 'comprado' || c.keko !== KEKO || !porId.has(c.furni_id)) continue;
+        const g = porId.get(c.furni_id);
+        const e = mano.get(g.tipo + ':' + g.sprite_id) || { sprite_id: g.sprite_id, tipo: g.tipo, cantidad: 0, ltds: [] };
+        e.cantidad += c.cantidad;
+        if (c.numero_ltd) e.ltds.push(c.numero_ltd);
+        mano.set(g.tipo + ':' + g.sprite_id, e);
+      }
+      lista = [...mano.values()];
+    }
+    let el = lista.find((x) => Number(x.sprite_id) === f.sprite_id && (x.tipo || 'suelo') === f.tipo);
+    if (!el) { el = { sprite_id: f.sprite_id, tipo: f.tipo, cantidad: 0, ltds: [] }; lista.push(el); }
+    el.cantidad = Math.max(Number(el.cantidad) || 0, enMano) + lote.cantidad;
+    if (lote.numero_ltd) el.ltds = [...new Set([...(el.ltds || []), lote.numero_ltd])];
+    const r = await anon.rpc('auditar_inventario', { token_sniper: token, keko: KEKO, hotel: 'es', inventario: lista });
+    if (r.error) throw new Error(r.error.message);
+    if (!Array.isArray(r.data.regresos)) throw new Error('Falta la migración 20261017000000_regreso_mercadillo.sql en la base del demo.');
+    return { ...r.data, lote_id: lote.id };
+  }
+
   async function simularEvento(tipo) {
     if (tipo === 'inventario') return simularInventario();
+    if (tipo === 'regreso') return simularRegreso();
     if (!['compra', 'publicar', 'recuperar', 'venta', 'venta-por-asignar'].includes(tipo)) throw new Error('Tipo de evento no valido.');
     const evento = tipo.startsWith('venta') ? await armarVenta(tipo === 'venta-por-asignar') : await armarEvento(tipo);
     const r = await anon.rpc('registrar_eventos_sniper', { token_sniper: token, eventos: [evento] });

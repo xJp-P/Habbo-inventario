@@ -129,9 +129,9 @@ function Notificaciones(props) {
       h('div', { key: 's', className: 'card-sub', style: { marginBottom: 8, lineHeight: 1.5 } }, mac
         ? 'Cuando la app está en segundo plano, su ícono rebota en el Dock y muestra un globo con los avisos sin ver. Si la estás mirando, no te interrumpimos.'
         : 'Te avisamos cuando la app está minimizada o en segundo plano. Si la estás mirando, no te interrumpimos.'),
-      fila('inventario', 'Diferencias nuevas en la Auditoría', mac
-        ? 'Cuando el inventario que envía tu Sniper deja de cuadrar. El globo desaparece al volver a la app.'
-        : 'Cuando el inventario que envía tu Sniper deja de cuadrar. Al hacer clic se abre la Auditoría de ese keko.'),
+      fila('inventario', 'Tu inventario de Habbo', mac
+        ? 'Cuando el inventario que envía tu Sniper deja de cuadrar, o cuando un furni vuelve del Mercadillo porque su oferta caducó. El globo desaparece al volver a la app.'
+        : 'Cuando el inventario que envía tu Sniper deja de cuadrar (se abre la Auditoría de ese keko), o cuando un furni vuelve del Mercadillo porque su oferta caducó (se abre Comprado de ese keko).'),
       fila('catalogo', 'Furnis nuevos en el catálogo', 'Cuando Habbo.es agrega furnis nuevos al catálogo.'),
       fila('ventas', 'Ventas del Sniper', mac
         ? 'Cuando tu Sniper registra ventas del mercadillo. Varias seguidas cuentan como un solo aviso. El globo desaparece al volver a la app.'
@@ -281,6 +281,11 @@ export function AjustesView(props) {
     API.post('/api/demo/simular-sniper', { tipo: tipo }).then(function (r) {
       if (r && r.errores && r.errores.length) props.onError(r.errores[0].error);
       if (r && tipo === 'inventario') props.onCambio('Inventario de ' + r.keko + ' recibido: revisa Auditoría');
+      if (r && tipo === 'regreso') {
+        var unidades = (r.regresos || []).reduce(function (s, x) { return s + x.cantidad; }, 0);
+        props.onCambio(unidades ? 'Regreso del Mercadillo: ' + unidades + (unidades === 1 ? ' unidad volvió' : ' unidades volvieron') + ' a Comprado en ' + r.keko
+          : 'La foto de ' + r.keko + ' llegó, pero no volvió nada del Mercadillo');
+      }
       var v = r && tipo.indexOf('venta') === 0 && r.eventos && r.eventos[0];
       if (v) props.onCambio(v.por_asignar ? 'Venta del Sniper por asignar: ' + v.motivo
         : 'Venta del Sniper registrada: 1 × ' + v.nombre + ' en ' + v.keko + ' · entraron ' + v.neto + ' cr');
@@ -312,7 +317,9 @@ export function AjustesView(props) {
         h('button', { className: 'btn btn-chico', onClick: function () { simular('recuperar'); } }, h(Ico, { name: 'undo', size: 12 }), 'Recuperar'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('inventario'); } }, h(Ico, { name: 'audit', size: 12 }), 'Inventario'),
         h('button', { className: 'btn btn-chico', onClick: function () { simular('venta'); } }, h(Ico, { name: 'tag', size: 12 }), 'Venta'),
-        h('button', { className: 'btn btn-chico', onClick: function () { simular('venta-por-asignar'); } }, h(Ico, { name: 'radar', size: 12 }), 'Venta por asignar')) : null,
+        h('button', { className: 'btn btn-chico', onClick: function () { simular('venta-por-asignar'); } }, h(Ico, { name: 'radar', size: 12 }), 'Venta por asignar'),
+        h('button', { className: 'btn btn-chico', title: 'Una oferta de KekoDemo caduca sin venderse y el furni vuelve a la mano', onClick: function () { simular('regreso'); } },
+          h(Ico, { name: 'reloj', size: 12 }), 'Regreso del Mercadillo')) : null,
 
       nuevo ? h('div', { className: 'token-nuevo', style: { margin: '10px 0' } },
         h('div', { style: { fontWeight: 700, color: 'var(--green)', marginBottom: 6 } }, 'Token de "' + nuevo.nombre + '" — cópialo ahora, no se vuelve a mostrar'),

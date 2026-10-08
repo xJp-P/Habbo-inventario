@@ -157,6 +157,26 @@ async function main() {
   assert.equal(aV[0].cuerpo, '1 × Furni A, 1 × Furni B y 3 furnis más · +50 cr de ganancia', 'una lista larga se resume');
   ok('avisos de ventas del Sniper: uno por keko y rafaga (lo vendido agrupado, LTD con su numero, ganancia o perdida; las por asignar abren la bandeja); seguidos, sin sonido');
 
+  // ── Avisos de lo que vuelve del Mercadillo (migracion 20261017000000) ──
+  const { crearAvisosRegresos } = require('../backend/core/avisos');
+  let relojR = 0;
+  const avR = crearAvisosRegresos({ ahora: () => relojR });
+  const regAv = (extra) => ({ keko: 'Ux_Data', nombre: 'Trono HC', sprite_id: 4623, cantidad: 1, ltds: [], ...extra });
+  let aR = avR.avisar([regAv()]);
+  assert.deepEqual([aR.length, aR[0].titulo, aR[0].cuerpo, aR[0].breve, aR[0].silencioso, aR[0].destino, aR[0].unidades], [1, 'Volvió del Mercadillo en Ux_Data',
+    '1 × Trono HC: su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.', 'Volvió del Mercadillo en Ux_Data: 1 × Trono HC', false,
+    { vista: 'inventario', filtro: 'comprado', keko: 'Ux_Data' }, 1]);
+  relojR = 60 * 1000;
+  aR = avR.avisar([regAv({ cantidad: 2 }), regAv({ nombre: 'Cama Criogénica Negra', ltds: [1475] }), regAv({ keko: '-JDark', nombre: null, sprite_id: 98765 })]);
+  assert.deepEqual(aR.map((a) => [a.titulo, a.cuerpo, a.silencioso]), [
+    ['Volvieron 3 furnis del Mercadillo en Ux_Data', '2 × Trono HC y 1 × Cama Criogénica Negra #1475: sus ofertas caducaron sin venderse. Ya están en Comprado, listos para publicarlos otra vez.', true],
+    ['Volvió del Mercadillo en -JDark', '1 × un furni sin registrar (sprite 98765): su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.', false]],
+    'un aviso por keko y por rafaga, por unidades; el segundo de Ux_Data en 2 min, sin sonido');
+  relojR = 4 * 60 * 1000;
+  assert.equal(avR.avisar([regAv()])[0].silencioso, false, 'pasados 2 minutos, con sonido otra vez');
+  assert.deepEqual(avR.avisar([]), []);
+  ok('avisos de lo que vuelve del Mercadillo: uno por keko y rafaga, con lo que volvio y cuantas unidades (LTD con su numero, sin registrar con su sprite); abren Comprado de ese keko; seguidos, sin sonido');
+
   // ── Ventas del Sniper en la interfaz (public/js/core/ventas.js) ──
   const ventasJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'ventas.js')).href);
   const lotesV = [
@@ -462,9 +482,24 @@ async function main() {
   avisador.alEvento(evVen);
   assert.equal(NotificacionFalsa.creadas.length, 2, 'con las ventas apagadas en Ajustes, no sale');
   pref.guardar({ ventas: true });
+  // Lo que volvio del Mercadillo: va con el interruptor del inventario y el clic abre Comprado.
+  const evReg = { tipo: 'regresos', avisos: [{ keko: 'Ux_Data', titulo: 'Volvió del Mercadillo en Ux_Data', cuerpo: '1 × Trono HC: su oferta caducó sin venderse.', silencioso: false,
+    destino: { vista: 'inventario', filtro: 'comprado', keko: 'Ux_Data' } }] };
+  ventanaFalsa.min = true;
+  avisador.alEvento(evReg);
+  const toastR = NotificacionFalsa.creadas[NotificacionFalsa.creadas.length - 1];
+  assert.deepEqual([NotificacionFalsa.creadas.length, toastR.o.title, toastR.o.id, toastR.o.id.length <= 16, toastR.o.id !== notif.idVentas('Ux_Data')],
+    [3, 'Volvió del Mercadillo en Ux_Data', notif.idRegresos('Ux_Data'), true, true], 'su propio id corto por keko (no reemplaza al de las ventas)');
+  toastR.manejadores.click();
+  assert.deepEqual(abiertos[abiertos.length - 1], { vista: 'inventario', filtro: 'comprado', keko: 'Ux_Data' }, 'el clic abre Comprado de ese keko');
+  pref.guardar({ inventario: false });
+  ventanaFalsa.min = true;
+  avisador.alEvento(evReg);
+  assert.equal(NotificacionFalsa.creadas.length, 3, 'con el inventario apagado en Ajustes, tampoco sale');
+  pref.guardar({ inventario: true });
   ventanaFalsa.min = false; ventanaFalsa.foco = true;
   assert.equal(avisador.probar(), 'mostrada', 'la de prueba sale aunque estes mirando la app');
-  ok('notificaciones: AUMID = appId, solo si no estas mirando la app, respetan tus preferencias y el clic abre la Auditoria del keko o Vendido (ventas del Sniper)');
+  ok('notificaciones: AUMID = appId, solo si no estas mirando la app, respetan tus preferencias y el clic abre la Auditoria del keko, Vendido (ventas del Sniper) o Comprado (lo que volvio del Mercadillo)');
 
   // ── Mac (plan B): el Dock rebota y muestra un globo con los avisos sin ver ──
   const dockFalso = { rebotes: 0, globos: [], rebotar() { this.rebotes++; }, globo(n) { this.globos.push(n); } };
@@ -2112,6 +2147,8 @@ async function main() {
     assert.deepEqual([f20.regresos, f20.resumen.sobrantes], [undefined, 1], 'sin la 21: un sobrante, como en la 1.9.0');
     const est20 = await crearServicioInstalacion().comprobar(r20.comoAnon());
     assert.deepEqual([est20.completa, est20.siguiente], [false, '20261017000000_regreso_mercadillo.sql'], 'el asistente ve que falta la 21');
+    const sinMig21 = await negR20.devolverDelMercadillo({ keko: 'Ux_Data', furni_id: 1 }).catch((e) => e);
+    assert.deepEqual([sinMig21.code, /20261017000000_regreso_mercadillo/.test(sinMig21.message)], [428, true], '«Volvió del Mercadillo» pide la migracion');
     const mig21 = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261017000000_regreso_mercadillo.sql'), 'utf8');
     await r20.pg.exec(mig21);
     await r20.pg.exec(mig21);
@@ -2138,9 +2175,18 @@ async function main() {
     assert.deepEqual([rDemo.procesados, rDemo.eventos[0].por_asignar], [1, true]);
     assert.ok(['despues', 'sin_furni'].includes(rDemo.eventos[0].causa), 'una venta anterior a la publicacion, o de un furni sin registrar');
     assert.equal((await negDemo.ventasPorAsignar()).ventas.length, 1, 'y aparece en la bandeja');
+    // «Regreso del Mercadillo»: pide algo publicado en KekoDemo; con eso, la oferta caduca y vuelve sola a Comprado.
+    await rechaza(demoT.simularEvento('regreso'), /No hay nada publicado en KekoDemo/);
+    await demoT.simularEvento('inventario');
+    assert.equal((await demoT.simularEvento('compra')).procesados, 1);
+    assert.equal((await demoT.simularEvento('publicar')).procesados, 1);
+    rDemo = await demoT.simularEvento('regreso');
+    const loteDemo = (await negDemo.listarCompras()).find((c) => c.id === rDemo.lote_id);
+    assert.deepEqual([rDemo.keko, rDemo.regresos.length > 0, rDemo.regresos[0].keko, rDemo.regresos[0].causa], ['KekoDemo', true, 'KekoDemo', 'caducada']);
+    assert.ok(!loteDemo || loteDemo.estado === 'comprado', 'el lote que caduco ya no esta publicado (volvio a Comprado o a su lote de origen)');
     await demoT.cliente.cerrar();
     fs.rmSync(dirDemo, { recursive: true, force: true });
-    ok('modo demo: «Venta» vende una unidad publicada del Sniper demo y «Venta por asignar» deja una en la bandeja, por la funcion real del Sniper');
+    ok('modo demo: «Venta» vende una unidad publicada del Sniper demo, «Venta por asignar» deja una en la bandeja y «Regreso del Mercadillo» hace caducar una oferta de KekoDemo, que vuelve sola a Comprado, por las funciones reales del Sniper');
 
     // ── Base local (demo): una migracion que cambio despues de aplicarse se vuelve a correr ──
     const dirHuella = fs.mkdtempSync(path.join(os.tmpdir(), 'hbi-huella-'));
@@ -2583,6 +2629,48 @@ async function main() {
     h = await pedir(puerto, 'GET', '/api/ventas-por-asignar');
     assert.deepEqual(h.json.ventas.map((v) => [v.keko, v.sprite_id, v.causa]), [['KekoVivo', 990778, 'sin_furni']]);
     ok('ventas del Sniper en la app: la API de la bandeja (lista, valida y responde 404); una rafaga de ventas llega en vivo y el servidor publica un aviso por keko con lo vendido y lo que quedo por asignar');
+
+    // ── Lo que vuelve del Mercadillo, desde la API de la app y en vivo ──
+    h = await pedir(puerto, 'POST', '/api/auditoria/regreso', { cuerpo: { furni_id: 1 } });
+    assert.deepEqual([h.status, /Falta el keko/.test(h.json.error)], [400, true]);
+    h = await pedir(puerto, 'POST', '/api/auditoria/regreso', { cuerpo: { keko: 'KekoReg', furni_id: 'x' } });
+    assert.equal(h.status, 400, 'un furni invalido');
+    h = await pedir(puerto, 'POST', '/api/auditoria/regreso', { cuerpo: { keko: 'KekoReg', furni_id: 1, cantidad: 0 } });
+    assert.equal(h.status, 400, 'una cantidad invalida');
+    const tkReg = await negocio.crearToken('VPS regresos en vivo');
+    const fotoReg = (inventario) => anon.rpc('auditar_inventario', { token_sniper: tkReg.token, keko: 'KekoReg', hotel: 'es', inventario });
+    assert.equal((await fotoReg([])).error, null);
+    const sReg = 990779;
+    await sniper([{ tipo_evento: 'compra', id_externo: 'reg_vivo_c', sprite_id: sReg, cantidad: 3, precio: 100, hotel: 'es' },
+      { tipo_evento: 'publicar', id_externo: 'reg_vivo_p1', sprite_id: sReg, cantidad: 1, precio_lista: 150, hotel: 'es', fecha: Date.now() - 8 * 24 * 3600000 },
+      { tipo_evento: 'publicar', id_externo: 'reg_vivo_p2', sprite_id: sReg, cantidad: 1, precio_lista: 150, hotel: 'es', fecha: Date.now() - 3600000 }], tkReg.token);
+    await new Promise((res) => setTimeout(res, 1200));
+    // La foto trae 2 de mas: la caducada vuelve sola y llega el aviso; la de hace 1 h se queda (sobrante en la Auditoria).
+    const avisoEvReg = esperarEvento(puerto, 'eventos-sniper');
+    const avisoReg = esperarEvento(puerto, 'regresos');
+    await new Promise((res) => setTimeout(res, 150));
+    const fReg = (await fotoReg([{ sprite_id: sReg, cantidad: 3 }])).data;
+    assert.deepEqual([fReg.regresos.length, fReg.regresos[0].cantidad, fReg.resumen.sobrantes], [1, 1, 1]);
+    const [evReg2, evRegresos] = await Promise.all([avisoEvReg, avisoReg]);
+    assert.deepEqual([evReg2.regresos, evReg2.recuperaciones], [1, 0], 'el aviso de eventos separa lo que volvio solo de lo que retiro el Sniper');
+    assert.deepEqual([evRegresos.avisos.length, evRegresos.avisos[0].titulo, evRegresos.avisos[0].cuerpo, evRegresos.avisos[0].destino],
+      [1, 'Volvió del Mercadillo en KekoReg', '1 × Sprite 990779 (suelo): su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.',
+        { vista: 'inventario', filtro: 'comprado', keko: 'KekoReg' }]);
+    // «Volvió del Mercadillo» desde la Auditoria: la de hace 1 h, con el sobrante que queda; despues, sin prueba.
+    h = await pedir(puerto, 'POST', '/api/auditoria/regreso', { cuerpo: { keko: 'KekoReg', furni_id: fReg.regresos[0].furni_id } });
+    assert.deepEqual([h.status, h.json.cantidad, h.json.keko], [200, 1, 'KekoReg']);
+    h = await pedir(puerto, 'POST', '/api/auditoria/regreso', { cuerpo: { keko: 'KekoReg', furni_id: fReg.regresos[0].furni_id } });
+    assert.deepEqual([h.status, /no tiene unidades de más/.test(h.json.error)], [409, true], 'sin sobrante en la foto, sin prueba');
+    // Una retirada que vio el Sniper (recuperar) no es un regreso: no hay aviso de regresos.
+    await sniper([{ tipo_evento: 'publicar', id_externo: 'reg_vivo_p3', sprite_id: sReg, cantidad: 1, precio_lista: 150, hotel: 'es', fecha: Date.now() - 60000 }], tkReg.token);
+    await new Promise((res) => setTimeout(res, 1200));
+    const avisoEvRec = esperarEvento(puerto, 'eventos-sniper');
+    const sinRegreso = rechaza(esperarEvento(puerto, 'regresos', 2000), /No llego el evento regresos/);
+    await new Promise((res) => setTimeout(res, 150));
+    await sniper([{ tipo_evento: 'recuperar', id_externo: 'reg_vivo_r', sprite_id: sReg, cantidad: 1, hotel: 'es' }], tkReg.token);
+    assert.deepEqual([(await avisoEvRec).recuperaciones, (await avisoEvRec).regresos], [1, 0]);
+    await sinRegreso;
+    ok('lo que vuelve del Mercadillo en la app: «Volvió del Mercadillo» desde la API (valida y, sin la prueba de la foto, 409); lo que vuelve solo llega en vivo con un aviso por keko que abre Comprado; una retirada del Sniper no es un regreso');
 
     h = await pedir(puerto, 'GET', '/api/icono/clothing_r26_scarface');
     if (h.status === 200) ok(`icono PNG servido desde cache (${h.bytes} bytes)`);

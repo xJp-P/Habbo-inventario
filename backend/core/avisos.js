@@ -1,6 +1,6 @@
 // backend/core/avisos.js — cuando merece una notificacion del sistema lo que llega en vivo
-// (la foto del inventario de un sniper, un catalogo nuevo de Habbo.es o las ventas que
-// registra el Sniper) y con que texto.
+// (la foto del inventario de un sniper, un catalogo nuevo de Habbo.es, las ventas que
+// registra el Sniper y lo que vuelve del Mercadillo) y con que texto.
 // Sin Electron ni base de datos, para que npm run verificar lo pruebe; el servidor lo usa
 // al recibir la foto (migracion 20261011000000) y el proceso principal solo muestra.
 //
@@ -93,6 +93,11 @@ function nombreVenta(v) {
 function listaVentas(ventas) {
   const m = new Map();
   for (const v of ventas) { const k = nombreVenta(v); m.set(k, (m.get(k) || 0) + 1); }
+  return listaPorNombre(m);
+}
+
+// nombre -> unidades, en texto: lo que mas se repite primero y, con muchos, «y N furnis mas».
+function listaPorNombre(m) {
   const partes = [...m].sort((a, b) => b[1] - a[1]).map(([k, n]) => n + ' × ' + k);
   if (partes.length > MAX_LINEAS) {
     const resto = partes.length - MAX_LINEAS + 1;
@@ -132,12 +137,13 @@ function avisoVentasKeko(keko, ventas) {
   };
 }
 
-function crearAvisosVentas({ sinSonidoMs = SIN_SONIDO_MS, ahora = () => Date.now() } = {}) {
+// Un aviso por keko con lo de la rafaga (`armar(keko, lista)`); dentro de los 2 minutos
+// siguientes a otro aviso de ese keko, sin sonido.
+function crearAvisosPorKeko(armar, { sinSonidoMs = SIN_SONIDO_MS, ahora = () => Date.now() } = {}) {
   const ultimoAviso = new Map();   // keko -> hora del ultimo aviso
-  // ventas: [{ keko, nombre, sprite_id, numero_ltd, precio, ganancia_cr, por_asignar }]
-  function avisar(ventas) {
+  function avisar(items) {
     const porKeko = new Map();
-    for (const v of ventas || []) {
+    for (const v of items || []) {
       const k = v.keko || 'tu keko';
       if (!porKeko.has(k)) porKeko.set(k, []);
       porKeko.get(k).push(v);
@@ -146,10 +152,42 @@ function crearAvisosVentas({ sinSonidoMs = SIN_SONIDO_MS, ahora = () => Date.now
     return [...porKeko].map(([keko, lista]) => {
       const silencioso = ultimoAviso.has(keko) && t - ultimoAviso.get(keko) < sinSonidoMs;
       ultimoAviso.set(keko, t);
-      return { ...avisoVentasKeko(keko, lista), silencioso };
+      return { ...armar(keko, lista), silencioso };
     });
   }
   return { avisar };
 }
 
-module.exports = { crearDetectorAuditoria, avisoCatalogo, diferencias, crearAvisosVentas };
+// ventas: [{ keko, nombre, sprite_id, numero_ltd, precio, ganancia_cr, por_asignar }]
+function crearAvisosVentas(opciones) { return crearAvisosPorKeko(avisoVentasKeko, opciones); }
+
+// ── Lo que vuelve del Mercadillo (migracion 20261017000000) ──
+// La oferta caduco sin venderse y la foto del inventario trajo el furni de vuelta en la
+// mano: la base ya lo paso a Comprado. Un aviso por keko y por rafaga; al hacer clic se
+// abre Comprado de ese keko, para publicarlo otra vez.
+function nombreRegreso(r) {
+  const base = r.nombre || (r.sprite_id ? 'un furni sin registrar (sprite ' + r.sprite_id + ')' : 'un furni');
+  const ltds = (r.ltds || []).filter(Boolean);
+  return base + (ltds.length ? ' ' + ltds.map((n) => '#' + n).join(', ') : '');
+}
+
+function avisoRegresosKeko(keko, regresos) {
+  const m = new Map();
+  for (const r of regresos) { const k = nombreRegreso(r); m.set(k, (m.get(k) || 0) + (Number(r.cantidad) || 1)); }
+  const lista = listaPorNombre(m);
+  const n = [...m.values()].reduce((s, x) => s + x, 0);
+  const una = n === 1;
+  return {
+    keko, destino: { vista: 'inventario', filtro: 'comprado', keko }, unidades: n,
+    titulo: una ? 'Volvió del Mercadillo en ' + keko : 'Volvieron ' + n + ' furnis del Mercadillo en ' + keko,
+    cuerpo: lista + (una
+      ? ': su oferta caducó sin venderse. Ya está en Comprado, listo para publicarlo otra vez.'
+      : ': sus ofertas caducaron sin venderse. Ya están en Comprado, listos para publicarlos otra vez.'),
+    breve: (una ? 'Volvió del Mercadillo en ' : 'Volvieron del Mercadillo en ') + keko + ': ' + lista,
+  };
+}
+
+// regresos: [{ keko, nombre, sprite_id, cantidad, ltds }]
+function crearAvisosRegresos(opciones) { return crearAvisosPorKeko(avisoRegresosKeko, opciones); }
+
+module.exports = { crearDetectorAuditoria, avisoCatalogo, diferencias, crearAvisosVentas, crearAvisosRegresos };

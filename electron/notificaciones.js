@@ -3,13 +3,14 @@
 //
 // El servidor local corre dentro de este proceso y publica en su bus lo que llega en vivo
 // (backend/server.js): `auditoria` (con los avisos de diferencias NUEVAS que arma
-// backend/core/avisos.js), `catalogo-nuevo` y `ventas` (las que registra el Sniper, un
-// aviso por keko y por rafaga). Aca solo se decide si mostrarlo:
+// backend/core/avisos.js), `catalogo-nuevo`, `ventas` (las que registra el Sniper, un
+// aviso por keko y por rafaga) y `regresos` (lo que volvio del Mercadillo porque su
+// oferta caduco; va con el interruptor del inventario). Aca solo se decide si mostrarlo:
 //   - nunca si estas mirando la app (ventana visible, no minimizada y enfocada): ahi ya lo
 //     ves en la propia app;
 //   - nunca si apagaste ese tipo en Ajustes (preferencias.json en la carpeta de datos);
 //   - al hacer clic, la ventana se restaura, pasa al frente y abre su destino: la Auditoria
-//     del keko, o Vendido (o la bandeja «Por asignar») del Inventario.
+//     del keko, Vendido (o la bandeja «Por asignar») o Comprado del Inventario.
 // La interfaz no puede disparar notificaciones: solo leer y cambiar las preferencias y
 // pedir una de prueba.
 //
@@ -66,6 +67,7 @@ function crearPreferencias(dirDatos) {
 function huella(keko) { return crypto.createHash('sha1').update(String(keko)).digest('hex').slice(0, 10); }
 function idAuditoria(keko) { return 'aud-' + huella(keko); }
 function idVentas(keko) { return 'ven-' + huella(keko); }
+function idRegresos(keko) { return 'reg-' + huella(keko); }
 
 // Estas mirando la app: no hace falta avisarte fuera de ella.
 function atendida(w) {
@@ -125,6 +127,11 @@ function crearNotificaciones({ Notification, ventana, preferencias, dock = null,
       for (const a of e.avisos || []) {
         mostrar({ tipo: 'ventas', id: idVentas(a.keko), titulo: a.titulo, cuerpo: a.cuerpo, silencioso: a.silencioso, destino: a.destino });
       }
+    } else if (e.tipo === 'regresos') {
+      // Lo que volvio del Mercadillo: con el interruptor del inventario (decision 3A).
+      for (const a of e.avisos || []) {
+        mostrar({ tipo: 'inventario', id: idRegresos(a.keko), titulo: a.titulo, cuerpo: a.cuerpo, silencioso: a.silencioso, destino: a.destino });
+      }
     }
   }
 
@@ -157,4 +164,4 @@ function crearNotificaciones({ Notification, ventana, preferencias, dock = null,
   return { mostrar, alEvento, probar, alVolver, alActivar, vivas: () => vivas.size, sinVer: () => sinVer.size };
 }
 
-module.exports = { APP_ID, crearPreferencias, crearNotificaciones, atendida, idAuditoria, idVentas };
+module.exports = { APP_ID, crearPreferencias, crearNotificaciones, atendida, idAuditoria, idVentas, idRegresos };

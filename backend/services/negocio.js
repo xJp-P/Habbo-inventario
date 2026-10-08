@@ -786,6 +786,49 @@ function crearServicioNegocio({ conexion, furnidata }) {
     });
   }
 
+  // ── Lo que vuelve del Mercadillo (migracion 20261017000000) ────────────────
+  // Lo caducado (168 h) que la foto del Sniper trae en la mano vuelve solo a Comprado: la
+  // base lo anota como un `recuperar` automatico en eventos_sniper. Lo demas (publicado hace
+  // menos, o sin keko) lo devuelves tu desde la Auditoria con «Volvió del Mercadillo»: la
+  // base solo lo acepta hasta el sobrante de la ultima foto de ese keko.
+  const MIGRACION_REGRESOS = 'Para devolver lo que volvió del Mercadillo instala la migración 20261017000000_regreso_mercadillo.sql en tu Supabase (aviso ámbar de arriba).';
+
+  async function devolverDelMercadillo(entrada = {}) {
+    const keko = nombreKeko(entrada.keko);
+    if (!keko) throw new ClientError('Falta el keko donde volvió el furni.');
+    const furniId = numeroValido(entrada.furni_id, { campo: 'El furni', minimo: 1, entero: true });
+    const vacia = entrada.cantidad === undefined || entrada.cantidad === null || entrada.cantidad === '';
+    const cantidad = vacia ? null : numeroValido(entrada.cantidad, { campo: 'La cantidad', minimo: 1, entero: true });
+    try {
+      return await datos(db().rpc('devolver_del_mercadillo', { p_keko: keko, p_furni_id: furniId, p_cantidad: cantidad }));
+    } catch (e) {
+      if (faltaMigracion(e)) throw new ClientError(MIGRACION_REGRESOS, 428);
+      throw e;
+    }
+  }
+
+  // Lo que volvio solo en cada `recuperar` recien llegado (para el aviso): keko, furni y
+  // cuantas unidades. Los `recuperar` del Sniper (retiradas que vio en el juego) no cuentan:
+  // solo los que anoto la base al recibir la foto (datos.automatico).
+  async function detalleRegresos(ids) {
+    const lista = (ids || []).map(Number).filter((x) => Number.isInteger(x) && x > 0);
+    if (!lista.length) return [];
+    const filas = (await datos(db().from('eventos_sniper').select('id, tipo_evento, datos, resultado').in('id', lista)))
+      .filter((f) => f.tipo_evento === 'recuperar' && f.resultado && f.datos && f.datos.automatico === true);
+    const idsFurni = [...new Set(filas.map((f) => Number(f.resultado.furni_id)).filter((x) => Number.isInteger(x) && x > 0))];
+    const nombres = new Map(idsFurni.length
+      ? (await datos(db().from('furnis').select('id, nombre').in('id', idsFurni))).map((f) => [Number(f.id), f.nombre]) : []);
+    return filas.map((f) => {
+      const r = f.resultado;
+      return {
+        id: f.id, keko: r.keko || f.datos.keko || null, furni_id: r.furni_id ?? null,
+        nombre: nombres.get(Number(r.furni_id)) || r.nombre || null, sprite_id: r.sprite_id ?? f.datos.sprite_id ?? null,
+        cantidad: Number(r.cantidad) || 0, ltds: (r.lotes || []).map((l) => l.numero_ltd).filter(Boolean),
+        causa: r.causa || f.datos.causa || 'caducada',
+      };
+    });
+  }
+
   return {
     tasa, fijarTasa, resumen,
     listarFurnis, furniPorId, crearFurni, actualizarFurni, eliminarFurni,
@@ -796,6 +839,7 @@ function crearServicioNegocio({ conexion, furnidata }) {
     resolverNombre, sincronizarConCatalogo,
     auditoria, resumenAuditoria, moverAKeko, darDeBaja, excluirDeAuditoria, entradaAuditoria,
     ventasPorAsignar, aplicarVentaPorAsignar, descartarVentaPorAsignar, detalleVentas,
+    devolverDelMercadillo, detalleRegresos,
   };
 }
 

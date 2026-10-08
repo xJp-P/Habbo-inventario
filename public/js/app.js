@@ -242,6 +242,7 @@ function App() {
       if (ev.compras) partes.push(ev.compras + (ev.compras === 1 ? ' compra' : ' compras'));
       if (ev.publicaciones) partes.push(ev.publicaciones + (ev.publicaciones === 1 ? ' publicación' : ' publicaciones'));
       if (ev.recuperaciones) partes.push(ev.recuperaciones + (ev.recuperaciones === 1 ? ' recuperación' : ' recuperaciones'));
+      if (ev.regresos) partes.push(ev.regresos + (ev.regresos === 1 ? ' furni volvió del Mercadillo' : ' furnis volvieron del Mercadillo'));
       if (ev.ventas) partes.push(ev.ventas + (ev.ventas === 1 ? ' venta' : ' ventas'));
       avisar('Sniper: ' + (partes.join(', ') || ev.total + ' evento(s)'), 'sniper');
       recargar();
