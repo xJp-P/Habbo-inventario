@@ -19,6 +19,10 @@
 // Sniper mas proxima a caducar, al minuto; lo que publicaste tu no lo sigue la app (guion).
 // «Publicado por» suma la etiqueta ambar «N caducadas», y «Retirar» aparece tambien si hay
 // algo del Sniper ya caducado (maqueta del 08-10-2026, decision 3).
+//
+// Furnis fantasma de antes de la 1.10.0 (v1.10.1): el aviso ambar de arriba lo arma app.js
+// (props.avisoFantasmas) y «Publicado por» suma la etiqueta gris punteada «N fantasma» con los
+// lotes que dice /api/fantasmas (props.fantasmaIds).
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { fmtCr, fmtLg } from '../core/format.js';
@@ -30,6 +34,8 @@ import { BloqueKeko, IndiceKekos, KekosVacios, Columnas, anchoMinimo, useAlinead
 import { Barrera, Dibujar } from '../componentes/Barrera.js';
 import { agruparPorKeko, ambitoDe, claveKeko } from '../core/kekos.js';
 import { resumenPublicado, precioMinimoSinPerder } from '../core/comision.js';
+import { EtiquetaFantasma } from '../componentes/Fantasmas.js';
+import { unidadesFantasma } from '../core/fantasmas.js';
 import { composicionMercadillo } from '../core/grupos.js';
 
 // Anchos de las columnas (null = Furni). Con sitio para todos, fijos: los bloques quedan
@@ -44,13 +50,15 @@ function Dato(props) {
   return h('div', null, h('div', { className: 'dato-l' }, props.l), h('div', { className: 'dato-v ' + (props.c || '') }, props.v));
 }
 
-// Quien publico lo de este furni: el Sniper, tu (a mano) o ambos; y cuantas caducaron.
+// Quien publico lo de este furni: el Sniper, tu (a mano) o ambos; cuantas caducaron y cuantas
+// son fantasma (v1.10.1).
 function PublicadoPor(props) {
   var r = props.r;
   return h('span', { style: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' } },
     r.sniper ? h('span', { className: 'tag tag-morado', title: r.sniper + ' und publicadas por el Sniper' }, h(Ico, { name: 'radar', size: 11 }), 'Sniper') : null,
     r.manual ? h('span', { className: 'tag tag-azul', title: r.manual + ' und publicadas por ti' }, h(Ico, { name: 'store', size: 11 }), 'Tú') : null,
-    props.caducadas ? h(EtiquetaCaducada, { n: props.caducadas }) : null);
+    props.caducadas ? h(EtiquetaCaducada, { n: props.caducadas }) : null,
+    props.fantasmas ? h(EtiquetaFantasma, { n: props.fantasmas }) : null);
 }
 
 // «29 oct, 14:05» (el dia y la hora de tu reloj).
@@ -129,6 +137,7 @@ export function MercadilloView(props) {
     var realizada = x.vendidos.reduce(function (s, l) { return s + (l.ganancia_cr || 0); }, 0);
     var comisionPagada = x.vendidos.reduce(function (s, l) { return s + (l.comision_pagada_cr || 0) * l.cantidad; }, 0);
     var caducadas = unidadesCaducadas(x.publicados, ahora);
+    var fantasmas = unidadesFantasma(x.publicados, props.fantasmaIds);
     var trs = [h('tr', { key: x.clave, className: 'fila' + (abiertoEste ? ' abierta' : ''), onClick: function () { setAbierto(abiertoEste ? null : x.clave); } },
       h('td', null, h(NombreFurni, { furni: f, ltds: r.ltds.slice().sort(function (a, b) { return a - b; }) })),
       h('td', { className: 'r mono' },
@@ -139,7 +148,7 @@ export function MercadilloView(props) {
       h('td', { className: 'r mono' }, r.costoPromedio === null ? '-' : fmtLg(r.costoPromedio)),
       h('td', { className: 'r mono ' + (r.ganancia > 0 ? 'pos' : r.ganancia < 0 ? 'neg' : ''), title: r.comision ? 'Ya descuenta ' + fmtCr(r.comision) + ' cr de comisión del mercadillo' : '' },
         (r.ganancia > 0 ? '+' : '') + fmtCr(r.ganancia)),
-      h('td', null, h(PublicadoPor, { r: r, caducadas: caducadas })),
+      h('td', null, h(PublicadoPor, { r: r, caducadas: caducadas, fantasmas: fantasmas })),
       h('td', { className: 'r' },
         h('span', { style: { display: 'inline-flex', gap: 6 } },
           h('button', { className: 'btn btn-chico', title: 'Registrar la venta de unidades publicadas en este keko', onClick: function (e) { e.stopPropagation(); props.onVender(f, ambitoDe(k)); } }, h(Ico, { name: 'lock', size: 11 }), 'Vendido'),
@@ -191,6 +200,8 @@ export function MercadilloView(props) {
         h('input', { className: 'inp', style: { paddingLeft: 34 }, placeholder: 'Buscar furni publicado…', value: q, onChange: function (e) { setQ(e.target.value); } })),
       h('span', { className: 'chip morado activo', style: { cursor: 'default' } },
         h(Ico, { name: 'lock', size: 12, sw: 2.2 }), furnis + (furnis === 1 ? ' furni' : ' furnis'), h('span', { className: 'mono' }, unidades + ' und'))),
+
+    props.avisoFantasmas || null,
 
     visibles.length === 0
       ? h('div', { className: 'tabla-caja' }, h('div', { className: 'vacio' }, filas.length ? 'Ningún furni publicado coincide con la búsqueda.'

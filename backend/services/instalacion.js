@@ -20,6 +20,8 @@ const path = require('path');
 const { ClientError } = require('../core/util');
 
 const DIR_MIGRACIONES = path.join(__dirname, '..', '..', 'supabase', 'migrations');
+const DIR_LIMPIEZA = path.join(__dirname, '..', '..', 'scripts', 'limpiar-fantasmas');
+const LIMPIEZA = ['1-revisar.sql', '2-limpiar.sql', '3-deshacer.sql'];
 const TOKEN_SONDA = 'hbi_sonda_del_asistente';
 
 const funcion = (nombre, args) => (c) => c.rpc(nombre, args);
@@ -101,7 +103,14 @@ function crearServicioInstalacion() {
     };
   }
 
-  return { listar, leerSql, comprobar };
+  // Los SQL de un solo uso que limpian los furnis fantasma de antes de la 1.10.0 (v1.10.1): la
+  // ventana del aviso los copia para el SQL Editor. Solo estos tres (van en el instalador).
+  function leerLimpieza(archivo) {
+    if (!LIMPIEZA.includes(archivo)) throw new ClientError('Ese archivo no existe.', 404);
+    return { archivo, sql: fs.readFileSync(path.join(DIR_LIMPIEZA, archivo), 'utf8') };
+  }
+
+  return { listar, leerSql, leerLimpieza, comprobar };
 }
 
 module.exports = { crearServicioInstalacion, MIGRACIONES, DIR_MIGRACIONES };

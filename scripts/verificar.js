@@ -212,6 +212,30 @@ async function main() {
   assert.deepEqual([cad.vence(pubC(1, 0)), cad.vence(pubC(1, null))], [AHORA_C + 168 * HC, null]);
   ok('caducidad de las ofertas: 168 h exactas (sin fecha, caducada); que se puede retirar y en que orden (el de retirar_furni y devolver_del_mercadillo); la columna Caducidad solo con lo del Sniper; «3 d 4 h»');
 
+  // ── El aviso de furnis fantasma en la interfaz (public/js/core/fantasmas.js, v1.10.1) ──
+  {
+    const fzi = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'fantasmas.js')).href);
+    const fila = (keko, lotes, unidades, reciente = true) => ({ keko, lotes_fantasma: lotes, unidades, inventario_reciente: reciente, inventario_en: '2026-10-08T12:00:00Z' });
+    const r = { disponible: true, unidades: 6, fantasmas: [fila('Ux_Data', [84, 83], 2), fila('-JDark', [105], 2, false), fila('Ux_Data', [9], 2)] };
+    assert.equal(fzi.firmaFantasmas(r), '9,83,84,105', 'la firma: los lotes, ordenados como numeros');
+    assert.deepEqual([fzi.avisoVisible(r, ''), fzi.avisoVisible(r, '9,83,84,105'), fzi.avisoVisible(r, '83,84,105'), fzi.avisoVisible({ disponible: true, unidades: 0, fantasmas: [] }, ''),
+      fzi.avisoVisible({ disponible: false, unidades: 3, fantasmas: [fila('Ux_Data', [5], 3)] }, ''), fzi.avisoVisible(null, '')], [true, false, true, false, false, false],
+      '«Ahora no» lo oculta hasta que la lista cambie; sin fantasmas o sin datos, no sale');
+    const ids = fzi.idsFantasma(r);
+    assert.deepEqual([ids.size, ids.has(83), fzi.unidadesFantasma([{ id: 83, cantidad: 1 }, { id: '84', cantidad: '2' }, { id: 7, cantidad: 5 }], ids), fzi.unidadesFantasma([{ id: 83, cantidad: 1 }], new Set())],
+      [4, true, 3, 0]);
+    assert.deepEqual(fzi.porKeko(r).map((g) => [g.keko, g.filas.length, g.unidades, g.reciente]), [['Ux_Data', 2, 4, true], ['-JDark', 1, 2, false]], 'por keko, en el orden en que llegan');
+    assert.deepEqual(fzi.textoAviso(r), { titulo: 'Tienes 6 furnis fantasma de antes de la 1.10.0', kekos: ['Ux_Data', '-JDark'] });
+    assert.equal(fzi.textoAviso({ unidades: 1, fantasmas: [fila('Ux_Data', [1], 1)] }).titulo, 'Tienes 1 furni fantasma de antes de la 1.10.0');
+    const guardado = {};
+    const almacenFz = { getItem: (k) => guardado[k] || null, setItem: (k, v) => { guardado[k] = v; } };
+    fzi.guardarAhoraNo(almacenFz, '9,83');
+    const roto = { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } };
+    assert.deepEqual([fzi.leerAhoraNo(almacenFz), fzi.leerAhoraNo(roto), fzi.leerAhoraNo(null), guardado[fzi.CLAVE_AHORA_NO]], ['9,83', '', '', '9,83']);
+    fzi.guardarAhoraNo(roto, 'x');
+    ok('aviso de furnis fantasma en la interfaz: «Ahora no» lo oculta hasta que cambie la lista (firma de lotes), las etiquetas cuentan las unidades fantasma de una fila, la ventana agrupa por keko y nada falla sin almacenamiento');
+  }
+
   const ventasJs = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'ventas.js')).href);
   const lotesV = [
     { id: 1, furni_id: 10, estado: 'publicado', keko: 'Ux_Data', precio_lista: 128, publicado_en: '2026-09-30T02:00:00Z' },
@@ -2345,6 +2369,9 @@ async function main() {
     assert.deepEqual([avisoFz.disponible, avisoFz.migracion21, avisoFz.unidades, avisoFz.lotes, avisoFz.kekos.slice().sort()], [true, true, 8, 7, ['Ux_Data', 'Viejo']],
       'el aviso: los 7 de Ux_Data y el de Viejo, aunque su inventario sea viejo (el paso 1 pedira uno nuevo)');
     assert.deepEqual(avisoFz.fantasmas.filter((f) => !f.inventario_reciente).map((f) => [f.keko, f.lotes_fantasma]), [['Viejo', viejoFz.viejo]]);
+    const filaHusoFz = avisoFz.fantasmas.find((f) => f.lotes_fantasma.includes(husoFz));
+    assert.deepEqual([filaHusoFz.furni_id, filaHusoFz.entradas_dias], [await furniDeFz(husoFz), [new Date(ayerFz.getTime() - 24 * H).toISOString().slice(0, 10)]],
+      'la ventana sabe el furni y el dia de la «Entrada con costo»');
 
     // 2-limpiar: borra exactamente eso, con copia; ventas, Auditoria y lo demas igual.
     const limpioFz = await correrFz('2-limpiar.sql');
@@ -2815,6 +2842,16 @@ async function main() {
     assert.ok(h.status === 200 && /create table/i.test(h.json.sql));
     h = await pedir(s2.address().port, 'GET', '/api/instalacion/sql/' + encodeURIComponent('../../package.json'));
     assert.equal(h.status, 404);
+    // Los SQL de la limpieza de fantasmas (v1.10.1): solo los tres de la lista, y van en el instalador.
+    for (const archivo of ['1-revisar.sql', '2-limpiar.sql', '3-deshacer.sql']) {
+      h = await pedir(s2.address().port, 'GET', '/api/fantasmas/sql/' + archivo);
+      assert.deepEqual([h.status, h.json.sql], [200, fs.readFileSync(path.join(__dirname, 'limpiar-fantasmas', archivo), 'utf8')], archivo);
+    }
+    for (const otro of ['comprobar-huella.sql', encodeURIComponent('../verificar.js'), encodeURIComponent('../../package.json')]) {
+      h = await pedir(s2.address().port, 'GET', '/api/fantasmas/sql/' + otro);
+      assert.equal(h.status, 404, otro);
+    }
+    assert.ok(require('../package.json').build.files.includes('scripts/limpiar-fantasmas/[1-3]-*.sql'), 'los SQL de la limpieza van en el instalador');
     s2.close();
     ok(`asistente: detecta que migraciones faltan con la clave publica (0 en un proyecto recien creado, 1, 3, 8 y ${archivosMig.length} de ${archivosMig.length}) sin escribir nada; copia el SQL sin sesion y solo de supabase/migrations`);
 

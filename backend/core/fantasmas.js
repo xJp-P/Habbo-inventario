@@ -41,10 +41,10 @@ function decidir(g, reciente, ahora) {
     return 'El inventario de este keko es de hace ' + Math.floor((ahora - g.recibido) / 60000)
       + ' min. Mueve un furni en Habbo (o reconecta el Sniper) para que envíe uno nuevo y vuelve a revisar.';
   }
-  if (g.comprobables === 0) return 'Caducó después del último inventario: puede seguir en «Expirado». Recógelo, espera el inventario nuevo y vuelve a revisar.';
+  if (g.comprobables === 0) return 'Caducó después del último inventario: espera a que el Sniper envíe uno nuevo (si quedó en «Expirado» de Habbo, recógelo antes) y vuelve a revisar.';
   if (g.numero_ltd === null) {
     if (g.habbo > g.app) return 'En Habbo tienes ' + (g.habbo - g.app) + ' más en la mano que en la app: el próximo inventario lo devuelve solo a Comprado.';
-    if (g.entradas === 0) return 'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Lo más probable es que siga en «Expirado» de Habbo: recógelo y la app lo devuelve sola a Comprado.';
+    if (g.entradas === 0) return 'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Es una oferta real: cuando vuelva a tu inventario (si quedó en «Expirado» de Habbo, recógelo), la app la devuelve sola a Comprado.';
     if (g.entradas < g.comprobables) return 'Solo ' + g.entradas + ' se volvieron a registrar con «Entrada con costo» y hay ' + g.comprobables + ' caducadas: revísalo a mano.';
     return null;
   }
@@ -105,7 +105,7 @@ function planFantasmas({ lotes = [], furnis = [], fotos = [], ahora = Date.now()
     const fo = keko !== null ? fotoDe.get(keko) : undefined;
     const t = instante(l.publicado_en);
     const antes = Boolean(fo) && fo.t !== null && (t === null || t + CADUCA_MS <= fo.t - MARGEN_MS);
-    const base = { keko, sprite_id: d.sprite, tipo: d.tipo, conInventario: Boolean(fo), recibido: fo ? fo.t : null };
+    const base = { keko, furni_id: Number(l.furni_id), sprite_id: d.sprite, tipo: d.tipo, conInventario: Boolean(fo), recibido: fo ? fo.t : null };
     if (l.numero_ltd === null || l.numero_ltd === undefined) {
       const k = [keko, d.sprite, d.tipo, d.sprite === null ? l.furni_id : ''].join('\u0000');
       const g = grupos.get(k) || { ...base, numero_ltd: null, nombre: null, caducadas: 0, comprobables: 0, lotes: [], desde: null };
@@ -140,6 +140,7 @@ function planFantasmas({ lotes = [], furnis = [], fotos = [], ahora = Date.now()
       ltdEnHabbo: Boolean(item && g.numero_ltd !== null && item.ltds.includes(g.numero_ltd)),
       ltdEnApp: Boolean(m && g.numero_ltd !== null && m.ltds.has(g.numero_ltd)),
       entradas: g.numero_ltd === null && g.desde !== null ? lista.filter((e) => e.dia >= g.desde).reduce((s, e) => s + e.cantidad, 0) : 0,
+      entradasDias: g.numero_ltd === null && g.desde !== null ? [...new Set(lista.filter((e) => e.dia >= g.desde).map((e) => e.dia))].sort() : [],
     };
     const reciente = x.recibido !== null && x.recibido >= ahora - INVENTARIO_MAX_MS;
     const noSeToca = decidir(x, reciente, ahora);
@@ -151,6 +152,7 @@ function planFantasmas({ lotes = [], furnis = [], fotos = [], ahora = Date.now()
     return {
       keko: x.keko,
       furni: x.nombre + (x.numero_ltd !== null ? ' #' + x.numero_ltd : ''),
+      furni_id: x.furni_id,
       sprite_id: x.sprite_id,
       tipo: x.tipo,
       numero_ltd: x.numero_ltd,
@@ -163,6 +165,8 @@ function planFantasmas({ lotes = [], furnis = [], fotos = [], ahora = Date.now()
       fantasma,
       unidades: fantasma ? x.comprobables : 0,
       lotes_fantasma: fantasma ? x.lotes.slice().sort((a, b) => a - b) : [],
+      // Para la ventana: los dias de las «Entrada con costo» que cuentan como huella.
+      entradas_dias: fantasma ? x.entradasDias : [],
       inventario_reciente: reciente,
       inventario_en: x.recibido === null ? null : new Date(x.recibido).toISOString(),
     };

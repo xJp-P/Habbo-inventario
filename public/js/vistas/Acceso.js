@@ -22,8 +22,9 @@ import { Ico } from '../componentes/iconos.js';
 var PANEL = 'https://supabase.com/dashboard';
 
 // Enlaces directos al panel del proyecto: el ref es el subdominio de la URL. Sin
-// proyecto conocido, "_" hace que Supabase pregunte cual.
-function enlacesSupabase(url) {
+// proyecto conocido, "_" hace que Supabase pregunte cual. (La usa tambien la ventana de los
+// furnis fantasma, v1.10.1.)
+export function enlacesSupabase(url) {
   var m = /^https:\/\/([a-z0-9]+)\.supabase\.co/i.exec(url || '');
   var base = PANEL + '/project/' + (m ? m[1] : '_');
   return {

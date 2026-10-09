@@ -59,6 +59,8 @@ import { retirable, ordenRetiro } from './core/caducidad.js';
 import { kekoConVentasSniper, nombreVentaPendiente } from './core/ventas.js';
 import { ErroresModal } from './componentes/ErroresModal.js';
 import { Barrera } from './componentes/Barrera.js';
+import { AvisoFantasmas, FantasmasModal } from './componentes/Fantasmas.js';
+import { firmaFantasmas, idsFantasma, hayFantasmas, leerAhoraNo, guardarAhoraNo } from './core/fantasmas.js';
 import { registrarError, erroresRegistrados, alCambiarErrores, limpiarErrores, describirEquipo } from './core/errores.js';
 
 // Cuanto se espera cada peticion de la carga antes de darla por fallida.
@@ -91,6 +93,7 @@ var NAV = [
 ];
 
 function leerTema() { try { return localStorage.getItem('tema') || 'dark'; } catch (_) { return 'dark'; } }
+function almacen() { try { return window.localStorage; } catch (_) { return null; } }
 
 function App() {
   var sC = useState(null); var cuenta = sC[0]; var setCuenta = sC[1];
@@ -120,6 +123,10 @@ function App() {
   var sVE = useState(null); var verErrores = sVE[0]; var setVerErrores = sVE[1];
   var sFa = useState({}); var fallos = sFa[0]; var setFallos = sFa[1];
   var sEM = useState(null); var estadoMig = sEM[0]; var setEstadoMig = sEM[1];
+  // Furnis fantasma de antes de la 1.10.0 (v1.10.1): lo que dice /api/fantasmas y la lista que se
+  // oculto con «Ahora no» en este equipo (vuelve si cambia).
+  var sFz = useState(null); var fantasmas = sFz[0]; var setFantasmas = sFz[1];
+  var sAN = useState(function () { return leerAhoraNo(almacen()); }); var ahoraNo = sAN[0]; var setAhoraNo = sAN[1];
   // Las partes que llegaron alguna vez en esta sesion (para distinguir una carga que falla
   // de una recarga que falla).
   var llegaron = useRef({});
@@ -202,6 +209,8 @@ function App() {
       // Diferencias de la auditoria y kekos (aparte: sin su migracion responden vacio).
       API.get('/api/auditoria/resumen').then(function (a) { if (a) setResAuditoria(a); });
       API.get('/api/kekos').then(function (k) { if (k) setKekos(k); });
+      // Los fantasmas: en silencio (es un aviso; si falla, simplemente no sale).
+      API.intentar('GET', '/api/fantasmas').then(function (f) { if (!f.error) setFantasmas(f.datos); });
     });
   }, []);
 
@@ -389,6 +398,26 @@ function App() {
   var tasa = datos.resumen ? datos.resumen.tasa : 50;
 
   function abrirErrores() { setVerErrores('registro'); }
+  // Furnis fantasma (v1.10.1): el aviso de arriba del Mercadillo y de Publicado, y sus lotes
+  // (las etiquetas «fantasma»). «Comprobar de nuevo» de la ventana vuelve a mirar y recarga.
+  var fantasmaIds = idsFantasma(fantasmas);
+  var avisoFantasmas = h(AvisoFantasmas, { datos: fantasmas, oculta: ahoraNo,
+    onVer: function () { setModal({ tipo: 'fantasmas' }); },
+    onAhoraNo: function () {
+      var f = firmaFantasmas(fantasmas);
+      guardarAhoraNo(almacen(), f); setAhoraNo(f);
+      avisar('Aviso oculto en este equipo hasta que la lista cambie');
+    } });
+  function comprobarFantasmas() {
+    return API.intentar('GET', '/api/fantasmas').then(function (r) {
+      if (r.error) { avisar(r.error.message, 'error'); return; }
+      setFantasmas(r.datos);
+      recargar();
+      if (!hayFantasmas(r.datos)) { setModal(null); avisar('Listo: ya no quedan furnis fantasma'); }
+      else avisar('Todavía quedan ' + r.datos.unidades + ' und fantasma: sigue los pasos 1 y 2 (si ya los hiciste, espera unos segundos y prueba de nuevo)', 'sniper');
+    });
+  }
+
   var contenido;
   // Lo que esta seccion necesita y aun no llego: si fallo, el motivo y Reintentar (nunca un
   // spinner eterno); si sigue en camino, el spinner (como mucho ESPERA_CARGA).
@@ -408,6 +437,7 @@ function App() {
   else if (vista === 'resumen') contenido = h(ResumenView, { resumen: datos.resumen, onNav: navegar, onVerFurni: verFurni, onCambio: cambio, onError: function (m) { avisar(m, 'error'); } });
   else if (vista === 'mercadillo') contenido = h(MercadilloView, {
     furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos, onVerErrores: abrirErrores,
+    avisoFantasmas: avisoFantasmas, fantasmaIds: fantasmaIds,
     onVerLotes: function (f) { verLotes(f.nombre, 'publicado'); },
     // Desde el bloque de un keko: solo lo publicado en ese keko.
     onVender: venderFurniDeKeko,
@@ -416,6 +446,7 @@ function App() {
   else if (vista === 'inventario') contenido = h(InventarioView, {
     compras: datos.compras, pendientes: datos.pendientes, tasa: tasa, filtroFurni: filtroFurni, filtroEstado: filtroEstado, kekos: kekos, onVerErrores: abrirErrores,
     furnis: datos.furnis || [], porAsignar: datos.porAsignar, abrir: abrirInventario,
+    avisoFantasmas: avisoFantasmas, fantasmaIds: fantasmaIds,
     // «+ Compra» de un bloque llega con su keko ya elegido.
     onNueva: function (keko) { setModal({ tipo: 'compra', keko: keko || null }); },
     // Lo publicado se vende en el mercadillo (con comision); lo que esta en mano, con la
@@ -511,6 +542,8 @@ function App() {
       onClose: function () { setVerErrores(null); } }) : null,
     novedades ? h(NovedadesModal, { version: novedades.version, items: novedades.items, onClose: function () { setNovedades(null); } }) : null,
     modal && modal.tipo === 'compra' ? h(CompraModal, { furni: modal.furni, keko: modal.keko, propios: datos.furnis || [], kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
+    modal && modal.tipo === 'fantasmas' && hayFantasmas(fantasmas) ? h(FantasmasModal, { datos: fantasmas, cuenta: cuenta, compras: datos.compras || [], furnis: datos.furnis || [], kekos: kekos,
+      onClose: function () { setModal(null); }, onComprobar: comprobarFantasmas }) : null,
     modal && modal.tipo === 'ltd' ? h(LtdModal, { lote: modal.lote, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'venta-manual' ? h(VentaManualModal, { furnis: datos.furnis || [], compras: datos.compras || [], furni: modal.furni, lote: modal.lote, ambito: modal.ambito, tasa: tasa, kekos: kekos, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,
     modal && modal.tipo === 'vender-furni' ? h(VenderFurniModal, { furni: modal.furni, lotes: modal.lotes, ambito: modal.ambito, tasa: tasa, onClose: function () { setModal(null); }, onGuardado: function (_r, msg) { cambio(msg); } }) : null,

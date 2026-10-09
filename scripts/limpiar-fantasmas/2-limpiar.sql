@@ -116,12 +116,12 @@ decision as (
              format('El inventario de este keko es de hace %s min. Mueve un furni en Habbo (o reconecta el Sniper) para que envíe uno nuevo y vuelve a revisar.',
                     floor(extract(epoch from now() - c.recibido_en) / 60)::integer)
            when c.comprobables = 0 then
-             'Caducó después del último inventario: puede seguir en «Expirado». Recógelo, espera el inventario nuevo y vuelve a revisar.'
+             'Caducó después del último inventario: espera a que el Sniper envíe uno nuevo (si quedó en «Expirado» de Habbo, recógelo antes) y vuelve a revisar.'
            when c.numero_ltd is null and c.habbo_sin_numero > c.app_sin_numero then
              format('En Habbo tienes %s más en la mano que en la app: el próximo inventario lo devuelve solo a Comprado.',
                     c.habbo_sin_numero - c.app_sin_numero)
            when c.numero_ltd is null and c.entradas = 0 then
-             'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Lo más probable es que siga en «Expirado» de Habbo: recógelo y la app lo devuelve sola a Comprado.'
+             'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Es una oferta real: cuando vuelva a tu inventario (si quedó en «Expirado» de Habbo, recógelo), la app la devuelve sola a Comprado.'
            when c.numero_ltd is null and c.entradas < c.comprobables then
              format('Solo %s se volvieron a registrar con «Entrada con costo» y hay %s caducadas: revísalo a mano.',
                     c.entradas, c.comprobables)

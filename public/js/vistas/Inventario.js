@@ -54,6 +54,9 @@
 // queda («caduca en 23 h») o desde cuando caduco, con la etiqueta ambar «Caducada»; lo
 // caducado del Sniper ya se puede «Retirar» (lo tuyo, siempre). Desde el aviso de lo que
 // volvio solo («Ver»), se abre Comprado de ese keko con esos lotes iluminados.
+//
+// Furnis fantasma de antes de la 1.10.0 (v1.10.1): en Publicado, el aviso ambar de arriba (lo
+// arma app.js) y la etiqueta gris punteada «Fantasma» en esos lotes («N fantasma» en su furni).
 
 import { h, useState, useMemo, useEffect } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -68,6 +71,8 @@ import { agruparPorKeko, claveKeko } from '../core/kekos.js';
 import { ingresoNeto, calcularComision } from '../core/comision.js';
 import { ventaDelSniper, cuandoVenta, horaDe, diaDe, nombreVentaPendiente } from '../core/ventas.js';
 import { composicionLotes, agruparPorFurni, franjaPrecios, claveGrupo, leerAbiertos, guardarAbiertos, alternarAbierto } from '../core/grupos.js';
+import { EtiquetaFantasma } from '../componentes/Fantasmas.js';
+import { unidadesFantasma } from '../core/fantasmas.js';
 
 // Un furni que llego del Sniper sin revisar: cuantas, a cuanto, cuando y desde que VPS.
 // "Confirmar" lo pasa a en mano (sin precio: el precio se pone al publicar o al vender).
@@ -316,9 +321,11 @@ function GrupoFurni(props) {
   else if (filtro === 'publicado') sub = n + ' lotes · ' + (g.listas.length > 1 ? g.listas.length + ' precios de lista' : 'todos a ' + fmtLg(g.listas[0]) + ' cr');
   else sub = n + ' lotes · ' + (g.compraMin === g.compraMax ? 'todos a ' + fmtLg(g.compraMin) + ' c/u' : 'de ' + fmtLg(g.compraMin) + ' a ' + fmtLg(g.compraMax) + ' c/u');
   var nCaducadas = filtro === 'publicado' ? unidadesCaducadas(g.lotes, props.ahora) : 0;
+  var nFantasma = filtro === 'publicado' ? unidadesFantasma(g.lotes, props.fantasmaIds) : 0;
   var estado = filtro === 'comprado'
     ? (g.porRevisar ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), g.porRevisar + ' por revisar') : h('span', { className: 'tag tag-azul' }, 'Comprado'))
-    : filtro === 'publicado' ? (nCaducadas ? h(EtiquetaCaducada, { n: nCaducadas }) : h(EtiquetaPublicado, {}))
+    : filtro === 'publicado' ? h('span', { style: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' } },
+        nCaducadas ? h(EtiquetaCaducada, { n: nCaducadas }) : h(EtiquetaPublicado, {}), nFantasma ? h(EtiquetaFantasma, { n: nFantasma }) : null)
     : g.todasSniper ? h('span', { className: 'tag tag-sniper' }, h(Ico, { name: 'radar', size: 11 }), 'Vendido · Sniper')
     : h('span', { className: 'tag tag-verde' }, 'Vendido');
   var prom = h('div', { className: 'prom' }, 'prom.');
@@ -579,7 +586,9 @@ export function InventarioView(props) {
       conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, g === null ? '-' : (g > 0 ? '+' : '') + fmtCr(g)) : null,
       conPrecio ? h('td', { className: 'r mono ' + (g > 0 ? 'pos' : g < 0 ? 'neg' : '') }, l.margen === null ? '-' : fmtPct(l.margen)) : null,
       h('td', null, l.pendiente ? h('span', { className: 'tag tag-ambar' }, h(Ico, { name: 'radar', size: 11 }), 'Por revisar')
-        : publicado ? (caducada(l, ahora) ? h(EtiquetaCaducada, {}) : h(EtiquetaPublicado, { manual: manual }))
+        : publicado ? h('span', { style: { display: 'inline-flex', gap: 4, flexWrap: 'wrap' } },
+            caducada(l, ahora) ? h(EtiquetaCaducada, {}) : h(EtiquetaPublicado, { manual: manual }),
+            props.fantasmaIds && props.fantasmaIds.has(Number(l.id)) ? h(EtiquetaFantasma, {}) : null)
         : delSniper ? h('span', { className: 'tag tag-sniper', title: 'Venta registrada por el Sniper' + (sniperDe(l.keko) ? ' (' + sniperDe(l.keko) + ')' : '') },
             h(Ico, { name: 'radar', size: 11 }), 'Vendido · Sniper')
         : l.estado === 'vendido' ? h('span', { className: 'tag tag-verde' }, 'Vendido') : h('span', { className: 'tag tag-azul' }, 'Comprado')),
@@ -666,7 +675,7 @@ export function InventarioView(props) {
             h(Dibujar, { dibujar: function () {
               return h(GrupoFurni, { grupo: gr, filtro: filtro, abierto: grupoAbierto(clave), animar: seAnima(clave), ahora: ahora,
                 onAlternar: function () { alternarGrupo(clave); }, filasLote: filasLote, columnas: columnas, anchos: ANCHOS[filtro],
-                acciones: accionesFurni, onVerErrores: props.onVerErrores });
+                acciones: accionesFurni, onVerErrores: props.onVerErrores, fantasmaIds: props.fantasmaIds });
             } }));
         }))));
   }
@@ -693,12 +702,16 @@ export function InventarioView(props) {
       h('button', { className: 'btn', onClick: props.onVentaManual, title: 'Registrar una venta hecha fuera del Sniper: un tradeo o una venta desde otro keko' }, h(Ico, { name: 'tag', size: 14 }), 'Venta'),
       h('button', { className: 'btn btn-verde', onClick: function () { props.onNueva(); } }, h(Ico, { name: 'plus', size: 14, sw: 2.4 }), 'Compra')),
 
-    // Hay ofertas caducadas a la vista: como se resuelven (maqueta del 08-10-2026).
+    // Furnis fantasma de antes de la 1.10.0 (v1.10.1).
+    filtro === 'publicado' ? props.avisoFantasmas || null : null,
+
+    // Hay ofertas caducadas a la vista: como se resuelven (maqueta del 08-10-2026; desde la
+    // v1.10.1 habla de «Expirado», en condicional: a veces el furni vuelve solo a la mano).
     filtro === 'publicado' && visibles.some(function (l) { return caducada(l, ahora); })
       ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 12, fontSize: 12.5 } },
           h(Ico, { name: 'reloj', size: 15, color: 'var(--yellow)' }),
           h('div', null, h('b', null, 'Las ofertas caducan a los ' + DIAS_CADUCIDAD + ' días. '),
-            'Lo que caduca en un keko con Sniper vuelve solo a Comprado en cuanto el Sniper lo ve en tu inventario. Si no vuelve (sigue en «Mis ofertas», o el keko no tiene Sniper), retíralo aquí cuando lo saques del mercadillo.'))
+            'Cuando una caduca, el furni vuelve a tu inventario (si se queda en la pestaña «Expirado» del Mercadillo de Habbo, recógelo). En un keko con Sniper vuelve solo a Comprado en cuanto el Sniper lo ve; en un keko sin Sniper, retíralo aquí.'))
       : null,
 
     enBandeja

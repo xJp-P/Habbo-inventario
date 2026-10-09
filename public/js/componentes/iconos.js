@@ -67,7 +67,9 @@ export var ICONS = {
   reloj:     'M12 21a9 9 0 100-18 9 9 0 000 18z M12 7v5l3 2',
   recibo:    'M6 2h12v20l-3-2-3 2-3-2-3 2z M9 7h6 M9 11h6 M9 15h4',
   trofeo:    'M8 21h8 M12 17v4 M7 4h10v5a5 5 0 01-10 0z M5 4H3v2a4 4 0 004 4 M19 4h2v2a4 4 0 01-4 4',
-  ir:        'M5 12h14 M13 6l6 6-6 6'
+  ir:        'M5 12h14 M13 6l6 6-6 6',
+  // Furnis fantasma de antes de la 1.10.0 (v1.10.1): el aviso, su ventana y las etiquetas.
+  fantasma:  'M6 20V10a6 6 0 0112 0v10l-2-2-2 2-2-2-2 2-2-2z M10 10h.01 M14 10h.01'
 };
 
 export function Ico(props){
