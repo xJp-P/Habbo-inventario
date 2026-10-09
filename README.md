@@ -32,7 +32,7 @@ Aplicación de escritorio (Windows y macOS) para llevar la compra y venta de fur
 
 Lo que tienes en mano no tiene precio ni ganancia: el precio aparece al publicar o al vender. Vender una parte de un lote lo divide y congela el precio real de venta.
 
-**Ofertas que caducan:** una oferta del Mercadillo de Habbo.es dura 7 días (168 h). Si caduca, el furni vuelve a tu inventario de Habbo, y la app lo regresa sola a Comprado cuando el inventario que envía el Sniper lo trae en la mano (solo en ese keko, y te avisa). Lo del Sniper ya caducado también se puede retirar desde la app.
+**Ofertas que caducan:** una oferta del Mercadillo de Habbo.es dura 7 días (168 h). Si caduca, el furni vuelve a tu inventario de Habbo, y la app lo regresa sola a Comprado cuando el inventario que envía el Sniper lo trae en la mano (solo en ese keko, y te avisa). Lo del Sniper ya caducado también se puede retirar desde la app. La pestaña **«Expirado»** del Mercadillo de Habbo es solo un aviso: no hace falta tocarla.
 
 ## Cómo funciona
 
@@ -236,7 +236,7 @@ Los reintentos del bot con el mismo `id_externo` se ignoran. Si el Sniper regist
 | La app no carga tus datos y el proyecto no responde | Supabase pausó el proyecto por inactividad | Reactívalo desde el panel de Supabase |
 | El Sniper dice *«HTTP 404»*, o sus compras no aparecen en la app | El Sniper apunta a **otro** proyecto de Supabase, o a ese proyecto le falta una migración | La URL de ⚙️ Ajustes del Sniper debe ser la misma que la de la app (**Ajustes → Cuenta y apariencia → Supabase**) y su token, uno creado en esta app. Si la app muestra el aviso ámbar, instala lo que falta |
 | *«Para retirar lo que publicó el Sniper y ya caducó instala la migración…»* | A tu proyecto le falta la migración 21 | Ejecuta `supabase/migrations/20261017000000_regreso_mercadillo.sql` en el SQL Editor (el aviso ámbar de la app te la ofrece) |
-| En el Mercadillo, furnis con unidades **«caducadas»** que ya no existen (repetidas) | Antes de la 1.10.0, lo que volvía del Mercadillo salía como sobrante en la Auditoría; si lo registraste con «Entrada con costo», el lote viejo se quedó publicado | Si en Habbo quedó algo en la pestaña **«Expirado»** del Mercadillo de algún keko, recógelo (a veces vuelve solo a la mano). Luego espera unos 3 minutos con el Sniper conectado. Luego, en el SQL Editor, ejecuta `scripts/limpiar-fantasmas/1-revisar.sql` (solo muestra qué borraría y por qué) y después `2-limpiar.sql` (borra solo esos lotes, sin registrar venta ni pérdida, y guarda una copia). `3-deshacer.sql` los devuelve |
+| En el Mercadillo, furnis con unidades **«caducadas»** que ya no existen (repetidas) | Antes de la 1.10.0, lo que volvía del Mercadillo salía como sobrante en la Auditoría; si lo registraste con «Entrada con costo», el lote viejo se quedó publicado | La app te avisa arriba del Mercadillo y de Publicado («Ver cómo limpiarlos»). Deja el Sniper de cada keko conectado unos 3 minutos y, en el SQL Editor, ejecuta `scripts/limpiar-fantasmas/1-revisar.sql` (solo muestra qué borraría y por qué) y después `2-limpiar.sql` (borra solo esos lotes, sin registrar venta ni pérdida, y guarda una copia). `3-deshacer.sql` los devuelve |
 | *«Windows protegió tu PC»* | La app no tiene certificado de pago | **Más información → Ejecutar de todas formas** |
 | macOS dice que la app *«está dañada»* | La app no está notarizada | `xattr -cr "/Applications/Habbo Inventario.app"` |
 

@@ -13,6 +13,12 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '1.10.1': [
+    'Nuevo aviso de furnis fantasma: si antes de la 1.10.0 registraste otra vez un furni que volvió del Mercadillo, su oferta vieja se quedó en Publicado y ese furni contaba dos veces. Ahora la app te avisa arriba del Mercadillo y de Publicado, con los kekos donde están.',
+    'Esos lotes llevan la etiqueta gris «Fantasma». La app solo marca los que de verdad están repetidos: una oferta real que caducó nunca sale.',
+    'Con «Ver cómo limpiarlos» tienes la lista y tres pasos guiados, con botones para copiar cada paso y abrir el editor de tu proyecto. Al final, «Comprobar de nuevo» confirma que ya no queda ninguno. Si prefieres hacerlo luego, «Ahora no» lo oculta hasta que algo cambie.',
+    'La pestaña «Expirado» del Mercadillo de Habbo es solo un aviso: no hace falta tocarla.',
+  ],
   '1.10.0': [
     'Lo que vuelve del Mercadillo ya no se pierde: una oferta dura 7 días y, si nadie la compra, el furni vuelve a tu inventario de Habbo. Ahora la app lo nota sola con el inventario que envía tu Sniper y lo regresa a Comprado.',
     'Te avisamos cuando algo vuelve: dentro de la app, con «Ver» para ir directo a esos lotes en Comprado, y con una notificación si la tienes minimizada. Puedes apagarlo en Ajustes → Notificaciones.',

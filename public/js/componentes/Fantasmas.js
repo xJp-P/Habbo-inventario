@@ -4,8 +4,8 @@
 // («Ver como limpiarlos» / «Ahora no»), etiqueta gris punteada en las listas y una ventana con la
 // lista por keko (con la hora de su inventario) y los pasos. La app NO borra nada: la ventana copia
 // los SQL de scripts/limpiar-fantasmas (que van en el instalador) para el SQL Editor del proyecto,
-// donde el usuario revisa antes de limpiar. «Expirado» va en condicional: a veces el furni vuelve
-// solo a la mano y no hay nada que recoger (lo vio el dueño).
+// donde el usuario revisa antes de limpiar. No hay paso de «Expirado»: esa pestana de Habbo es
+// solo un aviso y marcarla no mueve nada a la mano (lo midio el Sniper el 09-10-2026).
 
 import { h, useState } from '../core/react.js';
 import { API } from '../core/api.js';
@@ -113,7 +113,7 @@ export function FantasmasModal(props) {
       h(Ico, { name: listo ? 'check' : 'copy', size: 12 }), listo ? 'Copiado' : (texto || 'Copiar SQL'));
   }
   function paso(n, titulo, texto, acciones, siguiente) {
-    return h('div', { key: n, className: 'mig' + (siguiente ? ' siguiente' : '') + (sin21 && n > 0 ? ' bloqueado' : '') },
+    return h('div', { key: n, className: 'mig' + (siguiente ? ' siguiente' : '') + (sin21 ? ' bloqueado' : '') },
       h('span', { className: 'paso-n' }, n),
       h('div', { style: { flex: 1, minWidth: 0 } }, h('div', null, h('b', null, titulo)), h('div', { className: 'suave', style: { fontSize: 12, marginTop: 2, lineHeight: 1.45 } }, texto)),
       acciones ? h('div', { className: 'acciones' }, acciones) : null);
@@ -148,9 +148,6 @@ export function FantasmasModal(props) {
         }));
     })),
     h('div', { className: 'fz-pasos' },
-      paso(0, 'Si quedó algo en «Expirado», recógelo',
-        'En Habbo, mira la pestaña «Expirado» del Mercadillo de cada keko: si hay furnis, recógelos (a veces vuelven solos a tu inventario y no hace falta). Luego espera unos 3 minutos con el Sniper conectado: lo real vuelve solo a Comprado.',
-        null, copiado === null),
       paso(1, 'Revisar (no cambia nada)',
         'Pégalo en el SQL Editor y pulsa Run. Debe marcar BORRAR las mismas ' + r.unidades + ' und de esta lista'
           + (viejos.length ? '; los kekos con el inventario viejo saldrán «NO SE TOCA»: reconecta su Sniper y repítelo' : '') + '.',
@@ -158,7 +155,7 @@ export function FantasmasModal(props) {
           h('a', { key: 'e', className: 'btn btn-chico', href: sin21 ? undefined : sql, target: '_blank', rel: 'noopener noreferrer', 'aria-disabled': sin21 || undefined,
               style: sin21 ? { opacity: 0.5, pointerEvents: 'none' } : null },
             h(Ico, { name: 'external', size: 12 }), 'SQL Editor')],
-        copiado === 1),
+        copiado === null || copiado === 1),
       paso(2, 'Limpiar (guarda una copia)',
         'Pégalo y pulsa Run. Supabase avisará «Potential issue detected»: confirma con «Run this query». Te muestra lo que borró.',
         botonCopiar('2-limpiar.sql', 2), copiado === 2),

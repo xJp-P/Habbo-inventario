@@ -706,12 +706,12 @@ export function InventarioView(props) {
     filtro === 'publicado' ? props.avisoFantasmas || null : null,
 
     // Hay ofertas caducadas a la vista: como se resuelven (maqueta del 08-10-2026; desde la
-    // v1.10.1 habla de «Expirado», en condicional: a veces el furni vuelve solo a la mano).
+    // v1.10.1 aclara que «Expirado» de Habbo es solo un aviso: lo midio el Sniper).
     filtro === 'publicado' && visibles.some(function (l) { return caducada(l, ahora); })
       ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 12, fontSize: 12.5 } },
           h(Ico, { name: 'reloj', size: 15, color: 'var(--yellow)' }),
           h('div', null, h('b', null, 'Las ofertas caducan a los ' + DIAS_CADUCIDAD + ' días. '),
-            'Cuando una caduca, el furni vuelve a tu inventario (si se queda en la pestaña «Expirado» del Mercadillo de Habbo, recógelo). En un keko con Sniper vuelve solo a Comprado en cuanto el Sniper lo ve; en un keko sin Sniper, retíralo aquí.'))
+            'Cuando una caduca, el furni vuelve a tu inventario de Habbo; la pestaña «Expirado» del Mercadillo de Habbo es solo un aviso y no hace falta tocarla. En un keko con Sniper vuelve solo a Comprado en cuanto el Sniper lo ve; en un keko sin Sniper, retíralo aquí.'))
       : null,
 
     enBandeja

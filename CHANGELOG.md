@@ -8,6 +8,40 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
+## [1.10.1] - 2026-10-09
+
+### Añadido
+
+- **Aviso de furnis fantasma** (de antes de la 1.10.0). Si una oferta caducó antes de la
+  1.10.0 y el furni que volvió a la mano se registró con «Entrada con costo», la oferta
+  vieja se quedó en Publicado: el mismo furni contaba dos veces en el Mercadillo y en la
+  ganancia esperada. Ahora la app lo detecta y avisa en ámbar arriba del Mercadillo y de
+  Inventario › Publicado, con los kekos donde están. En las listas lleva una etiqueta gris
+  punteada: «N fantasma» en «Publicado por» y en la fila del furni, «Fantasma» en el lote.
+- Solo se marca lo que tiene la **huella** de la duplicación: una entrada de la Auditoría
+  del mismo keko y furni, del día en que caducó o después, por todas las unidades (en un
+  LTD, otra copia con el mismo número). Una oferta real caducada nunca sale.
+- **Ventana «Ver cómo limpiarlos»**: la lista por keko con la hora de su inventario (en
+  ámbar si es de hace más de una hora) y tres pasos: revisar, limpiar y comprobar. «Copiar
+  SQL» copia cada script, «SQL Editor» abre el editor de tu proyecto y «Comprobar de nuevo»
+  vuelve a mirar y cierra el aviso cuando ya no queda ninguno. Al pie, «Copiar «Deshacer»».
+  La app no borra nada: la limpieza se hace en tu Supabase, revisando primero. Sin la
+  migración 21, la ventana pide instalarla antes.
+- **«Ahora no»** oculta el aviso en ese equipo hasta que la lista de fantasmas cambie.
+- Los scripts de `scripts/limpiar-fantasmas/` van en el instalador (la ventana los copia).
+
+### Cambiado
+
+- `1-revisar.sql` y `2-limpiar.sql` exigen la huella. Antes, una oferta real que caducó y
+  todavía no se veía de vuelta en la mano también cumplía la regla.
+- **La pestaña «Expirado» del Mercadillo de Habbo es solo un aviso**. El Sniper la midió:
+  lista lo que caducó y marcarla como vista no mueve nada a la mano. El aviso de caducadas
+  de Publicado, los scripts y el README ya no piden recoger nada.
+
+### Migraciones de Supabase
+
+- Ninguna: esta versión no cambia la base de datos.
+
 ## [1.10.0] - 2026-10-08
 
 ### Añadido

@@ -192,6 +192,8 @@ Los elementos inválidos (sin `sprite_id` ni `nombre` conocido, cantidad no vál
 
 El bot no tiene que hacer nada nuevo (puede ignorar el campo o anotarlo en su log). Las retiradas que sí intercepta siguen yendo como `recuperar`, por la misma cola y antes de la foto, como hasta ahora. Errores: 401 token inválido o revocado; 400 falta `keko`, hotel no admitido o `inventario` no es una lista; 404 (`PGRST202`) falta ejecutar la migración **en el proyecto al que apunta el bot** (si la app no avisa en ámbar, el bot usa otro proyecto: ver la tabla de la sección 3).
 
+**«Expirado» (medido por el Sniper el 09-10-2026, Fase 27.72):** la pestaña «Expirado» de «Mis ventas» (`GetMarketplaceOwnOffers {i:3}`) lista lo que caducó, con la misma estructura que «vendido» y estado 3. Es solo un aviso: el botón de la pestaña manda `ClearMarketplaceOwnHistory {i:3}` y no mueve nada a la mano. El bot no manda `recuperar` por una oferta caducada (en estado 3 o con su plazo vencido) ni cuenta el estado 3 como venta: la devuelve la foto. Si el usuario retira una oferta en su último minuto, el bot lo trata como caducidad: si la foto llega antes de las 168 h, ese lote sigue publicado y la Auditoría muestra el sobrante con «Volvió del Mercadillo»; la primera foto que llegue pasadas las 168 h lo devuelve sola, porque el sobrante sigue ahí.
+
 ---
 
 ## 6. Ventas (requiere `20261015000000_ventas_sniper.sql`)

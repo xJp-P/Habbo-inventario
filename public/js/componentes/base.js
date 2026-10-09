@@ -96,8 +96,9 @@ export function EtiquetaPublicado(props) {
     h(Ico, { name: 'lock', size: 11, sw: 2.2 }), props.texto || 'Publicado');
 }
 
-// Oferta caducada (v1.10.0): ámbar, como lo «por revisar». Con `n`, «2 caducadas».
-export var AYUDA_CADUCADA = 'Su oferta venció (' + DIAS_CADUCIDAD + ' días) sin venderse: ya no está a la venta. Si vuelve a tu inventario, la foto del Sniper la devuelve sola a Comprado; si no, retírala cuando la saques del mercadillo.';
+// Oferta caducada (v1.10.0): ámbar, como lo «por revisar». Con `n`, «2 caducadas». Desde la
+// v1.10.1 no pide sacar nada del Mercadillo: el furni vuelve solo (lo midio el Sniper).
+export var AYUDA_CADUCADA = 'Su oferta venció (' + DIAS_CADUCIDAD + ' días) sin venderse: ya no está a la venta y el furni vuelve a tu inventario. En un keko con Sniper, su próxima foto la devuelve sola a Comprado; en un keko sin Sniper, retírala aquí.';
 export function EtiquetaCaducada(props) {
   return h('span', { className: 'tag tag-caducada', title: AYUDA_CADUCADA },
     h(Ico, { name: 'reloj', size: 11, sw: 2.2 }), props.n ? props.n + (props.n === 1 ? ' caducada' : ' caducadas') : 'Caducada');

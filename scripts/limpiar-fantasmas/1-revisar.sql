@@ -12,14 +12,14 @@
 --     furni que la app (si las tuviera, seria lo caducado que volvio, y la app lo devuelve sola) Y
 --     tiene la HUELLA de la duplicacion: en ese keko se volvieron a registrar con «Entrada con costo»
 --     (la Auditoria) al menos tantas unidades como caducadas, el dia en que caducaron o despues. Sin
---     huella es una oferta real que todavia no vuelve a la mano: no se toca.
+--     huella no se puede asegurar que sea un fantasma: no se toca.
 --   - Con numero LTD: es fantasma si la app ya tiene otra copia con ese numero que no esta caducada.
 --   - Es la misma regla del aviso de la app (backend/core/fantasmas.js, v1.10.1).
 --   - Nunca toca lo vigente, lo sin keko, los kekos sin inventario (manuales) ni nada en mano o vendido.
 --
--- ANTES de correrlo: si en Habbo quedo algo en la pestana «Expirado» del Mercadillo de algun keko,
--- recogelo (a veces vuelve solo a la mano y no hace falta). Luego espera unos 3 minutos con el Sniper
--- conectado: asi su inventario ya incluye lo que volvio.
+-- ANTES de correrlo: deja el Sniper de cada keko conectado unos 3 minutos, asi su inventario es
+-- reciente e incluye lo que volvio. La pestana «Expirado» del Mercadillo de Habbo es solo un aviso:
+-- no hace falta tocarla (marcarla como vista no mueve nada a la mano; lo midio el Sniper).
 --
 -- Uso: copia TODO este archivo en el SQL Editor de Supabase y pulsa Run. Muestra una fila por furni
 -- y keko: BORRAR (lo que hara el paso 2) o NO SE TOCA (con el motivo). La primera fila es el total.
@@ -129,12 +129,12 @@ decision as (
              format('El inventario de este keko es de hace %s min. Mueve un furni en Habbo (o reconecta el Sniper) para que envíe uno nuevo y vuelve a revisar.',
                     floor(extract(epoch from now() - c.recibido_en) / 60)::integer)
            when c.comprobables = 0 then
-             'Caducó después del último inventario: espera a que el Sniper envíe uno nuevo (si quedó en «Expirado» de Habbo, recógelo antes) y vuelve a revisar.'
+             'Caducó después del último inventario: espera a que el Sniper envíe uno nuevo y vuelve a revisar.'
            when c.numero_ltd is null and c.habbo_sin_numero > c.app_sin_numero then
              format('En Habbo tienes %s más en la mano que en la app: el próximo inventario lo devuelve solo a Comprado.',
                     c.habbo_sin_numero - c.app_sin_numero)
            when c.numero_ltd is null and c.entradas = 0 then
-             'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Es una oferta real: cuando vuelva a tu inventario (si quedó en «Expirado» de Habbo, recógelo), la app la devuelve sola a Comprado.'
+             'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara, así que no se puede asegurar que sea un fantasma: revísalo a mano.'
            when c.numero_ltd is null and c.entradas < c.comprobables then
              format('Solo %s se volvieron a registrar con «Entrada con costo» y hay %s caducadas: revísalo a mano.',
                     c.entradas, c.comprobables)

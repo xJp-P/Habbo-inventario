@@ -2,8 +2,8 @@
 //
 // Antes de la 1.10.0, lo que caducaba en el Mercadillo volvia a la mano, la Auditoria lo daba
 // como sobrante y se registraba con «Entrada con costo»: el lote viejo se quedaba en Publicado,
-// caducado, y el mismo furni contaba dos veces. Desde que Habbo guarda lo caducado en la pestana
-// «Expirado», una oferta REAL que espera ahi tambien esta caducada y fuera de la mano: por eso no
+// caducado, y el mismo furni contaba dos veces. Una oferta REAL que caduco y todavia no se ve de
+// vuelta en la mano (o que ya salio de ella) tambien esta caducada y fuera de la mano: por eso no
 // basta con «Habbo no la tiene». Hace falta la HUELLA de la duplicacion: una entrada de la
 // Auditoria (su nota fija, negocio.entradaAuditoria) del mismo keko y furni, fechada el dia en que
 // caduco o despues; en un LTD, otra copia buena con el mismo numero.
@@ -41,10 +41,10 @@ function decidir(g, reciente, ahora) {
     return 'El inventario de este keko es de hace ' + Math.floor((ahora - g.recibido) / 60000)
       + ' min. Mueve un furni en Habbo (o reconecta el Sniper) para que envíe uno nuevo y vuelve a revisar.';
   }
-  if (g.comprobables === 0) return 'Caducó después del último inventario: espera a que el Sniper envíe uno nuevo (si quedó en «Expirado» de Habbo, recógelo antes) y vuelve a revisar.';
+  if (g.comprobables === 0) return 'Caducó después del último inventario: espera a que el Sniper envíe uno nuevo y vuelve a revisar.';
   if (g.numero_ltd === null) {
     if (g.habbo > g.app) return 'En Habbo tienes ' + (g.habbo - g.app) + ' más en la mano que en la app: el próximo inventario lo devuelve solo a Comprado.';
-    if (g.entradas === 0) return 'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara. Es una oferta real: cuando vuelva a tu inventario (si quedó en «Expirado» de Habbo, recógelo), la app la devuelve sola a Comprado.';
+    if (g.entradas === 0) return 'Sin huella: nadie lo volvió a registrar con «Entrada con costo» después de que caducara, así que no se puede asegurar que sea un fantasma: revísalo a mano.';
     if (g.entradas < g.comprobables) return 'Solo ' + g.entradas + ' se volvieron a registrar con «Entrada con costo» y hay ' + g.comprobables + ' caducadas: revísalo a mano.';
     return null;
   }
