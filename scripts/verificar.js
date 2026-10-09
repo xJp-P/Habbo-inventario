@@ -492,6 +492,150 @@ async function main() {
   assert.deepEqual(hist.leerFiltros({ getItem: () => '[1,2]' }), hist.FILTROS_INICIALES);
   ok('historial de ventas: una fila por venta (lo que pago el comprador, lo que entro y la ganancia de la base; el dia del reloj del usuario; quien la registro); filtros por fechas, dia del grafico, texto sin tildes, keko, origen y perdida, con sus chips; orden y subtotales por dia; metricas sin las por asignar; grafico por dia, semana o mes; CSV para Excel; filtros recordados');
 
+  // ── El Resumen nuevo (public/js/core/tablero.js, v2.0.0): la logica pura ──
+  const tab = await import(pathToFileURL(path.join(__dirname, '..', 'public', 'js', 'core', 'tablero.js')).href);
+  const { calcularResumen } = require('../backend/core/calculos');
+  const ahoraT = new Date(2026, 9, 9, 15, 0).getTime();                 // viernes 9 de octubre, 15:00
+  const enT = (mes, d, hh, mm = 0) => new Date(2026, mes, d, hh, mm).toISOString();
+  const haceT = (ms) => new Date(ahoraT - ms).toISOString();
+  const HT = 3600000, DT = 24 * HT;
+  const loteT = (x) => ({ origen_id: null, numero_ltd: null, pendiente: false, comision_cr: null, comision_pagada_cr: null, ganancia_cr: null, publicado_por: null, ...x });
+  const venT = (x) => loteT({ estado: 'vendido', cantidad: 1, comision_cr: 0, moneda_venta_real: 'creditos', comision_venta: null, vendido_por: 'sniper', fuente: 'sniper', ...x,
+    precio_venta_cr: (x.costo_total_cr + x.ganancia_cr) / (x.cantidad || 1) });
+  const comprasT = [
+    loteT({ id: 1, estado: 'comprado', pendiente: true, keko: 'Ux_Data', furni_id: 10, nombre: 'Patito de Fuego Plateado', cantidad: 4, costo_total_cr: 472, fecha_compra: '2026-10-09' }),
+    loteT({ id: 2, estado: 'comprado', keko: 'Ux_Data', furni_id: 11, nombre: 'Alas Brillantes', cantidad: 3, costo_total_cr: 300, fecha_compra: '2026-09-25' }),   // 14 dias: dormido
+    loteT({ id: 3, estado: 'comprado', keko: 'xJp', furni_id: 12, nombre: 'Araña Venenosa en la Cabeza', cantidad: 2, costo_total_cr: 100, fecha_compra: '2026-09-26' }),   // 13: no
+    loteT({ id: 4, estado: 'comprado', keko: null, furni_id: 13, nombre: 'Caja de música victoriana', cantidad: 1, costo_total_cr: 50, fecha_compra: '2026-09-01' }),   // 38: viejo
+    loteT({ id: 5, estado: 'comprado', keko: 'Claudio4.8', furni_id: 14, nombre: 'Dragón Bebé', cantidad: 5, costo_total_cr: 200, fecha_compra: null }),   // sin fecha: no
+    loteT({ id: 6, estado: 'publicado', keko: 'Ux_Data', furni_id: 20, nombre: 'Corona de Oro de 24 kt', numero_ltd: 45, cantidad: 1, costo_total_cr: 900, ganancia_cr: 957, comision_cr: 43,
+      publicado_en: haceT(2 * DT), publicado_por: 'sniper', fecha_compra: '2026-10-05' }),
+    loteT({ id: 7, estado: 'publicado', keko: '-JDark', furni_id: 21, nombre: 'Dragón Fiel', cantidad: 2, costo_total_cr: 190, ganancia_cr: -10, comision_cr: 2,
+      publicado_en: haceT(8 * DT), publicado_por: 'sniper', fecha_compra: '2026-09-30' }),   // caducada y con perdida
+    loteT({ id: 8, estado: 'publicado', keko: '-JDark', furni_id: 22, nombre: 'Lámpara Dragón Oro Rosa', cantidad: 1, costo_total_cr: 340, ganancia_cr: 120, comision_cr: 10,
+      publicado_en: haceT(167 * HT), publicado_por: 'sniper', fecha_compra: '2026-10-01' }),   // caduca en 1 h
+    loteT({ id: 9, estado: 'publicado', keko: 'xJp', furni_id: 23, nombre: 'Dragón Helado', cantidad: 1, costo_total_cr: 180, ganancia_cr: 70, comision_cr: 7,
+      publicado_en: haceT(9 * DT), publicado_por: 'manual', fecha_compra: '2026-09-28' }),   // tuya: la app no la sigue
+    venT({ id: 10, keko: 'Ux_Data', furni_id: 11, nombre: 'Alas Brillantes', costo_total_cr: 38, ganancia_cr: 22, comision_pagada_cr: 2, comision_venta: 2, vendido_en: enT(9, 9, 10), fecha_venta: '2026-10-09' }),
+    venT({ id: 11, keko: 'xJp', furni_id: 30, nombre: 'Pato HC', cantidad: 2, costo_total_cr: 190, ganancia_cr: 110, vendido_por: 'manual', fuente: 'manual', vendido_en: enT(9, 5, 12), fecha_venta: '2026-10-05' }),
+    venT({ id: 12, keko: 'Ux_Data', furni_id: 11, nombre: 'Alas Brillantes', costo_total_cr: 60, ganancia_cr: 40, comision_pagada_cr: 3, comision_venta: 3, vendido_en: enT(9, 1, 20), fecha_venta: '2026-10-02' }),
+    venT({ id: 13, keko: 'Claudio4.8', furni_id: 14, nombre: 'Dragón Bebé', costo_total_cr: 45, ganancia_cr: 15, comision_pagada_cr: 1, comision_venta: 1, vendido_en: enT(8, 20, 8), fecha_venta: '2026-09-20' }),
+    venT({ id: 14, keko: 'xJp', furni_id: 30, nombre: 'Pato HC', costo_total_cr: 95, ganancia_cr: 50, vendido_por: 'manual', fuente: 'manual', vendido_en: null, fecha_venta: '2026-09-05' }),
+    venT({ id: 15, keko: 'Ux_Data', furni_id: 11, nombre: 'Alas Brillantes', costo_total_cr: 38, ganancia_cr: -5, comision_pagada_cr: 1, comision_venta: 1, vendido_en: enT(9, 2, 23, 30), fecha_venta: '2026-10-03' }),
+    venT({ id: 16, keko: null, furni_id: 31, nombre: 'Trono HC', costo_total_cr: 400, ganancia_cr: 100, vendido_por: null, fuente: 'excel', vendido_en: null, fecha_venta: null }),
+  ];
+  const filasT = hist.filasHistorial(comprasT, [], []);
+  const kekosT = [{ id: 1, nombre: 'xJp', origen: 'manual', desde: '2026-08-01T00:00:00Z' }, { nombre: 'Ux_Data', origen: 'sniper', desde: '2026-09-01T00:00:00Z' },
+    { nombre: '-JDark', origen: 'sniper', desde: '2026-09-02T00:00:00Z' }, { nombre: 'Claudio4.8', origen: 'sniper', desde: '2026-09-03T00:00:00Z' }];
+  const audT = { pendientes: 3, kekos: [{ keko: 'Ux_Data', recibido_en: haceT(2 * 60000), pendientes: 3 }, { keko: 'Claudio4.8', recibido_en: haceT(3 * 60000), pendientes: 0 }] };
+  const paT = { disponible: true, ventas: [{ id: 90, keko: '-JDark', precio: 320 }] };
+  const fzT = { disponible: true, unidades: 2, fantasmas: [{ keko: 'Ux_Data', unidades: 2, lotes_fantasma: [77] }] };
+  const casiT = (a, b, que) => assert.ok(Math.abs(Number(a) - Number(b)) < 1e-9, `${que} (${a} vs ${b})`);
+
+  // La cifra doble: cr enteros con punto de miles; L con dos decimales; sin iconos y siempre «L».
+  assert.deepEqual(tab.cifraDoble(11389, { tasa: 50 }), { principal: { texto: '11.389', unidad: 'cr' }, secundaria: { texto: '227,78', unidad: 'L' }, tono: null, titulo: '11.389 cr = 227,78 L (1 L = 50 cr)' });
+  assert.deepEqual(tab.cifraDoble(11389, { tasa: 50, moneda: 'L' }).principal, { texto: '227,78', unidad: 'L' }, 'el interruptor pone los L grandes');
+  assert.deepEqual([tab.cifraDoble(3576, { signo: true }).principal.texto, tab.cifraDoble(3576, { signo: true }).secundaria.texto, tab.cifraDoble(3576, { signo: true }).tono], ['+3.576', '+71,52', 'pos']);
+  assert.deepEqual([tab.cifraDoble(-10, { signo: true }).principal.texto, tab.cifraDoble(-10, { signo: true }).secundaria.texto, tab.cifraDoble(-10, { signo: true }).tono], ['−10', '−0,20', 'neg']);
+  assert.deepEqual([tab.cifraDoble(0, { cero: true }), tab.cifraDoble(0.4, { signo: true }).principal.texto, tab.cifraDoble(0.4, { signo: true }).tono], [null, '0', null], 'cero: guion; casi cero, sin signo');
+  assert.deepEqual([tab.cifraDoble(120, { tasa: 60 }).secundaria.texto, tab.cifraDoble(120, { tasa: 60 }).titulo], ['2,00', '120 cr = 2,00 L (1 L = 60 cr)'], 'con otra tasa');
+  assert.equal(tab.cifraDoble(1234567.6).principal.texto, '1.234.568');
+
+  // Lo de ahora: igual que el Resumen viejo (calculos.js) con los mismos lotes.
+  const viejoT = calcularResumen({ compras: comprasT, furnis: [], tasa: 50 });
+  const capT = tab.capital(comprasT), pcT = tab.porCobrar(comprasT);
+  assert.deepEqual([capT.revisar.unidades, capT.revisar.costo, capT.mano.unidades, capT.mano.costo, capT.publicado.unidades, capT.publicado.costo, capT.total.costo],
+    [4, 472, 11, 650, 5, 1610, 2732], 'capital en juego: por revisar + en mano + publicado');
+  assert.deepEqual([capT.revisar.costo, capT.mano.costo, capT.mano.lotes], [viejoT.por_revisar.costo_cr, viejoT.en_mano.costo_cr, viejoT.en_mano.lotes]);
+  assert.deepEqual([pcT.costo, pcT.ganancia, pcT.comision, pcT.entraria, pcT.unidades], [viejoT.publicado.costo_cr, viejoT.publicado.ganancia_cr, viejoT.publicado.comision_cr, viejoT.publicado.retorno_cr, viejoT.publicado.unidades],
+    'ganancia por cobrar = la ganancia esperada del Resumen viejo');
+  casiT(pcT.margen, viejoT.publicado.margen, 'el margen de lo publicado');
+  assert.deepEqual([pcT.ganancia, pcT.comision], [1137, 64]);
+
+  // Lo realizado: las filas del Historial, por periodo, con el anterior para comparar.
+  const realT = (p, k) => tab.realizado(filasT, p, k, ahoraT);
+  assert.deepEqual(['7', '30', 'mes', 'todo'].map((p) => realT(p).ganancia), [132, 182, 167, 332], 'la ganancia de cada periodo (el dia local: la venta del 2 a las 23:30 es del 2)');
+  assert.deepEqual(['7', '30', 'mes', 'todo'].map((p) => realT(p).anterior && realT(p).anterior.ganancia), [35, 50, 50, null], 'y la del periodo anterior («Todo» no tiene)');
+  assert.deepEqual([tab.periodoAnterior('7', ahoraT), tab.periodoAnterior('30', ahoraT), tab.periodoAnterior('mes', ahoraT)],
+    [{ desde: '2026-09-26', hasta: '2026-10-02' }, { desde: '2026-08-11', hasta: '2026-09-09' }, { desde: '2026-09-01', hasta: '2026-09-09' }]);
+  assert.deepEqual([tab.periodoAnterior('mes', new Date(2026, 2, 31, 12).getTime()), tab.periodoAnterior('mes', new Date(2026, 0, 15, 12).getTime())],
+    [{ desde: '2026-02-01', hasta: '2026-02-28' }, { desde: '2025-12-01', hasta: '2025-12-15' }], '«Este mes» contra los mismos dias del mes anterior (sin pasarse de su ultimo dia; en enero, diciembre)');
+  const todoT = realT('todo');
+  assert.deepEqual([todoT.entro, todoT.ganancia, todoT.costo, todoT.comision, todoT.unidades, todoT.ventas],
+    [viejoT.vendido.retorno_cr, viejoT.vendido.ganancia_cr, viejoT.vendido.costo_cr, viejoT.vendido.comision_cr, viejoT.vendido.unidades, viejoT.vendido.lotes], '«Todo» = las ventas del Resumen viejo (con lo del Excel)');
+  assert.deepEqual([realT('30', 'ux_data').ganancia, realT('30', 'xjp').ganancia, realT('todo', '').ganancia], [57, 110, 100], 'por keko; «» es «Sin keko», no «todos»');
+  assert.equal(realT('raro').ganancia, 182, 'un periodo desconocido es el de siempre (30 dias)');
+  const varT = (a, b) => tab.variacion({ ganancia: a }, b === undefined ? null : { ganancia: b });
+  assert.deepEqual([varT(10), varT(0, 0), varT(10, 0), varT(-5, 0), varT(100, 100), varT(50, 100), varT(10, -20)],
+    [null, null, { tipo: 'nuevo', valor: null }, { tipo: 'baja', valor: null }, { tipo: 'igual', valor: 0 }, { tipo: 'baja', valor: -0.5 }, { tipo: 'sube', valor: 1.5 }]);
+  assert.deepEqual([tab.textoPeriodo('30', ahoraT).comparado, tab.textoPeriodo('mes', ahoraT).titulo, tab.textoPeriodo('mes', ahoraT).comparado, tab.textoPeriodo('todo', ahoraT).comparado],
+    ['vs. los 30 días anteriores', 'Este mes (octubre)', 'vs. del 1 al 9 de septiembre', null]);
+  const serieT = tab.serieRendimiento(filasT, '30', 'todos', ahoraT);
+  assert.deepEqual([serieT.por, serieT.puntos.length, serieT.total.ganancia], ['dia', 30, 182], 'el grafico: un punto por dia y la misma ganancia');
+
+  // Capital dormido: 14 dias o mas en mano (sin lo por revisar ni lo sin fecha), en ambar desde 30.
+  const dorT = tab.dormido(comprasT, ahoraT);
+  assert.deepEqual(dorT.lotes.map((x) => [x.lote.id, x.dias, x.viejo]), [[4, 38, true], [2, 14, false]]);
+  assert.deepEqual([dorT.costo, dorT.unidades, tab.diasEnMano({ fecha_compra: '2026-10-09' }, ahoraT), tab.diasEnMano({ fecha_compra: null }, ahoraT)], [350, 4, 0, null]);
+  assert.deepEqual(tab.dormido([loteT({ id: 99, estado: 'comprado', pendiente: true, cantidad: 1, costo_total_cr: 10, fecha_compra: '2026-09-01' })], ahoraT).lotes, [], 'lo por revisar no esta dormido, aunque sea viejo');
+
+  // El ciclo: cada etapa con sus unidades, su dinero y a donde lleva.
+  const cicloT = tab.ciclo(comprasT, realT('30'), ahoraT);
+  assert.deepEqual(cicloT.map((e) => [e.clave, e.unidades, e.dinero]), [['revisar', 4, 472], ['mano', 11, 650], ['publicado', 5, 1610], ['vendido', 6, realT('30').entro]]);
+  assert.deepEqual([cicloT[1].dormidos, cicloT[2].caducadas, cicloT[2].caducanHoy, cicloT[2].destino.vista, cicloT[3].destino.vista], [2, 2, 1, 'mercadillo', 'historial'],
+    'lo tuyo publicado no cuenta como caducado (la app no lo sigue)');
+
+  // Necesita tu atencion: una sola bandeja, por prioridad, y el filtro de keko.
+  const fuentesT = { compras: comprasT, porAsignar: paT, auditoria: audT, fantasmas: fzT };
+  const atT = (k) => tab.atencion(fuentesT, k, ahoraT);
+  assert.deepEqual(atT('todos').map((a) => [a.tipo, a.n]),
+    [['perdida', 1], ['por_asignar', 1], ['por_revisar', 4], ['fantasmas', 2], ['auditoria', 3], ['caducadas', 2], ['caducan_hoy', 1]]);
+  const porT = Object.fromEntries(atT('todos').map((a) => [a.tipo, a]));
+  assert.deepEqual([porT.perdida.titulo, porT.perdida.detalle, porT.perdida.dinero, porT.perdida.destino], ['1 furni publicado deja pérdida', 'Dragón Fiel: su precio no cubre lo que costó', -10, { vista: 'mercadillo' }]);
+  assert.deepEqual([porT.por_revisar.dinero, porT.auditoria.detalle, porT.auditoria.destino, porT.caducan_hoy.detalle], [472, 'Ux_Data', { vista: 'auditoria', keko: 'Ux_Data' }, 'Lámpara Dragón Oro Rosa en 1 h'],
+    'la Auditoria de un solo keko abre ese keko');
+  assert.deepEqual([atT('xjp'), atT('-jdark').map((a) => a.tipo), atT('ux_data').map((a) => a.tipo)],
+    [[], ['perdida', 'por_asignar', 'caducadas', 'caducan_hoy'], ['por_revisar', 'fantasmas', 'auditoria']], 'cada keko ve solo lo suyo');
+  assert.deepEqual(atT('-jdark')[0].destino, { vista: 'mercadillo', keko: '-jdark' });
+  assert.deepEqual(tab.atencion({ compras: [loteT({ id: 98, estado: 'publicado', keko: 'X', furni_id: 1, nombre: 'Trono HC', cantidad: 1, costo_total_cr: 10, ganancia_cr: 5, comision_cr: 1, publicado_por: 'sniper', publicado_en: haceT(130 * HT) })] }, 'todos', ahoraT), [], 'una oferta que caduca en 38 h no «caduca hoy»');
+  assert.deepEqual(tab.atencion({ compras: [], porAsignar: { disponible: false }, auditoria: null, fantasmas: { disponible: false, unidades: 9 } }, 'todos', ahoraT), [], 'sin las migraciones (o sin datos): nada');
+  assert.deepEqual(tab.perdidas(comprasT).map((g) => [g.furni_id, g.valor]), [[21, -10]]);
+
+  // Por keko: en el orden de la app; la suma de las filas es el total.
+  const pkT = tab.porKeko(comprasT, filasT, kekosT, audT, '30', ahoraT);
+  assert.deepEqual(pkT.map((k) => [k.clave, k.origen]), [['xjp', 'manual'], ['ux_data', 'sniper'], ['-jdark', 'sniper'], ['claudio4.8', 'sniper'], ['', 'sin']]);
+  casiT(pkT.reduce((s, k) => s + k.capital, 0), capT.total.costo, 'la suma del capital de los kekos');
+  casiT(pkT.reduce((s, k) => s + k.porCobrar, 0), pcT.ganancia, 'la suma de lo por cobrar');
+  casiT(pkT.reduce((s, k) => s + k.realizada, 0), realT('30').ganancia, 'la suma de lo realizado');
+  casiT(pkT.reduce((s, k) => s + k.parte, 0), 1, 'las partes suman el 100 %');
+  assert.deepEqual([pkT[1].inventario_en, pkT[0].inventario_en, pkT[4].capital], [audT.kekos[0].recibido_en, null, 50]);
+
+  // Destacados y el pie.
+  assert.deepEqual(tab.masPorCobrar(comprasT).map((g) => [g.furni_id, g.valor, g.ltds]), [[20, 957, [45]], [22, 120, []], [23, 70, []], [21, -10, []]]);
+  assert.deepEqual(tab.masVendidos(realT('30').filas).map((g) => [g.furni_id, g.unidades, g.valor]), [[11, 3, 57], [30, 2, 110], [14, 1, 15]], 'por unidades vendidas en el periodo');
+  assert.deepEqual(tab.pieDatos(comprasT), { furnis: 11, conStock: 9, compras: 16 });
+
+  // Los chips de keko y el keko guardado.
+  const chipsT = tab.kekosDelResumen(comprasT, kekosT);
+  assert.deepEqual(chipsT.map((k) => k.clave), ['xjp', 'ux_data', '-jdark', 'claudio4.8', '']);
+  assert.deepEqual([tab.kekoVigente('borrado', chipsT), tab.kekoVigente('', chipsT), tab.kekoVigente('todos', []), tab.kekoVigente('xjp', chipsT)], ['todos', '', 'todos', 'xjp']);
+
+  // Todo junto, con un keko elegido.
+  const tbT = tab.tablero({ compras: comprasT, filas: filasT, kekos: kekosT, auditoria: audT, porAsignar: paT, fantasmas: fzT }, { keko: 'ux_data', periodo: '30' }, ahoraT);
+  assert.deepEqual([tbT.capital.total.costo, tbT.porCobrar.ganancia, tbT.realizado.ganancia, tbT.variacion.tipo, tbT.atencion.length, tbT.porKeko.length, tbT.destacados.dormido.lotes.length],
+    [472 + 300 + 900, 957, 57, 'nuevo', 3, 5, 1], 'el keko filtra todo menos la tabla «Por keko» (sirve para cambiar de keko)');
+
+  // Las preferencias: se recuerdan; lo roto o raro vuelve a lo de siempre.
+  const memT = { datos: {}, getItem(k) { return this.datos[k] || null; }, setItem(k, v) { this.datos[k] = v; } };
+  tab.guardarPreferencias(memT, { keko: 'ux_data', periodo: '7', moneda: 'L', destacados: 'dormido' });
+  assert.deepEqual(tab.leerPreferencias(memT), { keko: 'ux_data', periodo: '7', moneda: 'L', destacados: 'dormido' });
+  assert.deepEqual(tab.leerPreferencias({ getItem: () => '{"keko":" Ux_Data ","periodo":"90","moneda":"lg","destacados":"x"}' }), { ...tab.PREFERENCIAS_INICIALES, keko: 'ux_data' });
+  const rotoT = { getItem() { throw new Error('bloqueado'); }, setItem() { throw new Error('bloqueado'); } };
+  assert.deepEqual([tab.leerPreferencias(rotoT), tab.leerPreferencias(null), tab.leerPreferencias({ getItem: () => '{roto' })], [tab.PREFERENCIAS_INICIALES, tab.PREFERENCIAS_INICIALES, tab.PREFERENCIAS_INICIALES]);
+  tab.guardarPreferencias(rotoT, tab.PREFERENCIAS_INICIALES);
+  assert.deepEqual(tab.PREFERENCIAS_INICIALES, { keko: 'todos', periodo: '30', moneda: 'cr', destacados: 'cobrar' }, 'al abrir: todos los kekos, 30 dias, cr y «Más por cobrar»');
+  ok('Resumen nuevo (logica): la cifra doble (cr y L, sin iconos); capital, por cobrar y ventas iguales al Resumen viejo; periodos con el dia local y su periodo anterior (tambien «Este mes» en enero y en marzo); variacion; capital dormido desde 14 dias; el ciclo; la bandeja de avisos por prioridad y por keko; por keko suma el total; destacados; preferencias con almacenamiento roto');
+
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');
   assert.equal(notif.APP_ID, paquete.build.appId, 'el AUMID de Windows es el appId que el instalador pone en el acceso directo');
@@ -2001,6 +2145,74 @@ async function main() {
     assert.deepEqual([loteHb(vfHb.ventas[0].venta_id), mHb.ventas], [undefined, 5]);
     await hb.cerrar();
     ok('historial contra la base: cada venta (Sniper, a mano de hoy y de otro dia, tradeo en lingos, Excel) gana lo mismo que en el Inventario y el Mercadillo, y los totales son los del Resumen al centimo, tambien con otra tasa y tras deshacer una venta; las por asignar aparte');
+
+    // ── El Resumen nuevo contra la base: lo de ahora y lo realizado dan lo mismo que el Resumen viejo ──
+    const tb = await crearClienteLocal();
+    await tb.crearUsuario('tb@prueba.local', 'clave-tb');
+    await tb.auth.signInWithPassword({ email: 'tb@prueba.local', password: 'clave-tb' });
+    const conexTb = crearServicioConexion({ eventos: new EventEmitter(), clienteFijo: tb });
+    await conexTb.iniciar();
+    const negTb = crearServicioNegocio({ conexion: conexTb, furnidata });
+    const tkTb = await negTb.crearToken('VPS Tablero');
+    assert.equal((await tb.comoAnon().rpc('auditar_inventario', { token_sniper: tkTb.token, keko: 'Ux_Data', hotel: 'es', inventario: [] })).error, null);
+    const evTb = async (eventos) => (await tb.comoAnon().rpc('registrar_eventos_sniper', { token_sniper: tkTb.token, eventos })).data;
+    // El Sniper en Ux_Data: compra 4 a 115; publica 2 a 128 hace 8 dias (caducadas) y 1 hace una hora;
+    // vende 1 (la mas antigua). Queda 1 por revisar, 1 caducada y 1 vigente.
+    assert.equal((await evTb([compraVs('tb_c1', S1, 4, 115), publicarVs('tb_p1', S1, 2, 128, Date.now() - 8 * 24 * H), publicarVs('tb_p2', S1, 1, 128, Date.now() - H)])).procesados, 3);
+    assert.equal((await evTb([ventaVs('tb_v1', S1, 128, Date.now() - 30 * 60000)])).procesados, 1);
+    // A mano en Bodega: Trono HC (comprado el 1-sep: dormido), una venta del Mercadillo y un tradeo en lingos;
+    // un Dragon Hanami publicado con perdida; y sin keko, unas Alas compradas en lingos.
+    await negTb.crearKeko('Bodega');
+    const tTb = await negTb.crearCompra({ nombre: 'Trono HC', cantidad: 5, precio_compra: 22.5, keko: 'Bodega', fecha_compra: '2026-09-01' });
+    await negTb.publicarFurni(tTb.furni_id, { cantidad: 2, precio_lista: 61, keko: 'Bodega' });
+    const vfTb = await negTb.venderFurni(tTb.furni_id, { cantidad: 1, keko: 'Bodega' });
+    await negTb.venderEnMano(tTb.furni_id, { cantidad: 1, precio: 3, moneda: 'lingos', keko: 'Bodega' });
+    const hTb = await negTb.crearCompra({ nombre: 'Dragón Hanami', cantidad: 1, precio_compra: 650, keko: 'Bodega' });
+    await negTb.publicarFurni(hTb.furni_id, { cantidad: 1, precio_lista: 600, keko: 'Bodega' });
+    await negTb.crearCompra({ nombre: 'Alas Brillantes', cantidad: 2, precio_compra: 1, moneda_compra: 'lingos' });
+    const datosTb = async () => {
+      const [compras, pend, furnis, resumen, kekos, aud] = await Promise.all([negTb.listarCompras(), negTb.ventasPorAsignar(), negTb.listarFurnis(), negTb.resumen(), negTb.listarKekos(), negTb.resumenAuditoria()]);
+      return { compras, furnis, resumen, kekos: kekos.kekos, aud, pend, filas: hist.filasHistorial(compras, pend.ventas, furnis) };
+    };
+    const cuadraTb = async (cuando) => {
+      const d = await datosTb();
+      const t = tab.tablero({ compras: d.compras, filas: d.filas, kekos: d.kekos, auditoria: d.aud, porAsignar: d.pend }, { keko: 'todos', periodo: 'todo' }, Date.now());
+      const r = d.resumen;
+      const casi = (a, b, que) => assert.ok(Math.abs(Number(a) - Number(b)) < 1e-9, `${cuando}: ${que} (${a} vs ${b})`);
+      casi(t.capital.publicado.costo, r.publicado.costo_cr, 'lo publicado cuesta lo mismo');
+      casi(t.porCobrar.ganancia, r.publicado.ganancia_cr, 'por cobrar = la ganancia esperada');
+      casi(t.porCobrar.entraria, r.publicado.retorno_cr, 'lo que te entraria');
+      casi(t.porCobrar.comision, r.publicado.comision_cr, 'la comision que falta');
+      casi(t.porCobrar.margen, r.publicado.margen, 'el margen');
+      casi(t.capital.mano.costo, r.en_mano.costo_cr, 'en mano');
+      casi(t.capital.revisar.costo, r.por_revisar.costo_cr, 'por revisar');
+      casi(t.realizado.entro, r.vendido.retorno_cr, 'lo que entro');
+      casi(t.realizado.ganancia, r.vendido.ganancia_cr, 'la ganancia realizada');
+      casi(t.realizado.costo, r.vendido.costo_cr, 'el costo de lo vendido');
+      casi(t.realizado.comision, r.vendido.comision_cr, 'la comision pagada');
+      assert.deepEqual([t.capital.mano.unidades, t.capital.revisar.unidades, t.capital.publicado.unidades, t.realizado.unidades, t.pie.compras],
+        [r.en_mano.unidades, r.por_revisar.unidades, r.publicado.unidades, r.vendido.unidades, r.datos.compras_registradas], `${cuando}: unidades`);
+      assert.deepEqual(tab.perdidas(d.compras).map((g) => g.furni_id), r.datos.perdidas.map((f) => f.id), `${cuando}: los furnis con perdida son los del Mercadillo`);
+      casi(t.porKeko.reduce((s, k) => s + k.capital, 0), t.capital.total.costo, 'por keko: el capital');
+      casi(t.porKeko.reduce((s, k) => s + k.porCobrar, 0), t.porCobrar.ganancia, 'por keko: por cobrar');
+      casi(t.porKeko.reduce((s, k) => s + k.realizada, 0), t.realizado.ganancia, 'por keko: lo realizado');
+      return { d, t };
+    };
+    let { d: dTb, t: tTab } = await cuadraTb('al registrar');
+    assert.deepEqual(tTab.porKeko.map((k) => [k.nombre, k.origen]), [['Bodega', 'manual'], ['Ux_Data', 'sniper'], [null, 'sin']]);
+    assert.ok(tTab.porKeko[1].inventario_en, 'Ux_Data trae la hora de su ultimo inventario');
+    assert.deepEqual(tTab.atencion.map((a) => [a.tipo, a.n]), [['perdida', 1], ['por_revisar', 1], ['auditoria', 1], ['caducadas', 1]], 'la bandeja: la perdida, lo por revisar, la diferencia de la Auditoria (la foto vacia de Ux_Data no trae lo por revisar) y la caducada del Sniper');
+    assert.deepEqual(tTab.destacados.dormido.lotes.map((x) => x.lote.nombre), ['Trono HC'], 'el Trono comprado el 1 de septiembre esta dormido');
+    const bodegaTb = tab.tablero({ compras: dTb.compras, filas: dTb.filas, kekos: dTb.kekos, auditoria: dTb.aud, porAsignar: dTb.pend }, { keko: 'bodega', periodo: '30' }, Date.now());
+    assert.deepEqual([bodegaTb.atencion.map((a) => a.tipo), bodegaTb.realizado.ventas, bodegaTb.ciclo[2].unidades], [['perdida'], 2, 2], 'Bodega: su perdida, sus 2 ventas de hoy y lo suyo publicado');
+    // Con otra tasa del Lingo (las Alas y el tradeo valen otra cosa) y tras deshacer una venta, todo sigue cuadrando.
+    await negTb.fijarTasa(60);
+    ({ d: dTb, t: tTab } = await cuadraTb('con la tasa en 60'));
+    assert.equal(tab.cifraDoble(tTab.capital.total.costo, { tasa: dTb.resumen.tasa }).titulo.endsWith('(1 L = 60 cr)'), true);
+    await negTb.revertirVenta(vfTb.ventas[0].venta_id);
+    await cuadraTb('tras deshacer una venta');
+    await tb.cerrar();
+    ok('Resumen nuevo contra la base: capital, por cobrar, ventas, perdidas y unidades iguales al Resumen viejo al centimo (tambien con otra tasa del Lingo y tras deshacer una venta); por keko suma el total; la bandeja y el capital dormido con datos reales; un keko solo ve lo suyo');
 
     // ── Lo que vuelve del Mercadillo (migracion 20261017000000) ──
     // Una oferta dura 168 h. Si vence, el furni vuelve al inventario sin que el Sniper avise:
