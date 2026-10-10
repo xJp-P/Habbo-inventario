@@ -13,6 +13,14 @@
 //     entrada de la ultima, separadas por una linea que empieza con «—».
 
 export const CHANGELOGS = {
+  '2.0.0': [
+    '¡Llega la 2.0.0 con un Resumen totalmente nuevo! Es tu centro de mando: arriba eliges el keko, el período (7 días, 30 días, este mes o todo) y la moneda que quieres ver en grande. La app lo recuerda.',
+    'Todo el dinero se ve en créditos y en lingos a la vez. Y el Lingo ahora se escribe siempre «L», sin íconos, en toda la app.',
+    'Tres cifras para saber cómo vas: el capital que tienes en juego, la ganancia que ya hiciste en el período (y si subió o bajó contra el anterior) y la que te falta cobrar de lo publicado.',
+    'El ciclo de tus furnis (por revisar, en mano, publicado y vendido) y un gráfico con tu ganancia de cada día. Un clic en una etapa o en un día te lleva directo a verlo.',
+    '«Necesita tu atención» junta en una sola lista todo lo que pide algo de ti: pérdidas, ventas por asignar, compras por revisar, diferencias de la Auditoría y ofertas que caducan. Cada aviso te lleva a su lugar.',
+    'En «Por keko» ves el capital y la ganancia de cada cuenta (un clic y ves solo esa). En «Destacados», lo que más te dejaría, lo que más vendes y el capital dormido: lo que lleva 14 días o más sin moverse.',
+  ],
   '1.10.1': [
     'Nuevo aviso de furnis fantasma: si antes de la 1.10.0 registraste otra vez un furni que volvió del Mercadillo, su oferta vieja se quedó en Publicado y ese furni contaba dos veces. Ahora la app te avisa arriba del Mercadillo y de Publicado, con los kekos donde están.',
     'Esos lotes llevan la etiqueta gris «Fantasma». La app solo marca los que de verdad están repetidos: una oferta real que caducó nunca sale.',

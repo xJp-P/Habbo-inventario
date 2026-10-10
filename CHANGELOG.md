@@ -8,6 +8,63 @@ Cada versión indica en **Migraciones de Supabase** si hace falta ejecutar un ar
 nuevo de `supabase/migrations/`. Las apps instaladas se actualizan solas, así que esa
 migración debe ejecutarse **antes** de publicar el Release en GitHub.
 
+## [2.0.0] - 2026-10-09
+
+Un hito: el Resumen se rehízo de cero. No rompe nada ni cambia la base de datos. Desde esta
+versión los números avanzan de a un dígito (después de la 2.0.9 viene la 2.1.0, y después
+de la 2.9.9, la 3.0.0).
+
+### Añadido
+
+- **El Resumen nuevo, un centro de mando.** Una **barra de control** fija arriba (también al
+  bajar) con tres decisiones que valen para toda la vista y se recuerdan en el equipo:
+  - el **keko** (Todos, cada keko con su cara o «Sin keko»);
+  - el **período** de lo vendido (7 d, 30 d, Este mes o Todo; abre en 30 d);
+  - la **moneda** que va grande (cr o L).
+- **Todo el dinero en las dos monedas**: la elegida grande y la otra debajo. Al pasar el
+  ratón, la conversión exacta («11.389 cr = 227,78 L (1 L = 50 cr)»).
+- **Tres cifras principales**:
+  - el **capital en juego** (lo que invertiste y aún no vendes), repartido en por revisar,
+    en mano y publicado;
+  - la **ganancia realizada** del período, con la variación contra el período anterior
+    (7 y 30 días contra los 7 y 30 de antes; «Este mes», contra los mismos días del mes
+    anterior);
+  - la **ganancia por cobrar** de lo publicado, con lo que te entraría y la comisión.
+- **El ciclo de tus furnis**: Por revisar → En mano → Publicado → Vendido, con unidades y
+  dinero. Cada etapa abre su sección.
+- **Rendimiento**: ventas, lo que te entró, la comisión pagada y el margen, con un gráfico
+  de ganancia por día (Sniper en verde, tú en azul, los días con pérdida en rojo; por
+  semana o por mes en los períodos largos). Un clic en una barra abre ese día en el
+  Historial.
+- **Necesita tu atención**: una sola bandeja con lo que pide algo de ti, de lo más grave a
+  lo menos: lo publicado con pérdida, las ventas del Sniper por asignar, las compras por
+  revisar, los furnis fantasma, las diferencias de la Auditoría, las ofertas del Sniper
+  caducadas y las que caducan hoy. Cada aviso lleva a su lugar exacto (la Auditoría, en el
+  keko del aviso). Mide lo mismo que «Rendimiento» y, si no caben, tiene scroll por dentro.
+- **Por keko**: el capital, lo por cobrar y la ganancia realizada de cada keko, con la hora
+  del último inventario de cada Sniper. Un clic en una fila filtra todo el Resumen.
+- **Destacados**: «Más por cobrar» (abre el furni en el Mercadillo), «Más vendidos» (abre
+  el Historial de ese furni) y **«Capital dormido»**: los lotes con 14 días o más en mano
+  (desde 30, en ámbar), que abren Comprado con el lote iluminado. Mide lo mismo que «Por
+  keko» y, si no caben, tiene scroll por dentro.
+- En una ventana angosta, el Resumen pasa a dos columnas y los avisos van primero.
+- El Historial se abre desde el Resumen con su período y su keko, y los conserva.
+
+### Cambiado
+
+- **El Lingo es «L» en toda la app, sin íconos**: la cabecera («1 L = 50 cr»), el selector
+  de moneda de «+ Compra», «Venta» y «Publicar» (Créditos | Lingos), el Inventario, el
+  Historial, la Auditoría y las ventanas de venta y retiro. Nunca «lg» ni el diamante. El
+  crédito es «cr», también sin ícono. Las frases siguen diciendo «lingos» («tradeo en
+  lingos»).
+- **La tarjeta de la tasa del Lingo desaparece**: la de Habbo.es está en la cabecera. Si tu
+  base guardaba otra, el Resumen lo avisa y ofrece «Usar 50 cr».
+- Cada tarjeta del Resumen tiene su propia barrera: si una falla, las demás se ven normal.
+
+### Migraciones de Supabase
+
+- Ninguna: esta versión no cambia la base de datos.
+
 ## [1.10.1] - 2026-10-09
 
 ### Añadido

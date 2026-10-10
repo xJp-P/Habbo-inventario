@@ -3,7 +3,8 @@
 // Maqueta aprobada por el dueño el 09-10-2026 (plan 1A a 8A y maqueta 1A a 6A): barra de control
 // fija (keko, periodo y moneda), tres cifras principales (capital en juego, ganancia realizada y
 // por cobrar), el ciclo de los furnis, rendimiento, «Necesita tu atencion» (a la altura de
-// «Rendimiento», con scroll por dentro), por keko y destacados. Todo el dinero va en las dos
+// «Rendimiento», con scroll por dentro), por keko y destacados (a la altura de «Por keko», tambien
+// con scroll por dentro: pedido del dueño tras probar la fase 3). Todo el dinero va en las dos
 // monedas, sin iconos: el credito es «cr» y el Lingo siempre «L» (decision del dueño).
 //
 // Toda la logica esta en core/tablero.js (puro, con pruebas contra la base); aqui solo se dibuja.
@@ -46,6 +47,20 @@ function Dual(props) {
     h('span', { className: 'o' + (esL ? ' cr' : '') }, '· ' + c.secundaria.texto + ' ' + c.secundaria.unidad));
 }
 
+// Si la lista no cabe en su tarjeta, el borde de abajo se desvanece (hasta llegar al final).
+function useDesborda(ref) {
+  useEffect(function () {
+    var l = ref.current;
+    if (!l) return undefined;
+    function revisar() { l.classList.toggle('desborda', l.scrollHeight - l.scrollTop - l.clientHeight > 4); }
+    revisar();
+    l.addEventListener('scroll', revisar);
+    var ro = window.ResizeObserver ? new ResizeObserver(revisar) : null;
+    if (ro) ro.observe(l);
+    return function () { l.removeEventListener('scroll', revisar); if (ro) ro.disconnect(); };
+  });
+}
+
 function Delta(props) {
   var v = props.variacion;
   if (!v) return null;
@@ -57,6 +72,7 @@ export function ResumenView(props) {
   var sP = useState(function () { return leerPreferencias(almacen()); }); var pref = sP[0]; var setPref = sP[1];
   var sA = useState(Date.now()); var ahora = sA[0]; var setAhora = sA[1];
   var refLista = useRef(null);
+  var refDest = useRef(null);
   // Al minuto: lo que caduca hoy y los periodos se mueven solos.
   useEffect(function () { var t = setInterval(function () { setAhora(Date.now()); }, 60000); return function () { clearInterval(t); }; }, []);
   useEffect(function () { guardarPreferencias(almacen(), pref); }, [pref.keko, pref.periodo, pref.moneda, pref.destacados]);
@@ -92,17 +108,8 @@ export function ResumenView(props) {
     props.onIr(d);
   }
 
-  // Si los avisos no caben, el borde de abajo de la lista se desvanece (hasta llegar al final).
-  useEffect(function () {
-    var l = refLista.current;
-    if (!l) return undefined;
-    function revisar() { l.classList.toggle('desborda', l.scrollHeight - l.scrollTop - l.clientHeight > 4); }
-    revisar();
-    l.addEventListener('scroll', revisar);
-    var ro = window.ResizeObserver ? new ResizeObserver(revisar) : null;
-    if (ro) ro.observe(l);
-    return function () { l.removeEventListener('scroll', revisar); if (ro) ro.disconnect(); };
-  });
+  useDesborda(refLista);
+  useDesborda(refDest);
 
   function volverATasaHabbo() {
     API.put('/api/config/tasa', { tasa_lingo: TASA_HABBO }).then(function (x) { if (x) props.onCambio('Tasa del Lingo: ' + TASA_HABBO + ' cr, la de Habbo.es'); });
@@ -315,13 +322,13 @@ export function ResumenView(props) {
       });
     }
     var tabs = [['cobrar', 'Más por cobrar', 'Lo publicado que más ganancia te dejaría'], ['vendidos', 'Más vendidos', 'Lo que más vendiste en el período: ' + tp.titulo.toLowerCase()], ['dormido', 'Capital dormido', 'Lo que lleva ' + DORMIDO_DIAS + ' días o más en mano']];
-    return h('div', { className: 'rz-caja entra' },
+    return h('div', { className: 'rz-caja rz-dest entra' },
       h('div', { className: 'rz-caja-cab' }, h('span', { className: 'titulo' }, h(Ico, { name: 'trofeo', size: 16, color: 'var(--gold)' }), 'Destacados')),
       h('div', { className: 'segmento rz-seg', style: { display: 'flex', marginBottom: 10 }, role: 'tablist' }, tabs.map(function (x) {
         return h('button', { key: x[0], role: 'tab', 'aria-selected': cual === x[0], style: { flex: 1 }, className: cual === x[0] ? 'activo' : '', title: x[2], onClick: function () { cambiar({ destacados: x[0] }); } }, x[1]);
       })),
       nota,
-      filasD.length ? h('div', { className: 'rz-top' }, filasD.slice(0, TOPE_DESTACADOS).map(function (x, i) {
+      filasD.length ? h('div', { className: 'rz-top', ref: refDest }, filasD.slice(0, TOPE_DESTACADOS).map(function (x, i) {
         return h('button', { key: x.clave, className: 'rz-top-fila', onClick: x.abrir },
           h('span', { className: 'rz-top-n' }, i + 1),
           h(NombreFurni, { furni: x.furni, ltds: x.ltds, size: 32, sub: x.sub }),
