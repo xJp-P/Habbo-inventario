@@ -20,7 +20,7 @@ import { gruposPorPrecioLista, repartirFifo, etiquetaLote } from '../core/lotes.
 import { textoAmbito } from '../core/kekos.js';
 
 function texto(n) { return String(n).replace('.', ','); }
-function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' lg' : ' cr'); }
+function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' L' : ' cr'); }
 
 export function VenderFurniModal(props) {
   var furni = props.furni;
@@ -60,7 +60,7 @@ export function VenderFurniModal(props) {
     _submitGuard(enviando, setEnviando, function () {
       return API.post('/api/furnis/' + furni.id + '/vender', Object.assign({ cantidad: q, precio_lista: g.precio_lista, precio_venta: p, fecha_venta: fecha }, props.ambito))
         .then(function (r) {
-          if (r) props.onGuardado(r, q + ' und de ' + furni.nombre + ' vendidas · entraron ' + (lingos ? fmtLg(netoU * q) + ' lingos' : fmtCr(netoU * q) + ' cr'));
+          if (r) props.onGuardado(r, q + ' und de ' + furni.nombre + ' vendidas · entraron ' + (lingos ? fmtLg(netoU * q) + ' L' : fmtCr(netoU * q) + ' cr'));
         });
     });
   }
@@ -87,7 +87,7 @@ export function VenderFurniModal(props) {
           onChange: function (e) { setPrecio(e.target.value); setError(''); }, onKeyDown: function (e) { if (e.key === 'Enter') vender(); } })),
       h(Fld, { label: 'Fecha de venta' }, h('input', { className: 'inp', type: 'date', value: fecha, onChange: function (e) { setFecha(e.target.value); } }))),
     qValida && pValido ? h('div', { className: 'aviso' },
-      lingos ? h('div', null, 'En lingos no hay comisión: se guarda ', h('b', { className: 'mono' }, fmtLg(p) + ' lingos'), ' por unidad.')
+      lingos ? h('div', null, 'En lingos no hay comisión: se guarda ', h('b', { className: 'mono' }, fmtLg(p) + ' L'), ' por unidad.')
         : h('div', null, 'Entra a tu monedero: ', h('b', { className: 'mono' }, fmtCr(netoU) + ' cr'), ' por unidad (comisión ' + fmtCr(comisionU) + ' cr) · total ',
             h('b', { className: 'mono' }, fmtCr(netoU * q) + ' cr'), '. Se guarda ese neto.'),
       h('div', { style: { marginTop: 6 } }, tomas.length === 1 ? 'Sale del lote ' + etiquetaLote(tomas[0].lote) : 'Salen de ' + tomas.length + ' lotes (' + tomas.map(function (t) { return etiquetaLote(t.lote); }).join(', ') + ')',

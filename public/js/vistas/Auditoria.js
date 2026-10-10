@@ -348,7 +348,7 @@ export function AuditoriaView(props) {
       h('span', { className: 'mono' }, 'Nº ' + l.lote_id), l.numero_ltd ? h(EtiquetaLtd, { numero: l.numero_ltd }) : null,
       h('b', { className: 'mono' }, l.cantidad + ' und'),
       h('span', null, (l.keko ? 'en ' + l.keko : 'sin keko') + ' · publicada ' + fmtHace(l.publicado_en) + ' ' + (l.publicado_por === 'manual' ? 'por ti' : 'por el Sniper')
-        + (l.precio_lista !== null && l.precio_lista !== undefined ? ' a ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lg' : ' cr') : '')),
+        + (l.precio_lista !== null && l.precio_lista !== undefined ? ' a ' + fmtLg(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' L' : ' cr') : '')),
       l.caducada ? h(EtiquetaCaducada, {})
         : h('span', { className: 'tag tag-morado' }, h(Ico, { name: 'lock', size: 11, sw: 2.2 }), 'Vigente · caduca en ' + textoTiempo(r)));
   }

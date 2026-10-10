@@ -55,7 +55,7 @@ export function VenderModal(props) {
   }
 
   return h(Modal, { titulo: (publicado ? 'Registrar venta del lote Nº ' : 'Vender del lote Nº ') + l.id, onClose: props.onClose },
-    h(NombreFurni, { furni: l, sub: 'Lote de ' + l.cantidad + ' und a ' + fmtCr(costoU) + ' cr c/u' + (l.pendiente ? ' · por revisar' : '') + (publicado ? ' · publicado a ' + fmtCr(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' lingos' : ' cr') : '') }),
+    h(NombreFurni, { furni: l, sub: 'Lote de ' + l.cantidad + ' und a ' + fmtCr(costoU) + ' cr c/u' + (l.pendiente ? ' · por revisar' : '') + (publicado ? ' · publicado a ' + fmtCr(l.precio_lista) + (l.moneda_lista === 'lingos' ? ' L' : ' cr') : '') }),
     publicado ? h('div', { className: 'aviso', style: { display: 'flex', gap: 8, alignItems: 'center', background: 'var(--purple-bg)', color: 'var(--purple)' } },
       h(Ico, { name: 'lock', size: 14 }), 'Está publicado en el mercadillo. Regístralo aquí solo cuando se haya vendido.') : null,
     h(Fld, { label: '¿Cuántas vendiste?' },

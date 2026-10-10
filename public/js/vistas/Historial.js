@@ -188,6 +188,17 @@ export function HistorialView(props) {
   var compacto = !ancho.alineado;
   var ahora = Date.now();
 
+  // Desde el Resumen (v2.0.0): su periodo y su keko; con `periodo`, el dia (o la semana) de una
+  // barra del grafico; con `q`, un furni. Se aplica una vez por clic (`vez`).
+  useEffect(function () {
+    var a = props.abrir;
+    if (!a) return;
+    setFiltros(function (f) {
+      return Object.assign({}, f, { rango: a.rango || f.rango, periodo: a.periodo || null, kekos: Array.isArray(a.kekos) ? a.kekos : [], q: a.q || '' });
+    });
+    setMostrar(PAGINA);
+    setAbierta(null);
+  }, [props.abrir && props.abrir.vez]);
   // Los filtros que dejaste se recuerdan en este equipo (no la busqueda ni el dia elegido).
   useEffect(function () { guardarFiltros(filtros); }, [filtros.rango, filtros.desde, filtros.hasta, (filtros.kekos || []).join('|'), filtros.origen, filtros.perdida, filtros.orden]);
   // Lo alto de la barra de filtros: los encabezados de los dias se quedan fijos justo debajo.
@@ -326,7 +337,7 @@ export function HistorialView(props) {
           h('div', { className: 'furni-sub' }, compacto ? (k.origen === 'sin' ? 'Sin keko' : k.nombre) + ' · ' + sub : sub)))),
       keko: h('td', { key: 'keko' }, h('span', { className: 'h-keko' }, h(AvatarKeko, { keko: k, tam: 20 }), h('span', null, k.origen === 'sin' ? 'Sin keko' : k.nombre))),
       cant: h('td', { key: 'cant', className: 'r mono' }, x.cantidad),
-      precio: h('td', { key: 'precio', className: 'r mono' }, x.precio === null ? '-' : fmtLg(x.precio), x.moneda === 'lingos' ? h('span', { className: 'tenue' }, ' lg') : null),
+      precio: h('td', { key: 'precio', className: 'r mono' }, x.precio === null ? '-' : fmtLg(x.precio), x.moneda === 'lingos' ? h('span', { className: 'tenue' }, ' L') : null),
       entro: h('td', { key: 'entro', className: 'r mono' + (asignar ? ' tenue' : ''), title: asignar ? 'Lo que entró, pero sin lote todavía: no suma en los totales' : null }, fmtCr(x.entro)),
       ganancia: h('td', { key: 'ganancia', className: 'r mono ' + claseSigno(x.ganancia) }, x.ganancia === null ? h('span', { className: 'tenue' }, '—')
         : [h('b', { key: 'g' }, signo(x.ganancia)), x.margen !== null ? h('div', { key: 'm', className: 'h-margen' }, fmtPct(x.margen)) : null]),
@@ -356,7 +367,7 @@ export function HistorialView(props) {
       h('div', { key: 'g', className: 'detalle-grid' },
         dato('Lote', 'Nº ' + l.id + (x.origen_id ? ' · dividido del Nº ' + x.origen_id : '')),
         compacto ? dato('Keko', k.origen === 'sin' ? 'Sin keko' : k.nombre) : null,
-        dato('Precio de venta', x.precio === null ? '-' : fmtLg(x.precio) + (x.moneda === 'lingos' ? ' lingos (≈ ' + fmtCr(x.cantidad ? x.entro / x.cantidad : 0) + ' cr)' : ' cr') + ' c/u'),
+        dato('Precio de venta', x.precio === null ? '-' : fmtLg(x.precio) + (x.moneda === 'lingos' ? ' L (≈ ' + fmtCr(x.cantidad ? x.entro / x.cantidad : 0) + ' cr)' : ' cr') + ' c/u'),
         dato('Comisión de Habbo', x.mercadillo ? fmtCr(x.comision) + ' cr' : 'sin comisión'),
         dato('Entró', fmtCr(x.entro) + ' cr'),
         dato('Costo', costoU === null ? '-' : fmtLg(Math.round(costoU * 100) / 100) + ' cr c/u · ' + fmtCr(x.costo) + ' cr'),

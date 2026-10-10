@@ -20,7 +20,7 @@ import { gruposPorPrecioLista, repartirFifo, etiquetaLote } from '../core/lotes.
 import { ordenRetiro } from '../core/caducidad.js';
 import { textoAmbito } from '../core/kekos.js';
 
-function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' lg' : ' cr'); }
+function fmtLista(g) { return fmtLg(g.precio_lista) + (g.moneda_lista === 'lingos' ? ' L' : ' cr'); }
 
 export function RetirarFurniModal(props) {
   var furni = props.furni;

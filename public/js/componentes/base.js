@@ -106,9 +106,9 @@ export function EtiquetaCaducada(props) {
 
 export function SelectorMoneda(props) {
   return h('div', { className: 'segmento' },
-    [['creditos', 'Créditos', 'coin'], ['lingos', 'Lingos', 'diamond']].map(function (m) {
+    [['creditos', 'Créditos'], ['lingos', 'Lingos']].map(function (m) {
       return h('button', { key: m[0], type: 'button', className: props.valor === m[0] ? 'activo' : '', onClick: function () { props.onChange(m[0]); } },
-        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } }, h(Ico, { name: m[2], size: 14 }), m[1]));
+        m[1]);
     }));
 }
 

@@ -74,7 +74,7 @@ var PARTES = {
   porAsignar: { ruta: '/api/ventas-por-asignar', nombre: 'las ventas por asignar' },
 };
 var NECESITA = {
-  resumen: ['resumen'],
+  resumen: ['resumen', 'compras'],
   mercadillo: ['furnis', 'compras'],
   inventario: ['compras', 'pendientes'],
   historial: ['compras'],
@@ -117,6 +117,8 @@ function App() {
   var sAbA = useState(null); var abrirAuditoria = sAbA[0]; var setAbrirAuditoria = sAbA[1];
   // Clic en el aviso de ventas del Sniper: la pestaña del Inventario a abrir ({ filtro, keko, vez }).
   var sAbI = useState(null); var abrirInventario = sAbI[0]; var setAbrirInventario = sAbI[1];
+  // Desde el Resumen (v2.0.0): el Historial abierto en un periodo, un dia o un furni.
+  var sAbH = useState(null); var abrirHistorial = sAbH[0]; var setAbrirHistorial = sAbH[1];
   // Errores de la sesion, el modal que los muestra ('carga' | 'registro') y las partes de
   // la carga que fallaron la ultima vez ({ clave: Error }).
   var sErr = useState(erroresRegistrados); var errores = sErr[0]; var setErrores = sErr[1];
@@ -315,6 +317,20 @@ function App() {
     setVista('inventario');
   }
 
+  // Los clics del Resumen (v2.0.0, core/tablero.js): cada destino a su seccion, con su keko.
+  function irA(destino) {
+    if (!destino) return;
+    if (destino.vista === 'inventario') { abrirPestana(destino); return; }
+    setModal(null);
+    if (destino.vista === 'auditoria') { setAbrirAuditoria({ keko: destino.keko || null, vez: Date.now() }); setVista('auditoria'); return; }
+    if (destino.vista === 'historial') {
+      setAbrirHistorial({ rango: destino.rango || null, periodo: destino.periodo || null, kekos: destino.kekos || [], q: destino.q || '', vez: Date.now() });
+      setVista('historial'); setFiltroFurni('');
+      return;
+    }
+    navegar(destino.vista, destino.furni_id);
+  }
+
   function cambio(msg) { setModal(null); if (msg) avisar(msg); recargar(); }
 
   function furniDe(id) { return (datos.furnis || []).find(function (f) { return f.id === id; }); }
@@ -368,6 +384,7 @@ function App() {
     setEnfocar(v === 'mercadillo' && furniId ? furniId : null);
     if (v !== 'inventario') setFiltroFurni('');
     if (v === 'auditoria') setAbrirAuditoria(null);
+    if (v === 'historial') setAbrirHistorial(null);
   }
 
   function salir() {
@@ -434,7 +451,10 @@ function App() {
         h('button', { className: 'btn', onClick: function () { setVerErrores('carga'); } }, h(Ico, { name: 'copy', size: 14 }), 'Ver y copiar detalles'),
         h('button', { className: 'btn btn-verde', onClick: reintentarCarga }, h(Ico, { name: 'refresh', size: 14 }), 'Reintentar'))));
   else if (faltanPartes.length) contenido = h(Spinner);
-  else if (vista === 'resumen') contenido = h(ResumenView, { resumen: datos.resumen, onNav: navegar, onVerFurni: verFurni, onCambio: cambio, onError: function (m) { avisar(m, 'error'); } });
+  else if (vista === 'resumen') contenido = h(ResumenView, {
+    resumen: datos.resumen, compras: datos.compras, furnis: datos.furnis || [], porAsignar: datos.porAsignar, kekos: kekos,
+    auditoria: resAuditoria, fantasmas: fantasmas, onIr: irA, onVerFurni: verFurni, onCambio: cambio, onVerErrores: abrirErrores,
+  });
   else if (vista === 'mercadillo') contenido = h(MercadilloView, {
     furnis: datos.furnis, compras: datos.compras, enfocar: enfocar, kekos: kekos, onVerErrores: abrirErrores,
     avisoFantasmas: avisoFantasmas, fantasmaIds: fantasmaIds,
@@ -477,7 +497,7 @@ function App() {
     onCambio: cambio,
   });
   else if (vista === 'historial') contenido = h(HistorialView, {
-    compras: datos.compras, furnis: datos.furnis || [], kekos: kekos, porAsignar: datos.porAsignar, onVerErrores: abrirErrores, onCambio: cambio,
+    compras: datos.compras, furnis: datos.furnis || [], kekos: kekos, porAsignar: datos.porAsignar, onVerErrores: abrirErrores, onCambio: cambio, abrir: abrirHistorial,
     // «Ver en el Inventario» del detalle de una venta: Vendido, en su keko, con el lote abierto.
     onVerEnInventario: function (l) { abrirPestana({ filtro: 'vendido', keko: l.keko, lote: l.id }); },
     // Una venta por asignar del libro: el mismo modal de Inventario › Por asignar.
@@ -530,7 +550,7 @@ function App() {
         h('div', { style: { flex: 1 } }),
         errores.length ? h('button', { className: 'btn-errores', onClick: abrirErrores, title: 'Errores de esta sesión: ver y copiar los detalles' },
           h(Ico, { name: 'alert', size: 13 }), errores.length === 1 ? '1 error' : errores.length + ' errores') : null,
-        h('span', { className: 'tag tag-morado', title: 'Tasa del Lingo en Habbo.es (valor fijo del juego)' }, h(Ico, { name: 'diamond', size: 12 }), '1 lingo = ' + fmtLg(tasa) + ' cr'),
+        h('span', { className: 'tag tag-morado', title: 'Tasa del Lingo en Habbo.es (valor fijo del juego)' }, '1 L = ' + fmtLg(tasa) + ' cr'),
         h('button', { className: 'btn-icono', onClick: function () { setTema(tema === 'dark' ? 'light' : 'dark'); }, title: tema === 'dark' ? 'Tema claro' : 'Tema oscuro' },
           h(Ico, { name: tema === 'dark' ? 'sun' : 'moon', size: 14, color: 'var(--text3)' }))),
       h('div', { className: 'main-content' }, avisoMigraciones, h(Barrera, { key: vista, seccion: nav[2], onVerErrores: abrirErrores }, contenido))),

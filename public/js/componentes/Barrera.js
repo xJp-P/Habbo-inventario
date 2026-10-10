@@ -59,6 +59,15 @@ export class Barrera extends Component {
           h('span', { className: 'fila-error-txt' }, h('b', null, (this.props.etiqueta || 'Esta fila') + ' no se pudo mostrar: '), h('span', { className: 'mono' }, mensaje)),
           this.botones(true))));
     }
+    // Una tarjeta del Resumen (v2.0.0): las demas se ven igual.
+    if (this.props.tipo === 'tarjeta') {
+      return h('div', { className: 'card panel-error bloque-error', style: { minWidth: 0 } },
+        h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700 } },
+          h(Ico, { name: 'alert', size: 16, color: 'var(--red)' }), (this.props.etiqueta || 'Esta parte') + ' no se pudo mostrar'),
+        h('p', { className: 'suave', style: { fontSize: 12, margin: '6px 0 8px' } }, 'El resto del Resumen se ve normal y tus datos no se tocaron.'),
+        h('div', { className: 'aviso aviso-rojo mono', style: { fontSize: 12, wordBreak: 'break-word', marginBottom: 10 } }, mensaje),
+        h('div', { style: { display: 'flex', gap: 8 } }, this.botones(true)));
+    }
     if (this.props.tipo === 'bloque') {
       return h('section', { className: 'bk' }, h('div', { className: 'card panel-error bloque-error' },
         h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700 } },

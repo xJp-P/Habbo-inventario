@@ -118,7 +118,7 @@ export function VentaManualModal(props) {
   var tomas = qValida ? repartirFifo(usables, q) : [];
   var costo = tomas.reduce(function (s, t) { return s + t.lote.precio_compra_cr * t.toma; }, 0);
   var ganancia = qValida && pValido ? netoUcr * q - costo : null;
-  var fmtM = function (n) { return monedaEf === 'lingos' ? fmtLg(n) + ' lingos' : fmtCr(n) + ' cr'; };
+  var fmtM = function (n) { return monedaEf === 'lingos' ? fmtLg(n) + ' L' : fmtCr(n) + ' cr'; };
 
   function elegirFurni(f) {
     setFurniId(f.id); setLoteSel('fifo'); setCant('1'); setError('');

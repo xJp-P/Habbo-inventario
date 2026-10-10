@@ -634,7 +634,13 @@ async function main() {
   assert.deepEqual([tab.leerPreferencias(rotoT), tab.leerPreferencias(null), tab.leerPreferencias({ getItem: () => '{roto' })], [tab.PREFERENCIAS_INICIALES, tab.PREFERENCIAS_INICIALES, tab.PREFERENCIAS_INICIALES]);
   tab.guardarPreferencias(rotoT, tab.PREFERENCIAS_INICIALES);
   assert.deepEqual(tab.PREFERENCIAS_INICIALES, { keko: 'todos', periodo: '30', moneda: 'cr', destacados: 'cobrar' }, 'al abrir: todos los kekos, 30 dias, cr y «Más por cobrar»');
-  ok('Resumen nuevo (logica): la cifra doble (cr y L, sin iconos); capital, por cobrar y ventas iguales al Resumen viejo; periodos con el dia local y su periodo anterior (tambien «Este mes» en enero y en marzo); variacion; capital dormido desde 14 dias; el ciclo; la bandeja de avisos por prioridad y por keko; por keko suma el total; destacados; preferencias con almacenamiento roto');
+  // El Lingo es siempre «L» y sin iconos en TODA la app (decision del dueño, v2.0.0): ninguna
+  // pantalla dice «lg», usa el diamante ni escribe «N lingos» detras de una cifra.
+  const jsDe = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? jsDe(path.join(dir, e.name)) : e.name.endsWith('.js') ? [path.join(dir, e.name)] : []);
+  for (const archivo of jsDe(path.join(__dirname, '..', 'public', 'js')).filter((f) => path.basename(f) !== 'iconos.js')) {
+    assert.doesNotMatch(fs.readFileSync(archivo, 'utf8'), /' lg\b|'diamond'|\+ ' lingos/, path.relative(path.join(__dirname, '..'), archivo) + ': el Lingo es «L», sin «lg», sin diamante y sin «N lingos»');
+  }
+  ok('Resumen nuevo (logica): la cifra doble (cr y L, sin iconos; en toda la app el Lingo es «L», sin «lg» ni diamante); capital, por cobrar y ventas iguales al Resumen viejo; periodos con el dia local y su periodo anterior (tambien «Este mes» en enero y en marzo); variacion; capital dormido desde 14 dias; el ciclo; la bandeja de avisos por prioridad y por keko; por keko suma el total; destacados; preferencias con almacenamiento roto');
 
   // ── Notificaciones del sistema (electron/notificaciones.js, con piezas falsas) ──
   const notif = require('../electron/notificaciones');
